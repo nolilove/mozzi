@@ -1,0 +1,421 @@
+복기) Logical = S/W적 운영, 조작 및 변경
+LVM 설정절차
+1. fdisk  /dev/xxx
+2. pvcreate  /dev/{xxx1,xxx2,xxx3}
+3. vgcreate   vg_name  /dev/{xxx1,xxx2,xxx3}
+4. lvcreate  -n lv_name -l  xx%FREE /dev/vg_name   (vg_name의 남은것의 xx%퍼센트 할당)
+5. mkfs.xfs  /dev/vg_name/lv_name
+6. mkdir  -pv  /mnt/xxx
+7. vim  /etc/fstab
+8. systemctl daemon-reload 
+9. mount -a
+===========================================================
+* lsblk 명령어로 하드들이 잘 있나 확인한다.
+**수업자료>>실습파일>>실습파일 09- 스토리지 관리-2(lvm) 를 참조
+-pvcreate명령어 후 pvs로 확인, pvdisplay로 정밀하게 확인
+-vgcreate  developer  ( -s 8M or -s 16M) /dev/{xxx1,xxx2,xxx3}
+vgcreate명령어 후 vgs로 확인.
+   VG        #PV #LV #SN Attr   VSize   VFree  
+   developer   3   0   0 wz--n- <59.99g <59.99g
+   rl          1   2   0 wz--n- <39.00g      0 
+-lvcreate  -n db    -l 50%FREE /dev/developer 입력
+ㄴ만약 %설정을 잘못했는지 vgs lvs로 확인한다.
+   LV   VG        Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+   db   developer -wi-a-----  29.99g                                                    
+   web  developer -wi-a----- <30.00g                                                    
+   root rl        -wi-ao----  35.07g                                                    
+   swap rl        -wi-ao----  <3.93g 
+-포맷하기
+ mkfs.xfs /dev/developer/db
+ mkfs.xfs /dev/developer/web
+-이제 빈디렉토리 만들기
+ mkdir -pv /mnt/{db,web}
+-vim /etc/fstab입력
+ 1.하기전에 cp -rv /etc/fstab /etc/fstab.bak로 원본파일을 백업하기.
+ 2. 다시 fstab으로 들어가서 /dev/developer/db    /mnt/db   xfs    defaults        0 0
+		   	    /dev/developer/web    /mnt/web   xfs    defaults        0 0
+ 3. df -hT로 잘되었는지 확인
+-systemctl daemon-reload입력
+-마운트되었는지 확인 및 설정
+ mount -a 
+ df -hT로 확인하기
+[root@server-1 ~]# df -hT
+Filesystem                Type      Size  Used Avail Use% Mounted on
+devtmpfs                  devtmpfs  4.0M     0  4.0M   0% /dev
+tmpfs                     tmpfs     727M  9.7M  718M   2% /run
+/dev/mapper/rl-root       xfs        36G  4.6G   31G  13% /
+tmpfs                     tmpfs     364M   96K  364M   1% /run/user/0
+/dev/sda1                 xfs      1014M  393M  622M  39% /boot
+/dev/mapper/developer-db  xfs        30G  247M   30G   1% /mnt/db
+/dev/mapper/developer-web xfs        30G  247M   30G   1% /mnt/web
+
+=========================================
+쓰던하드에 추가하기  //만드는 과정중에 하는 것 절대아님!
+- pvcreate  /dev/{sde1,sdf1}
+-vgextend  /dev/developer     /dev/{sde1,sdf1}
+ 이후 vgs로 40기가가 추가된것을 확인하기.
+ [root@server-1 ~]# vgs
+  VG        #PV #LV #SN Attr   VSize   VFree 
+  developer   5   2   0 wz--n-  99.98g 39.99g
+  rl          1   2   0 wz--n- <39.00g     0 
+-lvextend -l    +50%FREE  -r    /dev/developer/db
+ lvextend -l    +100%FREE      /dev/developer/web
+위아래의 차이는? (-r) 리사이징 
+ 다음단계에서 -r 가 안된것에 xfs_growfs /dev/developer/web를 입력해줘야 리부팅없이 인식된다.  = 즉 xfs_growfs 명령어를 -r이 대체한다. 만약 입력안했다면 꼭 grow명령어사용.
+
+-마지막으로 df -hT를 입력해서 잘 추가되었는지 확인한다.
+=======================================================
+[root@server-1 ~]# lsblk /dev/sda
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda           8:0    0   40G  0 disk 
+├─sda1        8:1    0    1G  0 part /boot
+└─sda2        8:2    0   39G  0 part 
+  ├─rl-root 253:0    0 35.1G  0 lvm  /
+  └─rl-swap 253:1    0  3.9G  0 lvm  [SWAP]
+공부를 했다면 리눅스를 설치전에 하드를 배분시켜서 원하는 볼륨으로 만들 수 있다.
+
+가상메모리 SWAP Memory == Page
+nvme (server-2)버전으로 수업한다.
+ll /dev/nvme0n2 를 입력해서 확인한다.
+[root@server-2 ~]# free
+               total        used        free      shared  buff/cache   available
+Mem:         3722200     1532944     1793720       24212      654748     2189256
+Swap:        2097148           0     2097148
+[root@server-2 ~]# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.5Gi       1.7Gi        23Mi       639Mi       2.1Gi
+Swap:          2.0Gi          0B       2.0Gi
+*** -h 옵션을 하면 인간이 읽기 쉽도록 되어있으므로 까먹지 말자. 
+	Swap 부분이 가상 메모리라고 할 수 있다.
+- 가상메모리 늘리기 단계
+0. ll   /dev/nvme*로 확인하기.
+1. fdisk /dev/nvme0n2 로 마법사 시작
+ 마지막세션에서 +1G를 입력
+  빈도수가 높은 명령어들 기억. 
+Command (m for help): t
+Selected partition 1
+Hex code or alias (type L to list all): 82
+Changed type of partition 'Linux' to 'Linux swap / Solaris'.
+하고 p를 입력하면 
+/dev/nvme0n2p1       2048 2099199 2097152   1G 82 Linux swap / Solaris 가 뜬다
+****linux swap type = (가상메모리)
+2. mkswap /dev/nvme0n2p1 를 입력한다
+ Setting up swapspace version 1, size = 1024 MiB (1073737728 bytes)
+ no label, UUID=1a91eeee-1e83-45b7-8e64-98d652829625
+3. 마운트하기
+ 스왑은 마운트가 아니라, 스왑 시리즈에 따른다. swap tab*2를 하면 swapoff, swapon 
+ swapon -v /dev/nvme0n2p1 시
+swapon: /dev/nvme0n2p1: found signature [pagesize=4096, signature=swap]
+swapon: /dev/nvme0n2p1: pagesize=4096, swapsize=1073741824, devsize=1073741824
+swapon /dev/nvme0n2p1
+4. 확인
+ free -h 입력
+ 	       total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.4Gi       1.7Gi        23Mi       640Mi       2.1Gi
+Swap:          3.0Gi          0B       3.0Gi
+1G의 가상메모리가 늘은 것을 알 수 있다.
+ swapoff -v /dev/nvme0n2p1 후 free -h 하면 
+	       total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.4Gi       1.7Gi        23Mi       640Mi       2.1Gi
+Swap:          2.0Gi          0B       2.0Gi
+원상복귀된다.
+
+5. vim /etc/fstab을 입력
+/dev/nvme0n2p1  swap    swap    defaults        0 0 을 추가한다.
+저장후 swapoff -v /dev/nvme0n2p1 로 마운트오프를 해본다.
+
+6.systemctl daemon-reload로 리붓준비
+swapon -a  으로 마운트
+free -h 로 확인하면 
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.5Gi       1.7Gi        23Mi       644Mi       2.1Gi
+Swap:          3.0Gi          0B       3.0Gi
+리부팅을 연출할 수 있다.
+
+7.원래대로 돌아가기
+vim /etc/fstab에서 주석처리해서 비활성화한다.
+===========================================================
+리눅스 수업교재_08, 09번 참조
+systemd = system daemon 을 말하는 명령어이며, 시스템 데몬 및 서비스에 대해 공부함.
+
+ps tab*2를 입력해본다. ps = process를 의미한다. 
+[root@server-1 ~]# pstree | head -10 로 10줄만 보도록 해보자.
+systemd-+-ModemManager---3*[{ModemManager}]
+        |-NetworkManager---2*[{NetworkManager}]
+        |-VGAuthService
+        |-accounts-daemon---3*[{accounts-daemon}]
+        |-alsactl
+        |-atd
+        |-auditd-+-sedispatch
+        |        `-2*[{auditd}]
+        |-avahi-daemon---avahi-daemon
+        |-bluetoothd
+이렇게 나올텐데, 주목할 점은 systemd가 최상위에 있는것을 알 수 있다.
+서비스 유닛 확장자는 .service / 소켓 유닛 확장자는 .socket
+- systemctl tab*2를 누르면 많은 명령어가 나오는데,
+1. systemctl start 명령어 
+2. systemctl restart 명령어
+3. systemctl status 명령어
+4. systemctl enable 명령어가 주요하다.
+
+-systemctl   get-default 을 입력해보자
+graphical.target 이 출력된다.
+[root@server-1 ~]# systemctl   set-default  multi-user.target 
+Removed "/etc/systemd/system/default.target".
+Created symlink /etc/systemd/system/default.target → /usr/lib/systemd/system/multi-user.target.
+심볼릭 링크가 생성되었다.
+[root@server-1 ~]# systemctl get-default multi-user.target
+reboot를 입력
+이랬더니 부팅하고 서버3처럼 cmd만 뜬다.
+
+-free -h를 입력해서 상황을 본다. 마우스도 볼 수 없다.
+~]# systemctl set-default graphical.target 
+~]# reboot
+입력한 뒤 리부트한다.
+
+-그러면 GUI 환경으로 부팅된다.
+systemctl set-default multi-user.target 
+systemctl isolate multi-user.target 
+하면 리붓보다 빠르게 모드변경된다.
+systemctl isolate graphical.target 으로 gui 변경가능.
+===========================================================
+is 시리즈= status 명령어가 같다.
+systemctl is-active sshd.service 
+systemctl is-enabled sshd.service 
+systemctl status sshd.service 여기서 service는 생략해도 결과값이 같게 나온다.
+
+서버2에서 ssh 172.25.3.11을 입력해본다   //ssh는 원격접속을 의미
+The authenticity of host '172.25.3.11 (172.25.3.11)' can't be established.
+ED25519 key fingerprint is SHA256:LDI9dIQUL59WBMPjnHwTyILi/pYKAsOSZUEwlztZpoQ.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])?  가 도출됨
+yes 후 암호 redhat을 입력하면 
+[root@server-2 ~]에서
+[root@server-1 ~]으로 원격접속이 된다.
+
+[root@server-1 ~]# systemctl stop sshd.service 
+[root@server-1 ~]# systemctl status sshd.service 입력하면
+ 1-20/20 (END) 이 뜨면서 죽은것을 알수있음
+
+[root@server-1 ~]# systemctl start sshd.service 입력시
+다시 server2에서 접속이 가능해진다. 
+>>>>> 이번 주제: systemctl start // systemctl stop으로 서비스를 처리할 수 있다.
+===========================================================
+참고파일 >> 리눅스파일 링크 참조
+링크란, 바로가기를 의미한다.
+cd /test/
+mkdir -pv   data/d1/d2/d3
+tree data
+cp -rv /etc/fstab    data/d1/d2/d3/   입력하고
+tree data 시
+fstab이라는 파일을 숨겨놓을 수 있게된다. vim data/d1/d2/d3/fstab로 열수는 있으나 복잡.
+이것을 바로갈 수 있게 해보자.
+
+1. 어렵게 접근하기
+cd data/d1/d2/d3/ 입력후 ll 시 확인이 된다.
+디렉토리 바로가기를 만들자.
+ln    -s   /test/data/d1/d2/d3/     /test/d3
+test로 나와서 ll입력하면 
+[root@server-1 test]# ll
+합계 0
+lrwxrwxrwx. 1 root root 20  9월  5 12:15 d3 -> /test/data/d1/d2/d3/
+drwxr-xr-x. 3 root root 16  9월  5 12:03 data
+lrwxrwxrwx. 1 root root 25  9월  5 12:10 fstab -> /test/data/d1/d2/d3/fstab
+cd d3
+pwd
+ll
+로 확인가능하긴하다.
+
+
+2. 쉽게 접근하기 (-s 옵션 이용) - 절대경로를 권장(루트)
+ln   -s    /test/data/d1/d2/d3/fstab  ./fstab 입력을 하면
+[root@server-1 test]# ll
+합계 0
+drwxr-xr-x. 3 root root 16  9월  5 12:03 data
+lrwxrwxrwx. 1 root root 25  9월  5 12:10 fstab -> /test/data/d1/d2/d3/fstab
+가 도출됨.
+
+>>실전에서는 헷갈리고 잘 안쓴다.
+
+링크
+cat > file1.txt 후 내용 작성후 ctrl D( 터미네이팅 )
+
+[root@server-1 ~]# ll -i /test/abc.txt  입력하면
+35501209 -rw-r--r--. 1 root root 12  9월  5 12:35 /test/abc.txt
+노란부분은 inode 부분이다. 인덱스 노드
+
+cp -rv /test/abc.txt  /test2/ 로 복사
+[root@server-1 ~]# ll /test/abc.txt  /test2/abc.txt 
+-rw-r--r--. 1 root root 12  9월  5 12:35 /test/abc.txt
+-rw-r--r--. 1 root root 12  9월  5 12:37 /test2/abc.txt
+원본과 크기가 같은 파일 총 두개를 확인할수있다.
+[root@server-1 ~]# ll -i /test/abc.txt  /test2/abc.txt 
+ 35501209 -rw-r--r--. 1 root root 12  9월  5 12:35 /test/abc.txt
+102250707 -rw-r--r--. 1 root root 12  9월  5 12:37 /test2/abc.txt
+그러나 inode 부분은 다른것을 알 수 있다.
+
+[root@server-1 ~]# ln /test/abc.txt    /test2/abc3.txt  링크를하고
+ 
+빨간부분은 무시. 같은 아이노드를 가지고 있다는 것은, 같은 데이터블록 위치를 찾아간다는 의미이므로 데이터 저장공간을 중복으로 차지하지 않는다. (메모리가 늘어나지 않는다)
+
+[root@server-1 ~]# ll -i /test/abc.txt /test2/abc3.txt 
+35501209 -rw-r--r--. 2 root root 57  9월  5 12:44 /test/abc.txt
+35501209 -rw-r--r--. 2 root root 57  9월  5 12:44 /test2/abc3.txt
+그래서 똑같은 원본이 여러가지로 바뀌어도 어느하나 파일에서 수정이 이루어지면 똑같이 업데이트 된다. 이것을 하드링크라고 한다.
+===========================================================
+[root@server-1 test]# rm -rvf /test/* 로 클리닝한다.
+****vim 에디팅 참고 v  >> 비주얼블록설정하고 y >> N p하면 N번 붙여넣는다.
+
+[root@server-1 test]# ln -s /test/sample.txt /test2/sample.txt 하고
+[root@server-1 test]# ls -lh /test/sample.txt /test2/sample.txt
+-rw-r--r--. 1 root root 56  9월  5 14:15 /test/sample.txt
+lrwxrwxrwx. 1 root root 16  9월  5 14:17 /test2/sample.txt -> /test/sample.txt
+ls -lh로 비교한다.
+[root@server-1 test2]# ll
+합계 8
+-rw-r--r--. 1 root root 12  9월  5 12:37 abc.txt
+-rw-r--r--. 1 root root 57  9월  5 12:44 abc3.txt
+lrwxrwxrwx. 1 root root 16  9월  5 14:17 sample.txt -> /test/sample.txt
+
+원본을 가리킬건데, 간편하게 접근하기위한 링크목적이 아니라,
+두 디렉토리를 모두 열어보자.
+ cd   /etc/systemd/system/multi-user.target.wants/   를 열면 
+링크파일이 굉장히 많이나오는 것을 알 수 있다.
+ (예시)
+
+cd    /usr/lib/systemd/system/ 로 가보자.
+[root@server-1 system]# ll | wc -l   입력시 
+436			개의 파일이 있다는 것을 알 수 있다.
+[root@server-1 system]# cd -    로 나오면
+/etc/systemd/system/multi-user.target.wants   에 시스템을 넣으면 실행되는 서비스가 나옴.
+그래서 용량을 적게하면서, 원본을 실행시키기 위해서는 원본을 링크파일로 만든 뒤, wants 디렉토리에 링크만 집어넣는 것이다.
+
+[root@server-1 multi-user.target.wants]# ll sshd.service 
+lrwxrwxrwx. 1 root root 36  8월 30 12:28 sshd.service -> /usr/lib/systemd/system/sshd.service 이걸 지워보자.
+부팅할때 실행안되게 만들기위해선
+[root@server-1 multi-user.target.wants]# systemctl disable sshd 를 입력
+Removed "/etc/systemd/system/multi-user.target.wants/sshd.service". 지워졌다고 뜬다.
+>>이는마치 고속도로의 이정표를 뽑아버린 것.  링크는 삭제돼도 원본은 그대로다.
+disable의 반대 enable 해보자.
+[root@server-1 multi-user.target.wants]# systemctl enable sshd  를 입력
+Created symlink /etc/systemd/system/multi-user.target.wants/sshd.service → /usr/lib/systemd/system/sshd.service.
+>>알아서 원본을 가리키는 심볼링크를 만들어줬다는 메시지가 뜬다.
+systemctl enable 명령어는 중요하다는 것을 알 수 있음
+===========================================================
+[root@server-1 ~]# yum install httpd -y 를 (안깔려있다는 전제)
+[root@server-1 ~]# ll /etc/systemd/system/multi-user.target.wants/  (를 기억하면좋다)
+
+[root@server-1 ~]# systemctl  status  httpd  입력해서 상태를 본다.
+○ httpd.service - The Apache HTTP Server
+     Loaded: loaded (/usr/lib/systemd/system/httpd.service; disabled; preset: disabled)
+     Active: inactive (dead)
+       Docs: man:httpd.service(8)
+***자동실행시키기 (--now) 바로실행
+[root@server-1 ~]# systemctl  enable --now 로
+[root@server-1 ~]# systemctl  enable --now   httpd
+Created symlink /etc/systemd/system/multi-user.target.wants/httpd.service → /usr/lib/systemd/system/httpd.service.
+ 
+돌아가게 되었다. 똑같이 symlink 가 생겨서 적은 용량의 링크파일로 원본과 연동된다.
+===========================================================
+이번시간: 네트워크 기반 리눅스 root의 암호 redhat을 잊어먹었을 때 
+[root@server-1 ~]# systemctl status iptables.service >> linux의 옛 방화벽서비스.
+Unit iptables.service could not be found. 로 안뜨게 되었다.
+[root@server-1 ~]# systemctl mask iptables.service 
+Unit iptables.service does not exist, proceeding anyway.
+Created symlink /etc/systemd/system/iptables.service → /dev/null.
+그래서 밑빠진독에 부어버린다. unmask로도 복구가능하긴하다.
+~~
+[root@server-1 ~]# yum install telnet telnet-server.x86_64 로 설치받아보자.
+[root@server-1 ~]# systemctl status telnet.socket  을 입력하면 
+ 
+죽어있는 텔넷서비스를 알 수 있음.
+[root@server-1 ~]# systemctl enable telnet.socket   을 입력
+Created symlink /etc/systemd/system/sockets.target.wants/telnet.socket → /usr/lib/systemd/system/telnet.socket.
+하지만 아직 죽어있음. 그래서 꼭 후속조치로 start를 해야함.
+[root@server-1 ~]# systemctl start telnet.socket
+ 
+stop으로 멈춰보자. 그리고 disable을 하면 링크파일을 지운다.
+
+다시, 부팅시 자동활성화+시작을 하기위해서는 
+[root@server-1 ~]# systemctl enable --now   telnet.socket    로 하도록 한다.
+===========================================================
+부팅프로세스 제어 / 챕터09참조 , 실습파일 10번참조
+-root 암호를 잊었을때, 분실시 로그인해서 암호변경을 할 수 있음.
+
+init ram fs 의 합성명령어인  initramfs 와
+rd.break 를 추가해서 해결한다.
+
+switch_root:/# mount -o remount,rw /sysroot 
+switch_root:/# chroot /sysroot
+sh-4.4#
+passwd root
+touch /.autorelabel     >> auto relabel 알아서 리눅스 보안정책재구성
+
+0.
+cd /boot/grub2
+vim grub.cfg 으로 들어가서 
+65line set timeout=5 를 60으로 수정해서 여유롭게 연습준비.
+1.
+reboot하고 부트로더에서 e를 눌러 편집모드로 들어감. linux라인에 fn+end로 끝에 들어가서
+rd.break를 입력, ctrl+x 
+2. mount -o remount,rw /sysroot
+chroot /sysroot
+3.passwd root를 입력하고 redhat2를 입력,
+touch /.autorelabel
+exit 
+exit 입력하면
+자동으로 재부팅됨.
+****주의 auto re label임 rabel 아니다.
+ 
+이걸 안보고 가능하면 ok.
+********>>github에 기록하자 : 암호 복구, 암호 설정 *************
+=========================================================
+실습파일09 스토리지 관리 2(lvm) 참조
+단계-5 /etc/fstab에 설정된 정보를 근거로 마운트 한다.
+~]# systemctl daemon-reload 
+~]# mount -a
+~]# df -hT
+
+RHCSA 12 디스크 관리 기초( 세 문제) 참조
+가상메모리 확장하기
+
+문제수정: 확장용량 1G
+가상메모리우선순위설정x
+모든위치 /dev/vdc 포함 대상을 /dev/sdf 로 바꾸기   /구글드라이브에 존재
+ 
+>풀이 
+[root@server-1 ~]# lsblk
+[root@server-1 ~]# fdisk /dev/sdf
+Command (m for help): d
+Command (m for help): w
+[root@server-1 ~]# fdisk /dev/sdf
+Command (m for help): n
+Created a new partition 1 of type 'Linux' and of size 1 GiB.
+Command (m for help): t
+Selected partition 1
+Hex code or alias (type L to list all): 82
+Changed type of partition 'Linux' to 'Linux swap / Solaris'.
+Command (m for help): w
+[root@server-1 ~]# mkswap /dev/sdf1
+[root@server-1 ~]# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.5Gi       1.7Gi        23Mi       632Mi       2.0Gi
+Swap:          3.9Gi          0B       3.9Gi
+[root@server-1 ~]# swapon /dev/sdf1
+[root@server-1 ~]# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.5Gi       1.7Gi        23Mi       632Mi       2.0Gi
+Swap:          4.9Gi          0B       4.9Gi
+[root@server-1 ~]# swapoff /dev/sdf1
+[root@server-1 ~]# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.4Gi       1.8Gi        23Mi       632Mi       2.1Gi
+Swap:          3.9Gi          0B       3.9Gi
+[root@server-1 ~]# vim /etc/fstab
+  [ /dev/sdf1 swap swap defaults 0 0 ] 
+[root@server-1 ~]# swapon -a
+[root@server-1 ~]# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.5Gi       1.7Gi        23Mi       636Mi       2.1Gi
+Swap:          4.9Gi          0B       4.9Gi
+[root@server-1 ~]# 
