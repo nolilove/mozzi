@@ -1,0 +1,731 @@
+3주차_수요일 메모
+
+복기_
+root암호를 잊었을 때, 복구(새로 만들기)하는법
+1.  부트메뉴 표시후 5초이내 'e'키 입력
+2. 'linux 줄' 맨 뒷부분으로 이동하여 rd.break 입력(initramfs방식 boot)
+3. ctrl+x 으로 저장
+4. mount -o rw,remount /sysroot/  (rw와 remount의 순서는 중요x)
+  chroot /sysroot
+5.passwd root
+ 바꾸고자하는 pw*2 입력
+6. touch /.autorelabel
+  exit*2 입력 후 부팅하여 새 비밀번호로 login
+===========================================================
+Linux 파일 묶기와 압축하기
+
+[root@server-1 ~]# cd /test
+[root@server-1 test]# ll
+합계 8
+-rw-r--r--. 1 root root 7885  8월 31 12:51 bashrc
+drwxr-xr-x. 2 root root    6  8월 31 14:30 data31
+-rw-r--r--. 2 root root    0  8월 31 14:30 f2
+-rw-r--r--. 1 root root    0  8월 31 14:19 file1.txt
+[root@server-1 test]# rm -rvf /test/*
+removed '/test/bashrc'
+removed directory '/test/data31'
+removed '/test/f2'
+removed '/test/file1.txt'   로 청소.  
+
+[root@server-1 test]# echo "hello"
+hello
+[root@server-1 test]# echo "hello" >> /test/file1.txt
+[root@server-1 test]# cat /test/file1.txt 
+hello
+[root@server-1 test]# cat  >> file2.txt
+aaabbbcccddd
+bbbcccdddeee
+cccdddeeefff               
+ctrl+D로 저장후 나옴
+[root@server-1 test]# vim    /test/file3.txt
+aaaa             // V+방향키로 비주얼블록선택후 y로 복사, 배수n + p로 붙여넣기가 가능.
+[root@server-1 test]# ll
+합계 12
+-rw-r--r--. 1 root root    6  9월  6 09:23 file1.txt
+-rw-r--r--. 1 root root   39  9월  6 09:24 file2.txt
+-rw-r--r--. 1 root root 1516  9월  6 09:26 file3.txt
+*gzip --> bzip2 --> xz --> zip 등 명령어를 쓰도록 한다.
+1. 압축
+[root@server-1 test]# gzip file1.txt
+[root@server-1 test]# bzip2 file2.txt 
+[root@server-1 test]# xz file3.txt         입력후 
+[root@server-1 test]# ll			로 확인
+합계 12
+-rw-r--r--. 1 root root 36  9월  6 09:23 file1.txt.gz
+-rw-r--r--. 1 root root 52  9월  6 09:24 file2.txt.bz2
+-rw-r--r--. 1 root root 96  9월  6 09:26 file3.txt.xz
+>> 여기서 알수 있는 점은 gzip은 .gz //bzip2은 .bz2// xz는 .xz 로 나오는특징
+2.압축해제   // gunzip, bunzip2, unxz
+[root@server-1 test]# gunzip file1.txt.gz 
+[root@server-1 test]# bunzip2 file2.txt.bz2 
+[root@server-1 test]# unxz file3.txt.xz        로 해제가 가능하다.
+
+3.압축 (명령어, 옵션)
+[root@server-1 test]# gzip -kv file1.txt 
+  file1.txt:	-33.3% -- created file1.txt.gz
+[root@server-1 test]# bzip2 -kv file2.txt 
+  file2.txt:  0.750:1, 10.667 bits/byte, -33.33% saved, 39 in, 52 out.
+[root@server-1 test]# xz -kv file3.txt 
+file3.txt (1/1)
+  100 %              96 B / 1,516 B = 0.063       각각 다른방식으로 출력된다.
+[root@server-1 test]# ll     		으로 확인시
+합계 24
+-rw-r--r--. 1 root root    6  9월  6 09:23 file1.txt
+-rw-r--r--. 1 root root   36  9월  6 09:23 file1.txt.gz
+-rw-r--r--. 1 root root   39  9월  6 09:24 file2.txt
+-rw-r--r--. 1 root root   52  9월  6 09:24 file2.txt.bz2
+-rw-r--r--. 1 root root 1516  9월  6 09:26 file3.txt
+-rw-r--r--. 1 root root   96  9월  6 09:26 file3.txt.xz
+>>원본을 남기고 따로 압축을 한 것을 확인 가능하다. 
+
+4.원본을 남긴채로 압축해제
+[root@server-1 test]# rm -rvf   *.txt 로 원본파일만을 삭제 해본다.  이 상태에서,
+
+[root@server-1 test]# gzip -dkv file1.txt.gz 
+file1.txt.gz:	-33.3% -- created file1.txt
+[root@server-1 test]# bzip2 -dk  file2.txt.bz2 
+[root@server-1 test]# xz -dkv file3.txt.xz
+file3.txt.xz (1/1)
+  100 %              96 B / 1,516 B = 0.063 
+[root@server-1 test]# ll
+합계 24
+-rw-r--r--. 1 root root    6  9월  6 09:23 file1.txt
+-rw-r--r--. 1 root root   36  9월  6 09:23 file1.txt.gz
+-rw-r--r--. 1 root root   39  9월  6 09:24 file2.txt
+-rw-r--r--. 1 root root   52  9월  6 09:24 file2.txt.bz2
+-rw-r--r--. 1 root root 1516  9월  6 09:26 file3.txt
+-rw-r--r--. 1 root root   96  9월  6 09:26 file3.txt.xz
+>> -k 옵션은 즉 말그대로 keep으로, 원본과 압축파일 모두 남길 수 있다.
+>> -d 옵션으로 un명령어와 동일한 효과를 볼 수 있다.
+========================================================
+[root@server-1 test]# mkdir -pv data                    data폴더를 만든다.
+mkdir: created directory 'data'
+[root@server-1 test]# touch    data/f1   data/f2   data/f3          f1~f3을 만든다.
+[root@server-1 test]# ll data
+합계 0
+-rw-r--r--. 1 root root 0  9월  6 10:03 f1
+-rw-r--r--. 1 root root 0  9월  6 10:03 f2
+-rw-r--r--. 1 root root 0  9월  6 10:03 f3
+[root@server-1 test]# touch    data/f{4..6}   		f4~f6을 다른방법으로 만들었다.
+[root@server-1 test]# ll data
+합계 0
+-rw-r--r--. 1 root root 0  9월  6 10:03 f1
+-rw-r--r--. 1 root root 0  9월  6 10:03 f2
+-rw-r--r--. 1 root root 0  9월  6 10:03 f3
+-rw-r--r--. 1 root root 0  9월  6 10:04 f4
+-rw-r--r--. 1 root root 0  9월  6 10:04 f5
+-rw-r--r--. 1 root root 0  9월  6 10:04 f6
+
+[root@server-1 test]# gzip -kv data                gzip으로 압축하려 시도하면,
+gzip: data is a directory -- ignored		해당 data 디렉토리는 안된다고 출력됨.
+[root@server-1 test]# gzip -rkv data		 -r (recursive)를 옵션추가하면 생성됨.
+data/f1:	  0.0% -- created data/f1.gz
+data/f2:	  0.0% -- created data/f2.gz
+data/f3:	  0.0% -- created data/f3.gz
+data/f4:	  0.0% -- created data/f4.gz
+data/f5:	  0.0% -- created data/f5.gz
+data/f6:	  0.0% -- created data/f6.gz
+tar 명령어 사용 
+tar은 tape archive의 축약어이며, 본디 아카이브 마그네틱테이프에 파일저장용으로 만들어짐.
+tarfile이라고 알려진 저장파일을 묶거나 풀수 있다.
+tar 옵션에서는 반드시 2개이상이 붙게되고, 오른쪽 끝(마지막)은 반드시 -f 옵션이 되어야 함.
+
+-A 저장 파일에 tar 파일을 추가한다.
+-c, --create 새 저장 파일을 만든다.
+-d, --diff 저장파일과 일반파일과 다른 점을 찾는다.
+--delete 저장 파일에서 지운다.
+-r, --append 저장 파일의 끝에 파일을 덧붙인다.
+-t, --list 저장 파일의 내용 목록을 보여준다.
+-u, --update 저장 파일에 저장된 사본보다
+새로운 파일만을 덧붙인다.
+-x, --extract 저장된 것에서 풀어낸다.
+-f, --file 저장 파일을 지정한다.
+-v, --verbose 처리중인 파일을 자세하게 보여준다.
+-C DIR 디렉토리로 바꾸고 작업을 한다.
+-i, --ignore-zeros 크기가 0인 것은 무시한다.
+-j, --bzip2 bzip2 필터를 사용하여 .bz2 파일을 푼다.
+-J, --xz xz필터를 사용하여 .xz 파일을 푼다.
+-k, --keep-old-files 기존에 있는 파일을 유지한다.
+파일이 있으면 덮어쓰지 않는다.
+-p, --preserve-permissions 모든 퍼미션 정보를 유지한다.
+--remove-files 파일을 저장 파일에 덧붙인 다음 파일을 지운다.
+--exclude=FILE 지정된 FILE을 제외한다.
+-X, --exclude-from FILE FILE 목록에 들어있는 것을 제외한다.
+-Z, --compress compress로 압축하거나 푼다.
+-z, --gzip gzip으로 압축하거나 푼다.
+
+tar 명령어는 옵션필수이므로 -cvf나 cvf 명령이 같다.
+[root@server-1 test]# tar -cvf file.tar    file1.txt file2.txt file3.txt
+file1.txt
+file2.txt
+file3.txt
+[root@server-1 test]# ll
+합계 24
+-rw-r--r--. 1 root root 10240  9월  6 10:25 file.tar 	확인해보니 크기가 큰 tar파일 생성.
+-rw-r--r--. 1 root root     6  9월  6 09:23 file1.txt
+-rw-r--r--. 1 root root    39  9월  6 09:24 file2.txt
+-rw-r--r--. 1 root root  1516  9월  6 09:26 file3.txt
+[root@server-1 test]# touch file4.txt			파일4를 생성후 같이 묶기.
+[root@server-1 test]# tar tf   file.tar 
+file1.txt
+file2.txt
+file3.txt
+[root@server-1 test]# tar   -rf    file.tar  file4.txt 
+[root@server-1 test]# tar tf   file.tar 
+file1.txt
+file2.txt
+file3.txt
+file4.txt
+
+[root@server-1 test]# cat >> file1.txt 
+Linux
+Bye
+[root@server-1 test]# cat file1.txt
+hello
+Linux
+Bye
+[root@server-1 test]# mkdir -pv /test2
+mkdir: created directory '/test2'
+[root@server-1 test]# ll
+합계 24
+-rw-r--r--. 1 root root 10240  9월  6 10:29 file.tar
+-rw-r--r--. 1 root root    16  9월  6 10:30 file1.txt
+-rw-r--r--. 1 root root    39  9월  6 09:24 file2.txt
+-rw-r--r--. 1 root root  1516  9월  6 09:26 file3.txt
+-rw-r--r--. 1 root root     0  9월  6 10:27 file4.txt
+[root@server-1 test]# cp -rvf  file.tar /test2/
+'file.tar' -> '/test2/file.tar'
+[root@server-1 test]# tar -xvf   /test2/file.tar  -C   /test2/
+[root@server-1 test]# ll /test2
+합계 24
+-rw-r--r--. 1 root root 10240  9월  6 10:32 file.tar
+-rw-r--r--. 1 root root     6  9월  6 09:23 file1.txt
+-rw-r--r--. 1 root root    39  9월  6 09:24 file2.txt
+-rw-r--r--. 1 root root  1516  9월  6 09:26 file3.txt
+-rw-r--r--. 1 root root     0  9월  6 10:27 file4.txt
+[root@server-1 test]# tar -uvf  file.tar   file1.txt           -u는 업데이트되게하는 옵션이다.
+file1.txt
+
+tar jcvf /test/etc.tar
+tar Jcvf /test/etc.tar
+tar zcvf /test/etc.tar
+
+>>압축률이 제일 좋은 xz명령어를 사용하자.( Jcvf )
+[root@server-1 test]# gzip .gz  tar -zcvf  ^C
+[root@server-1 test]# bzip2 .bz2  tar -jcvf  ^C
+[root@server-1 test]# xz   .xz  tar -Jcvf  ^C
+====================================================
+test] rm -rvf *로 청소.
+[root@server-1 test]# tar --help | cat -n   로 찾자. 259라인 압축옵션 확인
+266	  -j, --bzip2                bzip2(으)로 아카이브를 필터링합니다
+267	  -J, --xz                   xz(으)로 아카이브를 필터링합니다
+275	  -z, --gzip, --gunzip, --ungzip   gzip(으)로 아카이브를
+276	                             필터링합니다
+~~~~~~~~~
+Daily Backup에 연 월 일을 자동으로 넣어보자.
+Date명령 기초
+[root@server-1 test]# mkdir  backup_2023_09_06
+mkdir: created directory 'backup_2023_09_06'
+[root@server-1 test]# touch file_09_06.txt
+[root@server-1 test]# ll
+합계 0
+drwxr-xr-x. 2 root root 6  9월  6 11:17 backup_2023_09_06
+-rw-r--r--. 1 root root 0  9월  6 11:17 file_09_06.txt
+
+1. date를 입력해보자.
+[root@server-1 test]# date
+2023. 09. 06. (수) 11:19:22 KST 			/date   --help  | head -10 을 해보자.
+2. format 연습
+[root@server-1 test]# date +%y		소문자y는 연도 yy
+23
+[root@server-1 test]# date +%Y		대문자y는 연도yyyy
+2023	
+[root@server-1 test]# date +%m		소문자m는 월mm
+09
+[root@server-1 test]# date +%d		소문자d는 일dd
+06
+[root@server-1 test]# date +%D		전부나온다.yy-mm-dd
+09/06/23
+[root@server-2 ~]# date +%h			영어판)h는 요일
+Sep
+[root@server-1 test]# date +%H		대문자H는 시간
+11
+[root@server-1 test]# date +%M		대문자m는 분
+23
+[root@server-1 test]# date +%S		대문자S는 초
+37
+3.  비교해보기
+[root@server-1 test]# date +%y-%m-%d
+23-09-06
+[root@server-1 test]# date +%D
+09/06/23				약간의 차이가 있다.
+win +space ---> shift +space 하면 한영을 바꿀수 있다.
+
+4. 변수 넣기
+[root@server-1 test]# date +%m-%d 			입력
+09-06
+[root@server-1 test]# NOW=$(date +%m-%d)		입력
+[root@server-1 test]# echo NOW
+NOW
+[root@server-1 test]# echo $NOW
+09-06						변수명에 $를 붙이면 값까지 도출된다.
+[root@server-1 test]# NOW=$(date +%H:%M)
+[root@server-1 test]# echo $NOW
+11:41						동일방법으로 변수명령을 넣을수있다.
+
+[root@server-1 test]# touch file_$NOW.txt
+[root@server-1 test]# ll
+합계 0
+drwxr-xr-x. 2 root root 6  9월  6 11:17 backup_2023_09_06
+-rw-r--r--. 1 root root 0  9월  6 11:17 file_09_06.txt
+-rw-r--r--. 1 root root 0  9월  6 11:43 file_11:41.txt
+
+5.한방에 출력하기.  
+[root@server-1 test]# touch  file_$(date +%H-%M).txt 를 하면
+
+[root@server-1 test]# tar zcvf /test/etc_$(date +%H:%M).tar.gz   /etc/ 	  입력을해보면
+drwxr-xr-x. 2 root root       6  9월  6 11:17 backup_2023_09_06
+-rw-r--r--. 1 root root 5214720  9월  6 11:52 etc_11:52.tar.gz
+-rw-r--r--. 1 root root       0  9월  6 11:17 file_09_06.txt
+-rw-r--r--. 1 root root       0  9월  6 11:47 file_11-47.txt
+-rw-r--r--. 1 root root       0  9월  6 11:43 file_11:41.txt
+-rw-r--r--. 1 root root       0  9월  6 11:44 file_11:44.txt
+===========================================================
+정기적 - 주기적 스케줄링 //시스템 예약 작업
+ 
+crontab 등록형식은 '분 시 일 월 요' 이다.	일요일:0 , 토요일:6
+* * * * * 수행 명령어(절대경로)
+각 필드(분 시 일 월 요)는 공백으로 구분(매우 중요)
+* (매, 모든 ~ )
+각 필드의 * 은 매분 매시 매일 매월 매요일
+, (언제,언제,언제, ...)
+필드내에 두 개 이상(불연속) 일 때
+주의 : , 로 구분(공백 있으면 안됨)
+*/숫자 ( ~ 마다 )
+각 필드내에 주기(간격)를 지정할 때
+- (시작-끝)
+각 필드내에 범위(연속)를 지정할 때
+~~~~~~~~~~~~~~~~~~~~~~~~~
+vim backup.sh 입력
+   1 #!/bin/bash     
+   2 NOW=$(date +%H:%M)
+   3 tar   -Jcf   /test/var_$NOW.tar.xz      /var/     입력후 저장하면 스크립트가 생성된다.
+
+root@server-1 test]# chmod    a+x   /test/backup.sh      실행권한을 준다.
+확인해보면 -rwxr-xr-x. 1 root root 83  9월  6 12:32 backup.sh
+이제 원하는시간에 실행시키기만 하면 된다.		(xz라 오래걸림)
+ls -lh 로 검색			
+합계 159M
+-rwxr-xr-x. 1 root root   83  9월  6 12:32 backup.sh
+-rw-r--r--. 1 root root 159M  9월  6 12:36 var_12:34.tar.xz
+
+crontab -e 로 편집기에 들어간다.
+[root@server-1 test]# crontab -e 
+ㄴ	41  12   *   *   *  /test/backup.sh
+no crontab for root - using an empty one
+crontab: installing new crontab
+확인하기위해서 crontabl -l 입력.
+
+[root@server-1 test]# ls -lh
+합계 191M
+-rwxr-xr-x. 1 root root   83  9월  6 12:32 backup.sh
+-rw-r--r--. 1 root root 159M  9월  6 12:36 var_12:34.tar.xz
+-rw-r--r--. 1 root root  22M  9월  6 12:41 var_12:41.tar.xz
+확인하니 백업이 되어있다.
+==========================================================
+위에 내역을 로그로 확인하기위해서는 
+[root@server-1 test]# tail /var/log/cron  을확인
+Sep  6 12:39:57 server-1 crontab[4071]: (root) REPLACE (root)
+Sep  6 12:39:57 server-1 crontab[4071]: (root) END EDIT (root)
+Sep  6 12:40:52 server-1 crontab[4112]: (root) LIST (root)
+Sep  6 12:41:00 server-1 crontab[4220]: (root) LIST (root)
+Sep  6 12:41:01 server-1 anacron[3692]: Job `cron.weekly' started
+Sep  6 12:41:01 server-1 anacron[3692]: Job `cron.weekly' terminated
+Sep  6 12:41:01 server-1 anacron[3692]: Normal exit (2 jobs run)
+Sep  6 12:41:01 server-1 CROND[4236]: (root) CMD (/test/backup.sh)
+Sep  6 12:41:01 server-1 CROND[4234]: (root) CMDOUT (tar: 구성 요소 이름 앞에 붙은 `/' 제거 중)
+Sep  6 12:43:11 server-1 CROND[4234]: (root) CMDEND (/test/backup.sh)
+
+===========================================================
+crontab -e 
+ㄴ 10  13   *   *   *  /test/backup.sh 로 수정한뒤 저장           (13시 10분에 백업)
+[root@server-1 test]# systemctl restart crond을 입력하면 되어있을 것이다.
+[root@server-1 test]# ll
+합계 487192
+-rwxr-xr-x. 1 root root        83  9월  6 12:32 backup.sh
+-rw-r--r--. 1 root root 166294724  9월  6 12:36 var_12:34.tar.xz
+-rw-r--r--. 1 root root 166288776  9월  6 12:43 var_12:41.tar.xz
+-rw-r--r--. 1 root root 166289976  9월  6 13:12 var_13:10.tar.xz
+실제로 xz파일이 생성되었음을 알 수 있다.
+===========================================================
+tail 명령어 
+tail -f abc.txt를 입력하면  -f는 follow기때문에 계속 깜빡거리는 것을 알 수 있다.
+ 
+이상태에서 왼쪽cmd창에서 redirection으로 abc.txt를 계속 입력하면 오른쪽화면에도 똑같이 도출된다. 오른쪽에서 ctrl+c로 강제로 팔로우를 끊으면 종료된다.
+* * * * * /test/backup.sh 로 바꾸면 1분마다 백업하게되는데,
+[root@server-1 test]# crontab -e
+#!/bin/bash     
+NOW=$(date +%H:%M)
+tar   -Jcf   /test/home_$NOW.tar.xz      /home  
+백업파일을 위와같이 변경하고 저장해본다.
+저장한 뒤 systemctl restart crond를 입력      		"cron + daemon"=crond
+[root@server-1 test]# ll
+합계 489464
+-rw-r--r--. 1 root root        20  9월  6 14:11 abc.txt
+-rwxr-xr-x. 1 root root        83  9월  6 14:15 backup.sh
+-rw-r--r--. 1 root root    771784  9월  6 14:17 home_14:17.tar.xz
+-rw-r--r--. 1 root root    771784  9월  6 14:18 home_14:18.tar.xz
+-rw-r--r--. 1 root root    771784  9월  6 14:19 home_14:19.tar.xz
+-rw-r--r--. 1 root root 166294724  9월  6 12:36 var_12:34.tar.xz
+-rw-r--r--. 1 root root 166288776  9월  6 12:43 var_12:41.tar.xz
+-rw-r--r--. 1 root root 166289976  9월  6 13:12 var_13:10.tar.xz
+>>1분마다 적은 용량의 home directiory의 xz file이 계속 생긴다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+실용적인 tail 옵션사용+log 보기
+오른쪽 cmd창에서 
+1. [root@server-1 test]# tail   /var/log/cron 을 입력한것과 
+2. [root@server-1 test]# tail  -f   /var/log/cron  을 입력한것의 차이
+ ㄴ2의 경우가 계속해서 로그가 생성될때마다 즉각적으로 보고된다. (-f옵션때문)
+***** tar 압축 중 메세지 " 구성 요소 이름 앞에 붙은 `/' 제거 중 " 이 뜨는 이유는, 최상위 /를 제거한다는 알림 메시지이다. · 최상위 /를 제거해야 절대경로가 아닌 상대경로가 되기 때문에, 압축을 해제할 때 안전하고 편리하다
+ 
+위의 경우이다.
+[root@server-1 test]# cat   backup.sh
+#!/bin/bash     
+NOW=$(date +%H:%M)
+tar   -Jcf   /test/home_$NOW.tar.xz      /home
+위의 명령어로 vi 편집모드로 백업 등 서비스를 쉽게 이용할 수 있다는 점을 기억하자.
+===========================================================
+[root@server-1 test]# rm -rvf /test/* 으로 클리닝.
+리눅스 find 명령
+find는 엑셀의 조건부서식을 통한 값찾기, 다양한 문서파일의 ctrl+F와 같이 훌륭한 도구이다.
+1. find 명령어 형식
+~]# find [path] [options] [actions]
+path : find를 수행할 대상경로(위치).
+options : 검색옵션(검색조건)
+주의 : 옵션명 앞에   ‘-’  하나만 표기함
+actions : 검색된 파일들을 대상으로 어떤 작업을
+수행할 것인가를 shell command로 지정.
+ 
+- 간단하게 touch f{1..6}으로 파일을 생성하고, 또한 touch a{1..3}으로 파일들을 생성함.
+[root@server-1 test]# find ./ -name f2
+./f2
+[root@server-1 test]# find ./ -name "f*"      입력시
+./.git/hooks/fsmonitor-watchman.sample
+./f1
+./f2
+./f3
+./f4
+./f5
+./f6					까지 출력된다.
+
+- 따로 f라는 파일들만 test2폴더로 모으고자 한다.      *mv =move 옵션  **\;= 끝 규칙설정
+[root@server-1 test]# find ./ -name "f*" -exec mv -v {}    /test2  \; 
+renamed './.git/hooks/fsmonitor-watchman.sample' -> '/test2/fsmonitor-watchman.sample'
+renamed './f1' -> '/test2/f1'
+renamed './f2' -> '/test2/f2'
+renamed './f3' -> '/test2/f3'
+renamed './f4' -> '/test2/f4'
+renamed './f5' -> '/test2/f5'
+renamed './f6' -> '/test2/f6'
+[root@server-1 test]# find /test2   -name "f*" -exec mv -v {}  /test2 \;     로 test2 폴더확인
+mv: '/test2/fsmonitor-watchman.sample' and '/test2/fsmonitor-watchman.sample' are the same file
+mv: '/test2/f1' and '/test2/f1' are the same file
+mv: '/test2/f2' and '/test2/f2' are the same file
+mv: '/test2/f3' and '/test2/f3' are the same file
+mv: '/test2/f4' and '/test2/f4' are the same file
+mv: '/test2/f5' and '/test2/f5' are the same file
+mv: '/test2/f6' and '/test2/f6' are the same file
+===========================================================
+[root@server-1 test]# touch  file{1..5}
+[root@server-1 test]# ll
+합계 0
+-rw-r--r--. 1 root root 0  9월  6 15:13 file1
+-rw-r--r--. 1 root root 0  9월  6 15:13 file2
+-rw-r--r--. 1 root root 0  9월  6 15:13 file3
+-rw-r--r--. 1 root root 0  9월  6 15:13 file4
+-rw-r--r--. 1 root root 0  9월  6 15:13 file5
+[root@server-1 test]# echo "aaa" >> file1
+[root@server-1 test]# echo "aaa" >> file3
+[root@server-1 test]# echo "aaa" >> file5
+[root@server-1 test]# ll
+합계 12
+-rw-r--r--. 1 root root 4  9월  6 15:14 file1
+-rw-r--r--. 1 root root 0  9월  6 15:13 file2
+-rw-r--r--. 1 root root 4  9월  6 15:14 file3
+-rw-r--r--. 1 root root 0  9월  6 15:13 file4
+-rw-r--r--. 1 root root 4  9월  6 15:14 file5		2,4번파일빼고 1,3,5파일에 내용o
+
+방대한 파일중에 이 내용있는걸 찾을거다.
+[root@server-1 test]# find ./ -empty -exec rm -rvf  {}     \;   제로바이트인 파일 없애기  
+-rw-r--r--. 1 root root 4  9월  6 15:14 file1
+-rw-r--r--. 1 root root 4  9월  6 15:14 file3
+-rw-r--r--. 1 root root 4  9월  6 15:14 file5		확인시 이렇게 도출.
+
+[root@server-1 test]# chmod -v u-w  file3		유저에서 w를 뺀경우
+mode of 'file3' changed from 0644 (rw-r--r--) to 0444 (r--r--r--)
+-rw-r--r--. 1 root root 4  9월  6 15:14 file1
+-r--r--r--. 1 root root 4  9월  6 15:14 file3
+-rw-r--r--. 1 root root 4  9월  6 15:14 file5 		구성이 바뀌어있다.
+이때 file3만 제외하고 권한을 변경하고자 한다.       **777=a+rwx 권한이다.
+[root@server-1 test]# find ./ -perm 644   -exec chmod  -v 777  {} \;
+mode of './file1' changed from 0644 (rw-r--r--) to 0777 (rwxrwxrwx)
+mode of './file5' changed from 0644 (rw-r--r--) to 0777 (rwxrwxrwx)
+
+man find >> /perm >>-perm -mode 문단 확인     >-perm /mode 문단확인
+[root@server-1 test]# chmod -v 644    file1
+mode of 'file1' changed from 0777 (rwxrwxrwx) to 0644 (rw-r--r--)
+[root@server-1 test]# chmod -v 644    file5
+mode of 'file5' changed from 0777 (rwxrwxrwx) to 0644 (rw-r--r--)   1, 5의 권한 다시변경
+ 
+위에 차이가 있다.
+===========================================================
+**참고파일>>dd명령의 개념 및 예제 참고
+랜덤 데이터로 파일 생성
+커널 랜덤 드라이버를 이용하여 랜덤 데이터로 이루어진 100바이트의 파일을 채우는 예시
+dd if=/dev/urandom of=myrandom bs=100 count=1       을 해볼것이다.
+
+[root@server-1 test]# dd if=/dev/urandom  of=/test/f10m.txt  bs=1MB count=10
+10+0 records in
+10+0 records out
+10000000 bytes (10 MB, 9.5 MiB) copied, 0.04332 s, 231 MB/s
+[root@server-1 test]# dd if=/dev/urandom  of=/test/f20m.txt  bs=1MB count=20
+20+0 records in
+20+0 records out
+20000000 bytes (20 MB, 19 MiB) copied, 0.0871714 s, 229 MB/s
+[root@server-1 test]# dd if=/dev/urandom  of=/test/f30m.txt  bs=10MB count=3
+3+0 records in
+3+0 records out
+30000000 bytes (30 MB, 29 MiB) copied, 0.140831 s, 213 MB/s
+[root@server-1 test]# dd if=/dev/urandom  of=/test/f100m.txt  bs=1MB count=100
+100+0 records in
+100+0 records out
+100000000 bytes (100 MB, 95 MiB) copied, 0.48396 s, 207 MB/s
+[root@server-1 test]# dd if=/dev/urandom  of=/test/f1g.txt  bs=1MB count=1024
+1024+0 records in
+1024+0 records out
+1024000000 bytes (1.0 GB, 977 MiB) copied, 7.36647 s, 139 MB/s    
+
+이렇게 무작위파일을생성했다.
+[root@server-1 test]# ll
+합계 1156260
+-rw-r--r--. 1 root root  100000000  9월  6 16:07 f100m.txt
+-rw-r--r--. 1 root root   10000000  9월  6 16:05 f10m.txt
+-rw-r--r--. 1 root root 1024000000  9월  6 16:07 f1g.txt
+-rw-r--r--. 1 root root   20000000  9월  6 16:06 f20m.txt
+-rw-r--r--. 1 root root   30000000  9월  6 16:06 f30m.txt
+
+[root@server-1 test]# find ./ -size  +30M
+./f100m.txt
+./f1g.txt 			30M이상인 파일을 찾아봤다.
+[root@server-1 test]# ls -lh
+합계 1.2G
+-rw-r--r--. 1 root root  96M  9월  6 16:07 f100m.txt
+-rw-r--r--. 1 root root 9.6M  9월  6 16:05 f10m.txt
+-rw-r--r--. 1 root root 977M  9월  6 16:07 f1g.txt
+-rw-r--r--. 1 root root  20M  9월  6 16:06 f20m.txt
+-rw-r--r--. 1 root root  29M  9월  6 16:06 f30m.txt
+[root@server-1 test]# find ./ -size  +25M
+./f30m.txt
+./f100m.txt
+./f1g.txt
+
+50M넘는 파일을 날리고자 한다.			
+[root@server-1 test]# find ./ -size +50M -exec rm -rvf {} \;
+removed './f100m.txt'
+removed './f1g.txt'
+[root@server-1 test]# ll
+합계 58600
+-rw-r--r--. 1 root root 10000000  9월  6 16:05 f10m.txt
+-rw-r--r--. 1 root root 20000000  9월  6 16:06 f20m.txt
+-rw-r--r--. 1 root root 30000000  9월  6 16:06 f30m.txt
+
+5M 넘는파일을 test2로 이동시키고자 한다.
+[root@server-1 test]# find ./ -size +5M -exec mv -v {} /test2 \;
+renamed './f10m.txt' -> '/test2/f10m.txt'
+renamed './f20m.txt' -> '/test2/f20m.txt'
+renamed './f30m.txt' -> '/test2/f30m.txt'
+[root@server-1 test]# ll
+합계 0
+
+임의의 파일 입력(리디렉션)을 한다.
+[root@server-1 test]# cat >> f1
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+[root@server-1 test]# 
+[root@server-1 test]# 
+[root@server-1 test]# cat >> f2
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+[root@server-1 test]# 
+[root@server-1 test]# cat >> f3
+aaaaaaaaaaaaaa
+aaaaaaaaaaaa
+aaaaaaaaaaaa
+[root@server-1 test]# ll
+합계 12
+-rw-r--r--. 1 root root  42  9월  6 16:17 f1
+-rw-r--r--. 1 root root 107  9월  6 16:17 f2
+-rw-r--r--. 1 root root  81  9월  6 16:17 f3		
+[root@server-1 test]# find ./ -size +50c  		크기50이상을 찾아봤다.
+./f2
+./f3
+[root@server-1 test]# find ./ -size -50c			크기50이하를 찾아봤다.
+./
+./f1
+
+=======================================================
+[root@server-1 test]# chmod   777   /test
+[root@server-1 test]# 
+[root@server-1 test]# ls -ld /test
+drwxrwxrwx. 2 root root 36  9월  6 16:17 /test  		권한777을 줘봤다.
+[root@server-1 test]# ls -ld   /tmp
+drwxrwxrwt. 23 root root 4096  9월  6 15:44 /tmp
+[root@server-1 test]# 
+[root@server-1 test]# ls -ld   /var/tmp/
+drwxrwxrwt. 13 root root 4096  9월  6 14:41 /var/tmp/
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+수년간 어떤 이용자가 만들어온 데이터들을 한순간에 모으고싶다면?
+다찾아서 백업디렉토리에 옮기고자 한다.
+[root@server-1 test]# mkdir /st_backup
+mkdir: created directory '/st_backup'
+[root@server-1 test]# find  / -user student   -exec   cp  -rvp  {}  /st_backup/  \; 를 입력하면
+
+[root@server-1 test]# ll /st_backup/
+합계 2188개의 student가 이용했던 파일들이 모아진다.
+=========================================================
+touch 명령과 stat 명령.
+
+[root@server-1 test]# touch f{1..5}
+[root@server-1 test]# ll
+합계 0
+-rw-r--r--. 1 root root 0  9월  6 16:46 f1
+-rw-r--r--. 1 root root 0  9월  6 16:46 f2
+-rw-r--r--. 1 root root 0  9월  6 16:46 f3
+-rw-r--r--. 1 root root 0  9월  6 16:46 f4
+-rw-r--r--. 1 root root 0  9월  6 16:46 f5
+[root@server-1 test]# stat f1
+  File: f1
+  Size: 0         	Blocks: 0          IO Block: 4096   일반 빈 파일
+Device: fd00h/64768d	Inode: 101922883   Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: unconfined_u:object_r:default_t:s0
+Access: 2023-09-06 16:46:24.217653944 +0900
+Modify: 2023-09-06 16:46:24.217653944 +0900
+Change: 2023-09-06 16:46:24.217653944 +0900
+ Birth: 2023-09-06 16:46:24.217653944 +0900
+[root@server-1 test]# stat f5
+  File: f5
+  Size: 0         	Blocks: 0          IO Block: 4096   일반 빈 파일
+Device: fd00h/64768d	Inode: 102026669   Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: unconfined_u:object_r:default_t:s0
+Access: 2023-09-06 16:46:24.217653944 +0900
+Modify: 2023-09-06 16:46:24.217653944 +0900
+Change: 2023-09-06 16:46:24.217653944 +0900
+ Birth: 2023-09-06 16:46:24.217653944 +0900
+> f1~5까지 생성했고, stat 명령으로 확인만 한 상태이다.
+
+한 파일마다 생성시간을 다르게 설정하도록 해본다.
+[root@server-1 test]# touch -t 202309050000 f1
+[root@server-1 test]# touch -t 202309040000 f2
+[root@server-1 test]# touch -t 202309030000 f3
+[root@server-1 test]# touch -t 202309020000 f4
+[root@server-1 test]# touch -t 202309010000 f5
+ll로 확인시
+-rw-r--r--. 1 root root 0  9월  5 00:00 f1
+-rw-r--r--. 1 root root 0  9월  4 00:00 f2
+-rw-r--r--. 1 root root 0  9월  3 00:00 f3
+-rw-r--r--. 1 root root 0  9월  2 00:00 f4
+-rw-r--r--. 1 root root 0  9월  1 00:00 f5
+> 그러나 stat에서 생성일(Birth)는 바뀌지 않는다. 권한, 속성같은것 변화는(change)
+[root@server-1 test]# stat f1 		
+  File: f1
+  Size: 0         	Blocks: 0          IO Block: 4096   일반 빈 파일
+Device: fd00h/64768d	Inode: 101922883   Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: unconfined_u:object_r:default_t:s0
+Access: 2023-09-05 00:00:00.000000000 +0900
+Modify: 2023-09-05 00:00:00.000000000 +0900
+Change: 2023-09-06 16:50:52.319679092 +0900
+ Birth: 2023-09-06 16:46:24.217653944 +0900
+>>여기서 f1파일에 cat f1으로 접근(access)해보면
+  File: f1
+  Size: 0         	Blocks: 0          IO Block: 4096   일반 빈 파일
+Device: fd00h/64768d	Inode: 101922883   Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: unconfined_u:object_r:default_t:s0
+Access: 2023-09-06 17:20:50.359386857 +0900
+Modify: 2023-09-05 00:00:00.000000000 +0900
+Change: 2023-09-06 16:50:52.319679092 +0900
+ Birth: 2023-09-06 16:46:24.217653944 +0900
+접근일이 바뀌게 된다.
+>>vi 편집기로 들어가서(modify) 저장한다면, 접근+수정이 같아지게된다.
+(빈파일이였다면 A,M,C,B전부)
+  File: f1
+  Size: 0         	Blocks: 0          IO Block: 4096   일반 빈 파일
+Device: fd00h/64768d	Inode: 102741863   Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: unconfined_u:object_r:default_t:s0
+Access: 2023-09-06 17:24:01.681738439 +0900
+Modify: 2023-09-06 17:24:01.681738439 +0900
+Change: 2023-09-06 17:24:01.681738439 +0900
+ Birth: 2023-09-06 17:24:01.681738439 +0900
+
+>>f2파일을 test2에 복사해보도록한다.
+[root@server-1 test]# cp -rv f2      /test2/
+'f2' -> '/test2/f2'
+[root@server-1 test]# stat f2
+  File: f2
+  Size: 0         	Blocks: 0          IO Block: 4096   일반 빈 파일
+Device: fd00h/64768d	Inode: 102026666   Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: unconfined_u:object_r:default_t:s0
+Access: 2023-09-04 00:00:00.000000000 +0900
+Modify: 2023-09-04 00:00:00.000000000 +0900
+Change: 2023-09-06 16:51:53.907144296 +0900
+ Birth: 2023-09-06 16:46:24.217653944 +0900
+>단순복사는 Change항목이 변경된다.
+>>>find 명령어를 통해 리눅스의 보안, 모니터링을 할 수 있으며, 시나리오를 연구해본다.
+RHCSA  08번 파일관리 문제 참조
+
+처리 조건
+- 전체 파일시스템에 내에서 소유자(소유권한)가 jein 으로 설정된 대상을 찾아 /root/found 디렉토리로 복사하시오.   ( ~ ,  /tmp  ,  /var/tmp 등으로 파일 만들어보기)
+단계 1: /root/found 디렉토리를 만듭니다.
+~]# mkdir -pv /root/found
+단계 2: find 명령을 실행 합니다.
+~]# find / -user jein -exec cp –rfvp {} /root/found/ \;
+r : 찾아진 것들이 파일 또는 디렉토리일 수 있기 때문에
+f : find 명령을 재실행할 경우 덮어쓰기를 수행하기 위해
+p : 찾아진 것들의 속성을 유지하기 위해
+v : 복사 진행 과정을 화면으로 확인하기 위해
+ >>hint. 이 경우 실제로 useradd를 통해 jein 계정으로 들어가서, 파일몇개 만들고 root계정으로 넘어와서 진행하도록 한다.
+
+**tar 명령 응용 문제
+처리 조건-1
+/usr/local 디렉토리를 /root/backup.tar.gz 로 백업하시오.
+  ~]# tar czvf /root/backup.tar.gz /usr/local			입력시
+>>[root@server-1 ~]# ll /root/backup.tar.gz
+-rw-r--r--. 1 root root 579  9월  6 17:47 /root/backup.tar.gz     도출
+
+처리 조건-2
+/usr/local 디렉토리를 /root/backup.tar.bz2 로 백업하시오.
+  ~]# tar cjvf /root/backup.tar.bz2 /usr/local			입력시
+>>[root@server-1 ~]# ll /root/backup.tar.bz2 
+-rw-r--r--. 1 root root 494  9월  6 17:43 /root/backup.tar.bz2 		도출
+
+처리 조건-3
+/usr/local 디렉토리를 /root/backup.tar.xz 로 백업하시오.
+  ~]# tar cJvf /root/backup.tar.xz /usr/local			입력시
+>>[root@server-1 ~]# ll /root/backup.tar.xz
+-rw-r--r--. 1 root root 528  9월  6 17:45 /root/backup.tar.xz		도출
+
+>>>결과 ll  /root 를 입력하면
+[root@server-1 ~]# ll /root
+합계 32
+-rw-------. 1 root root 1135  8월 30 12:34 anaconda-ks.cfg
+drwxr-xr-x. 3 root root   16  8월 31 12:23 b1
+-rw-r--r--. 1 root root  494  9월  6 17:43 backup.tar.bz2
+-rw-r--r--. 1 root root  579  9월  6 17:47 backup.tar.gz
+-rw-r--r--. 1 root root  528  9월  6 17:45 backup.tar.xz
+아까 만들었던 시나리오대로 백업된 모습을 볼 수 있다.
+
+
