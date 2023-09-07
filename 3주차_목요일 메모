@@ -1,0 +1,392 @@
+
+3주차_목요일 메모
+
+복기_
+.gz  >> tar zcvf (압축하기) -->  tar xvf   ~.tar.gz   (압축해제)
+.bz2  >> tar jcvf -->  			 ~tar.bz2
+.xz   >> tar Jcvf -->    			 ~tar.xz
+
+date
+crond ,crontab    // 특정시간에 특정작업을 하는 daemon 생성, 특정 table에 저장하는것
+find 명령어
+===========================================================
+ 06 파일에 대한 액세스 제어 ( 특수권한 )
+디렉토리에 대한 특수권한에 대해서 알아본다.
+r , 4   //(read)
+파일 내용을 읽을 수 있다. 디렉터리 내용(파일 이름)을 나열할 수 있다.
+w , 2   //(write)
+파일 내용을 변경할 수 있다.
+디렉터리에 임의 파일을 생성하거나 삭제할 수 있다.
+x , 1   //(execute)
+파일을 명령처럼 실행할 수 있다. 디렉터리는 현재 작업 디렉터리가 될 수 있다.
+(cd을 수행할 수 있지만 발견한 파일을 나열할 수 있는 읽기 권한도 필요한다.)
+ 
+chmod -v -R  777 /test   -->test 폴더의 모드를 0777(rwxrwxrwx)으로 변경.
+[root@server-1 test]# useradd  user1
+[root@server-1 test]# useradd  user2
+[root@server-1 test]# passwd  user1 
+[root@server-1 test]# passwd  user2
+[root@server-1 test]# su  user1
+[user1@server-1 test]$ mkdir -pv u1
+[user1@server-1 test]$ su user2
+[user2@server-1 test]$ mkdir -pv u2
+[user2@server-1 test]$ ll
+합계 0
+drwxr-xr-x. 2 user1 user1 6  9월  7 09:19 u1
+drwxr-xr-x. 2 user2 user2 6  9월  7 09:20 u2
+~~~~
+** 특수권한 sticky 부여
+[root@server-1 test]# ls -ld /test
+drwxrwxrwx. 2 root root 6  9월  7 09:24 /test  가 현재상태이다.
+
+[root@server-1 test]# chmod   -v  o+t  /test         // other +sticky 의 의미를가진다.
+mode of '/test' changed from 0777 (rwxrwxrwx) to 1777 (rwxrwxrwt)   
+su  user1로 유저변경
+[root@server-1 test]# su user1
+[user1@server-1 test]$ mkdir -pv u1
+mkdir: created directory 'u1'
+[user1@server-1 test]$ touch fu1
+su user2로 유저변경 > user1의 것을 지워보도록 했을때 불가
+
+ [user1@server-1 test]$ stat /test
+  File: /test
+  Size: 6         	Blocks: 0          IO Block: 4096   디렉토리
+Device: fd00h/64768d	Inode: 101293858   Links: 2
+Access: (1777/drwxrwxrwt)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: unconfined_u:object_r:default_t:s0
+Access: 2023-09-07 09:28:44.663755092 +0900
+Modify: 2023-09-07 09:32:48.956929577 +0900
+Change: 2023-09-07 09:32:48.956929577 +0900
+ Birth: 2023-09-06 15:13:37.029000266 +0900
+
+>1777이라는 권한이주어졌다. 
+[root@server-1 test]# chmod   -v  0777    /test
+mode of '/test' changed from 1777 (rwxrwxrwt) to 0777 (rwxrwxrwx)
+[root@server-1 test]# chmod   -v  1777    /test
+mode of '/test' changed from 0777 (rwxrwxrwx) to 1777 (rwxrwxrwt)
+
+[root@server-1 test]# ll /etc/shadow
+----------. 1 root root 1714  9월  7 09:16 /etc/shadow
+>섀도우라는 폴더에서 암호화된 파일이 많다.
+[root@server-1 test]# lsattr   /etc/shadow
+---------------------- /etc/shadow
+user1의 비밀번호 (root에서가 아님) 커런트 비밀번호입력+ 새암호( La****2@)
+
+[root@server-1 test]# tail -2 /etc/shadow
+user1:$6$5DzPJRyl4f2/oeJh$PVL3cVcukkOUpQ6f0dsXVHxJvw1qiMi4WPNq5qXxpiXhwT0wqZLrMIiJ3j7LbvjUog7ZHbaYf9EYMjDcBiB4N/:19607:0:99999:7:::
+user2:$6$EqnQpY5kQx5myH0v$f2aMrAFYMVW8VzgF0b5VmvwfYxr2ODWxv6c3pWJgZySKZOSBKsRL.cFKvODdoXjAvbeuch618XHbpH89iB56F/:19607:0:99999:7:::
+이 명령이 어디있는지 알고싶을때 명령어 which
+[root@server-1 test]# which passwd 
+/usr/bin/passwd
+[root@server-1 test]# ll /usr/bin/passwd 	를 입력시
+-rwsr-xr-x. 1 root root 32656  5월 15  2022 /usr/bin/passwd    가 도출되는데,
+권한을보면 다른이들도 실행할 수 있게 되어있다.
+-rws :루트 자격을 얻어서 shadow에 업데이트 할 수 있는 권한
+[root@server-1 test]# which   tail
+/usr/bin/tail
+[root@server-1 test]# ll /usr/bin/tail 
+-rwxr-xr-x. 1 root root 69536  4월 24 08:27 /usr/bin/tail
+ 실행가능.
+
+[root@server-1 test]# chmod -v  u+s   /usr/bin/tail
+mode of '/usr/bin/tail' changed from 0755 (rwxr-xr-x) to 4755 (rwsr-xr-x)  시
+[root@server-1 test]# ll /usr/bin/tail     		을 입력하면
+-rwsr-xr-x. 1 root root 69536  4월 24 08:27 /usr/bin/tail
+ 
+이러면 아무나 tail명령어로 root자격으로 파일을 볼 수 있으므로, 권한부여하지 말라는 교훈을 얻을 수 있다.
+
+[root@server-1 test]# chmod -v   u-s  /usr/bin/tail
+mode of '/usr/bin/tail' changed from 4755 (rwsr-xr-x) to 0755 (rwxr-xr-x) 으로 권한박탈
+[root@server-1 test]# ll /usr/bin/tail 
+-rwxr-xr-x. 1 root root 69536  4월 24 08:27 /usr/bin/tail  
+ 
+다시 초록색(각자 유저 자격으로만 볼 수 있는 권한) 으로 돌아왔다.
+
+[root@server-1 test]# chown -v user1:user1  user1_data	**own 을 의미
+changed ownership of 'user1_data' from root:root to user1:user1
+[root@server-1 test]# ll
+합계 0
+drwxr-xr-x. 2 user1 user1 6  9월  7 10:13 user1_data
+
+**set your id
+[root@server-1 test]# chmod -v  g+s user1_data/		소유그룹의 그룹화를 진행.
+mode of 'user1_data/' changed from 0755 (rwxr-xr-x) to 2755 (rwxr-sr-x)  
+[root@server-1 user1_data]# mkdir -pv d2 d3 d4
+mkdir: created directory 'd2'
+mkdir: created directory 'd3'
+mkdir: created directory 'd4'
+[root@server-1 user1_data]# ll
+합계 0
+drwxr-xr-x. 2 root root  6  9월  7 10:15 d1
+drwxr-sr-x. 2 root user1 6  9월  7 10:20 d2
+drwxr-sr-x. 2 root user1 6  9월  7 10:20 d3
+drwxr-sr-x. 2 root user1 6  9월  7 10:20 d4 		
+이러고나니, 현재이후 해당 소유그룹으로 세팅을 원하면 디렉토리에 대해 권한을 g+s로 주면 그룹이름으로 자동상속이된다.
+
+setfacl  명령어  //실용적
+[root@server-1 user1_data]# setfacl   g:sales:rwx  kkk 같은 형식으로 사용한다.
+
+[root@server-1 ~]# ll -d   /tmp   /var/tmp
+drwxrwxrwt. 25 root root 4096  9월  7 09:41 /tmp
+drwxrwxrwt. 15 root root 4096  9월  7 09:29 /var/tmp       이것을 해독할수 있어야 한다.
+ 
+ 
+또한 이 빨간색은 왜인지 해독할 수 있어야 한다. 그 의미를 알도록 하자.
+===========================================================
+>>파일 이름 바꾸는 것은 mv 명령어이다.
+[root@server-1 test]# mv -v  file1 file1.txt
+renamed 'file1' -> 'file1.txt'
+다만 mv  -v file1.txt   /test2/ 를 하면 폴더 test2로 이동된다.
+
+>> which 명령어
+[root@server-1 test2]# which rename
+/usr/bin/rename
+>>whereis 명령어
+[root@server-1 test2]# whereis rename
+rename: /usr/bin/rename /usr/share/man/man1/rename.1.gz /usr/share/man/man2/rename.2.gz /usr/share/man/man3p/rename.3p.gz
+>>rename 명령어
+man page 들어와서 예제를 보면서 확인하기.
+
+***man (manual)명령어 에서 정 쓰는법을 모르겠으면, EXAMPLES 문단으로 참고한다.
+
+[root@server-1 test]# touch foo{1..9}
+[root@server-1 test]# ll
+합계 0
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo1
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo2
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo3
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo4
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo5
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo6
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo7
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo8
+-rw-r--r--. 1 root root 0  9월  7 10:49 foo9
+[root@server-1 test]# touch foo{10..15}
+까지하면 
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo1
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo10
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo11
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo12
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo13
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo14
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo15
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo2
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo3
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo4
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo5
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo6
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo7
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo8
+-rw-r--r--. 1 root root 0  9월  7 10:54 foo9
+
+이와같이 1다음 10으로 정렬되는게 보인다. 이때 2가 10보다 먼저 정렬되게하고자한다면 
+ls -v 를 입력하자.
+
+rename -v foo foo0  foo??
+>>rename은 규칙적인것만 바꾸기가 가능하다.
+touch file{1,3,5}를 한뒤
+하나만 바꾸려면 : mv -v file1 file-09-07-1 (수동)을 하는게 맞겠으나
+여러개 바꾸려면 : TODAY=$(date +%m-%d) 를 입력, 파일과 숫자 사이에 날짜를 넣으려면 
+		rename file file-$TODAY-    file?  을 입력해본다.
+-rw-r--r--. 1 root root 0  9월  7 11:05 file-09-07-1
+-rw-r--r--. 1 root root 0  9월  7 11:05 file-09-07-3
+-rw-r--r--. 1 root root 0  9월  7 11:05 file-09-07-5        ll로 확인했을때 도출된다.
+===========================================================
+리눅스 16 네트워킹 관리
+ 
+기존의 osi 7계층모델을 TCP/IP 프로토콜로 바꾸면 4단계가 된다.
+리눅스의 /etc/services 를 들어가보면 무엇이 있는지 확인한다.
+cat -n /etc/services 입력 
+
+인터페이스는 en으로 시작한다 ( ether + network ) 
+ip명령어를 통해서 네트워크 인터페이스를 식별+정보수집을 한다.
+
+*nmcli명령어 
+nmcli connection show를 입력하면 (nmcli con sh)
+[root@server-1 ~]# nmcli connection show 
+NAME    UUID                                  	     TYPE      DEVICE 
+ens160  68ee8ee7-4ae2-33c9-ad16-f232a3963f8b  ethernet  ens160 
+lo      63f49ee1-c629-466c-ab6b-5e68e60848f7  loopback  lo     
+
+*ifconfig   
+리눅스에서는 ip를 보는것이 ifconfig이다.
+ip address를 치면 다 나오지만, 
+ 
+너무 번거로우므로 ip a를 입력하면 그대로 나온다.
+ip a show ens160 입력 
+ 
+컬러감을 주고싶다면 ip -c a show ens160
+ 
+ip route     /tab해서 색입력을 미리해두자.
+[root@server-1 ~]# ip -c route
+default via 172.25.3.2 dev ens160 proto static metric 100 
+172.25.3.0/24 dev ens160 proto kernel scope link src 172.25.3.11 metric 100 ㄴ
+alias ip='ip -c'  를 설정해두면 컬러가 재부팅 전까지는 계속 나온다.
+
+[root@server-1 ~]# cat /etc/resolv.conf    를 입력하면, 
+# Generated by NetworkManager
+search example.com 
+nameserver 172.25.3.2    
+>>dns서버를 알 수 있다.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Network (TCP/IP)설정 방법   nmcli  con mod  // con up   /확인은 ip -c a
+>구 방법은 nmtui로 들러가서 하면됨.
+1. GUI	끔<>켬
+2. nmtui : 마우스 사용불가 
+3. nmcli(권장) tab 
+ ~]# nmcli con mod ens160	\
+ ipv4.method [auto 또는 manual]	\
+ ipv4.address 172.25.3.11/24	\
+ ipv4.gateway 172.25.3.2	\
+ ipv4.dns 172.25.3.2	
+
+nmcli con up ens160
+
+= 
+nmcli  connection modify ens160		
+[root@server-1 ~]# nmcli con mod ens160 ipv4.addresses 172.25.3.200/24   를 입력했음.
+[root@server-1 ~]# nmcli con up ens160   를 입력하면    (up:살리기 down:죽이기)
+연결이 성공적으로 활성화되었습니다 (D-버스 활성 경로: /org/freedesktop/NetworkManager/ActiveConnection/10)
+ip -c a를 눌러 확인
+[root@server-1 ~]# nmcli con mod ens160 ipv4.ad 172.25.3.11/24 로 다시 되돌린다.
+[root@server-1 ~]# nmcli con up ens160    를 재입력한다.
+연결이 성공적으로 활성화되었습니다 (D-버스 활성 경로: /org/freedesktop/NetworkManager/ActiveConnection/11)
+
+=  이어지는것이 역슬래쉬(\)   //유의할점은 역슬래시 다음 공백없을것.
+[root@server-1 ~]# nmcli connection modify ens160  \
+> ipv4.ad 172.25.3.11/24 \
+> ipv4.dns 172.25.3.2 \
+> ipv4.gateway 172.25.3.2 \
+> ipv4.method   manual
+
+nmcli con up ens160 
+
+4. vim 사용
+#RHEL 8 version
+~]# cd /etc/sysconfig/network-scripts/      입력(tab키 많이 활용할 것)
+	cat -n  readme-ifcfg-rh.txt		읽어보면 아래링크로 가라고써있음.
+~]# cd /etc/NetworkManager/system-connections/
+~]# vim ens160.nmconnection      
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[connection]
+id=ens160
+uuid=68ee8ee7-4ae2-33c9-ad16-f232a3963f8b
+type=ethernet
+autoconnect-priority=-999
+interface-name=ens160
+timestamp=1694057315
+
+[ethernet]
+
+[ipv4]
+address1=172.25.3.11/24,172.25.3.2       >>11을 114로 수정
+dns=172.25.3.2;
+method=manual
+
+[ipv6]
+addr-gen-mode=eui64
+method=auto
+
+[proxy]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[root@server-1 system-connections]# systemctl restart NetworkManager
+[root@server-1 system-connections]# ip -c a
+
+2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:cc:e9:eb brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 172.25.3.11/24 brd 172.25.3.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+    inet 172.25.3.113/24 brd 172.25.3.255 scope global secondary noprefixroute ens160
+       valid_lft forever preferred_lft forever
+    inet6 fe80::20c:29ff:fecc:e9eb/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[root@server-1 system-connections]# vim ens160.nmconnection    (복구)
+[root@server-1 system-connections]# nmcli con up ens160
+[root@server-1 system-connections]# ip -c a
+
+ 2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:cc:e9:eb brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet 172.25.3.11/24 brd 172.25.3.255 scope global noprefixroute ens160
+       valid_lft forever preferred_lft forever
+    inet6 fe80::20c:29ff:fecc:e9eb/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+===========================================================
+Chapter 14 네트워크 보안 관리 (리눅스 방화벽) //fire wall daemon
+방화벽은 사실 필터링에 가깝다고 보아도 된다.  
+netfilter 넷필터 의 일환으로 방화벽이 작동한다.
+ 
+왼쪽 붉은 박스에서 '침입'하여 Routing decision을지나 Filter 에서 이것들을 걸러낸다.
+
+firewalld
+[root@server-1 ~]# systemctl enable --now cockpit.socket
+ 이후 웹브라우저로	https://localhost:9090 에 접속해본다.
+[root@server-1 ~]# systemctl status cockpit.socket 
+vim /etc/cockpit/disallowed-users      이 폴더안에 명단이 있으면, 접근불가
+ 여기서 root가 기본으로 있는데, # root (주석처리)를 하면 접근이 다시 가능해짐.(권장은x)
+
+[root@server-1 ~]# firewall-cmd --list-services 입력시
+cockpit dhcpv6-client ssh 		(공장초기화모드)
+
+[root@server-1 ~]# firewall-cmd --remove-service=cockpit 	허락된목록에서 삭제
+success
+[root@server-1 ~]# firewall-cmd --list-services 			그러면 목록에서 사라짐
+dhcpv6-client ssh
+이러면 server2를 통해 웹브라우저에 접속하려고하면, 오류가 발생한다.
+ 
+[root@server-1 ~]# firewall-cmd --add-service=cockpit 		없앴던걸 다시 추가한다.
+success
+[root@server-1 ~]# firewall-cmd --list-services 
+cockpit dhcpv6-client ssh					
+
+~~~~~~~~~~~~~~
+yum = yellow update modifier (설치관리자)
+여기서 
+[root@server-1 ~]# yum list installed telnet 을 입력해본다
+[root@server-1 ~]# yum list installed telnet-server 도 입력해본다
+둘다 꾸러미가 없다는 알림이 나온다.
+>>앵간하면 쓰지마라는 알림. 
+하지만 어림도없지 설치를 해본다.
+[root@server-1 ~]# yum install telnet-server    깔았다면 
+[root@server-1 ~]# systemctl status telnet.socket 으로 상태확인을 한다.
+ Active: inactive (dead) 상태이기 때문에  활성화를 해준다
+[root@server-1 ~]# systemctl enable --now  telnet.socket 	입력.
+Created symlink /etc/systemd/system/sockets.target.wants/telnet.socket → /usr/lib/systemd/system/telnet.socket.
+이후 다시 상태를 조회하면 active 상태이다.
+~~~~~~~~~~~~~~~~~~~~
+필요한 환경설정
+[root@server-1 ~]# firewall-cmd --add-service=telnet 	방화벽을 추가해본다.
+success
+[root@server-1 ~]# firewall-cmd --list-services 
+cockpit dhcpv6-client ssh telnet
+서버2의 cmd 에서 [root@server-2 ~]# yum install telnet -y 를 입력해 telnet을 설치.
+
+[root@server-2 ~]# telnet 172.25.3.11		아이피로 접근 시도.
+Trying 172.25.3.11...
+Connected to 172.25.3.11.
+Escape character is '^]'.
+
+Kernel 5.14.0-284.25.1.el9_2.x86_64 on an x86_64
+server-1 login: root
+Password: 
+Last login: Thu Sep  7 15:22:05 from ::ffff:172.25.3.12 까지 되면 성공이다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+yum install wireshark* -y  		와이어샤크를 설치해본다.
+ 그림과같이 와이어샤크가 실행된 모습.
+두개의 메뉴만 알아보도록 한다.   capture // analyze>follow
+캡쳐중에 텔넷을 사용하면, 로그인시 id와 pw가 그대로 나오게된다. 
+tcp or telnet을 필터링에서 찾아보면 로그가 남는데 여기에 남게되므로 텔넷 사용이 권장되지는 않는다고 할 수 있다. 
+
+ssh 등 앞에 secure가 들어간것은 보안이 적용되어있으므로, 와이어샤크에서 캡쳐링 후 telnet과 다르게 로그인할때 로그인과 비밀번호나    cat >> abc.txt  를 통해 만든 텍스트의 내용이 보이지 않는다. 따라서 보안정책이 적용된 ssh와 같은 서비스만 쓰도록 한다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Xshell  연동
+VMware 워크스테이션과 Xshell이 연동된다. 
+예를들어 
+[root@server-1 ~]# shutdown -h 5 5분 후에 꺼집니다. 를 입력하면
+xshell server 1에서 
+5분 후에 꺼집니다.
+The system will power off at Thu 2023-09-07 17:43:36 KST!   가 출력된다.
+
