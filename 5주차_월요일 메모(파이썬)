@@ -1,0 +1,204 @@
+
+5주차_월요일 메모 (파이썬)
+
+제어문> 이터레이터와 제너레이터를 참조 (https://wikidocs.net/138204)
+
+iterator / generator
+-container를 다루는 간단한 방법을 제공하는 객체.
+<오늘의 정리>
+결과값에 i를 추가할때는 초기 결과값을 0으로 초기화해주어야한다. (result = 0, sum=0)
+print함수에 \n을 찍는것은 줄바꿈이다.' <#print('aaa','\n') = print('aaa',end='\n')>
+print('aaa','naver.com', sep='@')  = aaa@naver.com
+print(100,90,85,100, sep='점 ') = 100점 90점 85점 100
+#####################################################################
+#1. 이터레이터와 제너레이터 
+1)이터레이터		iterable = '반복할 수 있는'
+'반복'을 수행하기 위한 객체이다. iter / next 메서드를 구현한다.
+my_list = [1, 2, 3]
+my_iterator = iter(my_list)
+print(next(my_iterator))  # 1
+print(next(my_iterator))  # 2
+print(next(my_iterator))  # 3
+2)제너레이터
+이터레이터를 '생성하기 위한' 간단한 방법중 하나이다. 함수안에서 yield 키워드로 값 반환하고, 다음 호출로 제너레이터 객체의 반환을 이루면 된다.
+def my_generator():
+    yield 1
+    yield 2
+    yield 3
+gen = my_generator()
+print(next(gen))  # 1
+print(next(gen))  # 2
+print(next(gen))  # 3
+
+3. 컴프리헨션 (Comprehension, 내포)  / list, dict 가 주로 사용됨
+이터레이터에서 가용한 객체를 생성하는 방법중 하나이다. 종류로는 
+LC ; List Comprehension (for 문, if 문 등 사용)
+	#1부터 10까지의 제곱 값을 포함하는 리스트 생성:
+	squares = [x**2 for x in range(1, 11)]
+	print(squares)  # [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+
+	#문자열 리스트에서 길이가 5인 문자열만 추출:
+	words = ["apple", "banana", "cherry", "date", "elderberry"]
+	filtered_words = [word for word in words if len(word) == 5]
+	print(filtered_words)  # ['apple', 'cherry']
+
+	#표현이 모두 똑같은 리스트
+ 
+list1 = [ 0,1,2,3,4,5,6,7,8,9]
+list2 = [ ]
+for i in range(10) : 
+    list2.append(i)
+list3 =[i for i in range(10)]    
+print(f'list1 = ', list1)
+print(f'list2 = ', list2)
+print(f'list3 = ', list3)
+>>>list1,2,3 모두 =  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  가 도출된다.
+여기서 알 수 있는 점은, 리스트1처럼 단순 나열하는것보다 리스트2나 3의 방법으로 표현하는것을 습관들이는게 좋다는이야기이다.
+list1 = [ 0,2,4,6,8,10]
+list2 = []
+for i in range(11) : 
+    if i % 2 == 0 :
+        list2.append(i)
+list3 =[i for i in range(11) if i % 2 == 0]    
+위도 같은 결과가 도출된다.
+조건문 else
+a = 10
+if a % 2 == 0 : 
+   print('짝수')
+else:
+    print('홀수')
+print('짝수' if a % 2 == 0 else '홀수')
+>>>같다.
+SC ; Set Comprehension
+DC ;  Dict comprehension  		(Key와 Value를 한 쌍으로 가지는 자료형,)
+ { key:val for key, val in OO.items() if key ! = "xx"} 
+리스트의 각 요소를 키로 하고, 해당 요소의 제곱 값을 값으로 갖음 
+numbers = [1, 2, 3, 4, 5]
+squared_dict = {num: num**2 for num in numbers}
+print(squared_dict)  # {1: 1, 2: 4, 3: 9, 4: 16, 5: 25}
+>{1: 1, 2: 4, 3: 9, 4: 16, 5: 25}
+
+ 문자열 리스트에서 각 문자열의 길이를 키로 하고 해당 문자열을 값으로 갖는 딕셔너리
+words = ["apple", "banana", "cherry", "date", "elderberry"]
+length_dict = {word: len(word) for word in words}
+print(length_dict)  # {'apple': 5, 'banana': 6, 'cherry': 6, 'date': 4, 'elderberry': 10}
+>{'apple': 5, 'banana': 6, 'cherry': 6, 'date': 4, 'elderberry': 10}
+
+# 기존 딕셔너리에서 바나나가 없는 새로운 딕셔너리 만들기
+fruit_color = {"apple" : "red", "banana" : "yellow", "peach":"pink"}
+no_bana = { key:val for key, val in fruit_color.items() if key != "banana" }
+print(no_bana)
+# 결과값 -> {'apple': 'red', 'peach': 'pink'}
+
+ 
+ 
+city_list.append(name) 아래에 
+else : 
+	continue 를 기입.
+GE ; Generator comprehesion
+#####################################################################
+ 단순한 합을 나타내는것
+ 
+list1 = [50,20,30,40,10]
+sum = 0			>>이부분을 정해주지 않으면, 오류가 난다.
+for n in list1:			
+    sum = sum+n
+print(f'합 = ', sum)
+#	sum = 0 이라는 것은, 정수형(int>어떤 형태의 데이터타입이다), 초기값은 0이다 라는 그 부분을 설정해주어야 수식에서 계산이 가능한 것이다.
+sum 변수를 초기화하지 않으면 처음에 변수에 어떤 값이 들어있는지 확실하지 않습니다. 따라서 초기 값이 없을 경우, sum 변수를 사용하는 첫 번째 반복에서 오류가 발생할 수 있습니다.
+#	sum = sum+n    이라는 부분은, 반복문을 통해 리스트의 요소들을 하나씩 순회하면서 그 값을 누적적으로 합산하기 위해서입니다.		 >>> sum+= n   로도 표현가능.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#2.  Function (함수) 
+
+1. 함수를 정의하기		def= definition 정의.
+우선 파이썬 함수는 사용하기 위해서는 함수를 정의하여야 한다.
+def 함수명(매개변수) :
+    <수행할 문장 1>
+    <수행할 문장 2>
+    ...
+def : 함수를 만들 때 사용하는 예약어. (definition, 정의)
+함수 이름 : 임의로 설정(대.중.소 분류)
+매개변수 : 함수에 입력으로 전달되는 값을 받는 변수
+함수에서 수행할 문장
+
+2. 매개변수와 인수 
+매개변수 (Parameters):
+매개변수는 함수 정의에서 사용되는 변수입니다. 함수가 호출될 때 이러한 매개변수에 값을 전달하게 됩니다. 매개변수는 함수의 입력(input) 역할을 합니다.
+def add(x, y):
+    result = x + y
+    return result
+
+인수 (Arguments):			(관례상 *args , arg , args 등으로 표현함)
+인수는 함수를 호출할 때 함수에 전달되는 값들을 의미합니다. 함수를 호출할 때 함수에 필요한 인수를 제공해야 합니다. 인수는 함수의 호출(call) 역할을 합니다.
+예를 들어, 위에서 정의한 add 함수를 호출할 때, 다음과 같이 3과 4가 인수로 사용됩니다:
+result = add(3, 4)
+여기서 3과 4가 함수 add의 매개변수 x와 y에 전달되며, 함수는 이 인수들을 기반으로 계산을 수행하고 result 변수에 결과를 반환합니다.
+
+파이썬에서 함수 정의에서 지정한 매개변수의 개수와 함수 호출 시 전달한 인수의 개수가 일치해야 합니다. 그렇지 않으면 오류가 발생할 수 있습니다. 때로는 매개변수에 기본값을 설정하여 인수를 생략할 수도 있습니다. 이러한 기본값이 있는 매개변수를 사용할 때에는 생략된 인수를 자동으로 기본값으로 초기화합니다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+def my_function(arg):
+    # arg를 사용한 작업 수행
+
+def calculate_sum(*args):
+    # args를 사용하여 여러 인수 처리
+
+def print_values(*args):
+    for value in args:			>>튜플로 묶음
+        print(value)
+print_values(1, 2, 3, 4, 5)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+수업예제
+ 
+여기에서
+Add_many(1,2,3) 만 추가로 입력해서 실행해도 *args 값이 더해서 나옵니다.
+~~~~~~
+ 
+결과는
+<class 'tuple'>
+합= 6
+<class 'tuple'>
+합= 5050			으로 도출된다.
+*** print(type(args))가 빠진상태로 실행하면 에러가 나는데, 이는 타입을 인식못했기 때문.
+ 
+>값 6이 도출 (class 'tuple')
+ 
+>값 5050이 도출 (class 'list')
+GPT 답변>>>Add_many(1,2,3)은 함수에 인수를 튜플 형태로 전달합니다. 이는 함수 호출 시 인수를 ,로 구분하여 전달하면 해당 인수들이 튜플로 묶여서 함수에 전달됩니다. 따라서 *args를 사용하더라도 args는 튜플 형태로 처리됩니다.
+반면에 Add_many([n for n in range(1,101)])는 함수에 리스트를 인수로 전달합니다. 리스트는 [...]로 묶여 있으며, 이것이 하나의 인수로 전달됩니다. 따라서 args는 이 경우에는 리스트 자체가 됩니다.
+함수를 정의할 때 매개변수와 인수의 처리 방식은 함수의 매개변수 선언에 따라 달라집니다. *args를 사용한 경우 함수 호출 시 여러 개의 인수를 튜플로 묶어서 전달하게 되고, 그렇지 않은 경우 인수는 그대로 전달됩니다.
+예를 들어, Add_many(1, 2, 3)에서 *args를 사용했으므로 함수 내에서 args는 (1, 2, 3)과 같은 튜플로 처리됩니다. 반면에 Add_many([n for n in range(1,101)])에서는 [n for n in range(1,101)] 리스트 자체가 함수에 하나의 인수로 전달되므로 args는 리스트가 됩니다.
+
+키워드 파라미터 kwargs(keyword arguments)  >> Kw args
+키워드 파라미터를 사용할 때는 매개변수 앞에 별 두 개(**)를 붙인다.
+즉 **kwargs 처럼 매개변수 이름 앞에 **을 붙이면 매개변수 kwargs 는 딕셔너리가 되고
+모든 key=value 형태의 결과값이 그 딕셔너리에 저장된다.
+※kwargs 는 keyword arguments 의 약자이며 args 와 마찬가지로 관례적으로 사용한다.
+
+list1 = [ 'bbb', 'aaa', 'ccc', 'ddd']
+print(f'정렬전 = ',list1)
+list1.sort()			>>sort로 정렬해서 덮어쓰는것
+print(f'정렬후 = ',list1)
+
+정렬전 =  ['bbb', 'aaa', 'ccc', 'ddd']
+정렬전 =  ['aaa', 'bbb', 'ccc', 'ddd']
+
+역방향 정렬할때는 
+list1.sort() >>list1.sort(reverse=True) 를 대체하자
+정렬전 =  ['bbb', 'aaa', 'ccc', 'ddd']
+정렬후 =  ['ddd', 'ccc', 'bbb', 'aaa']	가 도출된다.
+
+오늘의 TIP) 파이썬 여러줄 주석처리(#)는 블록선택후 ctrl + / 를 누르자
+
+print('aaa','\n')
+print('bbb')
+print('ccc','\n')
+print('ddd')
+>출력시		'print함수에 \n을 찍는것은 줄바꿈이다.'
+aaa
+
+bbb
+ccc
+
+ddd				가 도출된다.
+####################################################################
+
