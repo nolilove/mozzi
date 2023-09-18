@@ -1,0 +1,90 @@
+
+5주차_주간 메모(AWS) (월~금)
+
+*AWS 프리티어를 통해 계정을 만들고, 실습하도록 한다.
+ 루트사용자 계정생성 및 별칭 생성 - 리전을 서울로 변경 - MFA할당 및 설정- admin사용자 계정의 생성 - 리전을 서울로 변경 - MFA할당 및 설정 - 컴퓨팅 항목으로 이동 ( EC2 ) - 인스턴스의 시작 - 
+*** 인스턴스 '종료'= 삭제이므로 필히 알것 // 서버를 없애지않고 끄려면 '중지' 
+
+# 1. Amazon Web Services 개요
+오늘230918부터는 AWS의 기초와 개요를 알아보는 시간을 가진다.
+ 컴퓨팅, 스토리지, 데이터베이스, 분석, 네트워킹, 모바일, 개발자 도구, 관리 도구, IoT, 보안 및 엔터프라이즈 애플리케이션을 비롯하여 광범위한 글로벌 클라우드 기반 제품을 몇 초 이내에 온디맨드(수요에 의한 만큼) 방식의 종량제 요금으로 제공
+
+서비스형 인프라(IaaS)
+서비스형 인프라(IaaS)에는 클라우드 IT의 기본 구성 요소가 포함되어 있어 일반적으로 네트워킹 기능, 컴퓨터(가상 또는 전용 하드웨어) 및 데이터 스토리지 공간에 액세스할 수 있습니다. IaaS는 IT 리소스에 대한 최고 수준의 유연성 및 관리 제어 기능을 제공하며 오늘날 많은 IT 부서 및 개발자에게 익숙한 기존 IT 리소스와 아주 유사합니다.
+서비스형 플랫폼(PaaS)
+서비스형 플랫폼(PaaS)을 사용하면 기본 인프라(대개 하드웨어 및 운영 체제)를 관리할 필요가 없으므로 조직은 애플리케이션 배포 및 관리에 집중할 수 있습니다. 즉, 애플리케이션 실행과 관련된 리소스 구매, 용량 계획, 소프트웨어 유지 관리, 패치 또는 다른 모든 획일적인 작업에 대한 부담을 덜어 더욱 효율적이 되도록해줍니다.
+서비스형 소프트웨어(SaaS)
+서비스형 소프트웨어(SaaS)는 서비스 공급자가 운영하고 관리하는 완제품을 제공합니다. 대부분의 경우 서비스로서의 소프트웨어라고 하면 최종 사용자 애플리케이션을 말합니다. SaaS를 사용하면 서비스가 유지관리되거나 기본 인프라가 관리되는 방식은 신경 쓸 필요가 없고 그 특정 소프트웨어를 어떻게 활용할 것인지만 생각하면 됩니다. SaaS 애플리케이션의 흔한 예는 이메일을 주고 받는 데 사용하는 웹 기반 이메일을들 수 있는데, 이 경우 이메일 제품에 추가되는 기능을 관리하거나 이메일 프로그램이 실행되는 기반인 서버및 운영 체제를 유지 관리할 필요가 없습니다.
+########
+#MFA (Multi - Factor Authentication)  : 다요소 인증(2차인증) 설정
+ > 보안 자격증명 및 규정 준수 탭으로 이동.
+ > MFA 디바이스 할당 
+ > MFA 디바이스 선택
+ > QR코드 표시
+ > 스마트폰의 google authenticatior 추가
+ > 내 보안 자격증명이 추가되었음.
+'You can register up to 8 MFA devices of any combination of the currently supported MFA types with your AWS account root and IAM user. With multiple MFA devices, you only need one MFA device to sign in to the AWS console or create a session through the AWS CLI with that user.'
+>로그아웃 후 재 로그인을 위해서는 root의 '별칭' 을 입력 후 admin의 id, pw를 입력해 접속
+
+#인스턴스 시작 (EC2>인스턴스)
+>MyServer-AWS-1 생성
+>Quick start 로 Amazon Linux 확인
+>Amazon linux 2023 AMI 가상머신 이미지 선택
+>인스턴스 유형 정보 확인
+ -키 페어(로그인) >새 키 페어 생성(MyServer-AWS-1) / RSA type/ .pem type/ 
+ 생성시 key file이 컴퓨터에 생성됨.
+>네트워크 설정 확인
+ -보안그룹 SSH 트래픽 허용
+>스토리지 구성 (EBS)
+
+생성 후 인스턴스 상태(default: 대기 중 > 실행 중)를 확인하기
+>인스턴스에 연결
+>EC2 인스턴스 연결
+-사용자 이름 확인(default: ec2-user) > 퍼블릭ip 주소 백업 및 실행.
+useradd test1 입력 시> permission denied가 뜸. >sudo useradd test1> access
+[ec2-user@ip-172-31-35-115 ~]$ ls -l /home
+total 0
+drwx------. 3 ec2-user ec2-user 74 Sep 18 07:50 ec2-user
+drwx------. 2 test1    test1    62 Sep 18 07:56 test1		생성
+exit 후 좌측 상단 ec2를 클릭
+
+#SSH로 인스턴스에 접속
+EC2 대시보드 > 인스턴스 > 퍼블릭 IPv4주소를 확인 > 인스턴스에 연결> SSH 클라이언트 탭이동 > 
+1. SSH 클라이언트를 엽니다.(XShell 클라이언트 이용)
+2. 프라이빗 키 파일을 찾습니다. 이 인스턴스를 시작하는 데 사용되는 키는 MyServer-AWS-1.pem입니다.
+3. 필요한 경우 이 명령을 실행하여 키를 공개적으로 볼 수 없도록 합니다.
+ chmod 400 MyServer-AWS-1.pem
+4. 퍼블릭 DNS을(를) 사용하여 인스턴스에 연결:
+ ec2-~~~~~.ap-northeast-2.compute.amazonaws.com
+
+<1-1. XShell 이동>
+새로만들기> host에 공인ip 혹은 공인 DNS를 입력 (호스트) > 사용자인증
+>ID: ec2-user (root x), 퍼블릭 키 설정 이동 후 가져오기로 .pem 파일을 가져오기
+>MyServer-AWS-1 키가 있는것을 확인가능
+>키가 있기 때문에 암호는 입력하지 않아도 됨
+>연결하면 AWS LINUX에 원격접속 완료.
+
+<1-2. 권한부여>		이단계는 ubuntu에서의 초기설정 방법과도 같다.
+passwd root 를 입력하면 접근 불가
+~]$ sudo passwd root	를 사용하면 가능
+암호- aws로 설정
+~]$ su - root 	로 root에 원격접속 가능.
+~]# sudo grep wheel /etc/sudoers 		로 모든권한 부여
+~]# grep wheel /etc/group			로 그룹을 확인
+wheel:x:10:ec2-user				
+
+#Session Manager 서비스
+
+#EC2 직렬콘솔
+활성화
+
+#윈도우(Windows) 인스턴스의 경우
+~인스턴스에 연결> RDP 클라이언트 탭
+ 원격데스크톱 (win r)
+컴퓨터에 퍼블릭DNS 입력	이름 administrator 	입력
+>암호입력은 RDP 클라이언트에서 표시된 암호를 ctrl v 
+연결하여 원격으로 접속한다.
+
+
+>>(월) 오늘은 아마존AWS에 접속해서 실습을 해봤다. 구글계정과 aws계정, 루트로그인과 MFA 인증및 설정, IAM 사용자 그룹설정 활용까지 생각해보면 좋을 듯 하다.
+
