@@ -1,0 +1,154 @@
+
+5주차_수요일 메모 (파이썬) 
+
+# 1. 클래스 (Class) _ 객체 지향 프로그래밍
+클래스는 C언어에는 없는 항목이다. 			객체(object) = 인스턴스와 유사
+설명을 하자면, 클래스는 '과자틀'에 해당하고, 객체는 틀에서 찍어낸 '과자'에 해당한다.
+
+² 객체 지향 프로그래밍은 데이터와 연관된 순서들 (메소드)을 데이터에 작용하는 하나
+의 단위로 묶는 것이다. 하나로 묶인 단위를 객체라고 부른다.
+² 파이썬은 객체 지향 프로그래밍 언어다.
+² 파이썬에 모든 것은 객체다,
+² 파이썬에서 기본으로 제공하는 기능들도 파이썬 객체다.
+² 객체를 선언하고, type() 함수를 사용하여, 객체의 타입을 확인할 수 있다.
+² dir() 함수를 사용하여, 해당 객체에서 사용할 수 있는 속성, 메소드 들을 확인해 볼
+수 있다.
+
+# 객체와 인스턴스의 차이
+클래스로 만든 객체를 ‘인스턴스’라고도 한다. 그렇다면 객체와 인스턴스의 차이는 무엇일까? 이렇게 생각해 보자. a = Cookie()로 만든 a는 객체이다. 그리고 a 객체는 Cookie의 인스턴스이다. 즉, 인스턴스라는 말은 특정 객체(a)가 어떤 클래스(Cookie)의 객체인지를 관계 위주로 설명할 때 사용한다. ‘a는 인스턴스’보다 ‘a는 객체’라는 표현이 어울리며 ‘a는 Cookie의 객체’보다 ‘a는 Cookie의 인스턴스’라는 표현이 훨씬 잘 어울린다.
+
+# 2. 사칙 연산 클래스 만들기
+class FourCal:
+    pass
+a = FourCal()
+type(a)				함수의 선언
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# self 키워드
+² 클래스 외부에서 해당 함수를 호출한 객체를 찾는 일은 객체의 이름만 알면 쉽게 찾을
+수 있다. 하지만 클래스 내부에서 호출한 객체를 찾으려면 마땅한 방법이 없다. 그래서
+도입된 것이 바로 self 키워드이다.
+² 파이썬에서 self 키워드는 해당 함수를 호출한 객체를 가리킨다.  (내가 나를 가리키는)
+² self 는 객체 공간을 가리키는 식별자이다.
+² 객체 공간의 필드와 메소드에 접근할 경우 self.식별자 형식을 이용한다.
+² 파이썬 메소드의 첫 번째 매개변수 이름은 관례적으로 self 를 사용한다.
+² 객체를 호출할 때 호출한 객체 자신이 전달되기 때문에 self 를 사용한 것이다.
+² 물론 self 말고 다른 이름을 사용해도 상관없다.
+² 메소드의 첫 번째 매개변수 self 를 명시적으로 구현하는 것은 파이썬만의 독특한 특징이다.
+	def setdata(self, first, second): 	# ① 메소드의 매개변수
+	self.first = first 			# ② 메소드의 수행문
+	self.second = second 		# ② 메소드의 수행문
+① setdata 메소드의 매개변수
+setdata 메소드는 매개변수로 self, first, second 3 개 입력값을 받는다.
+일반 함수와는 달리 메소드의 첫 번째 매개변수 self 는 특별한 의미를 가진다.
+※ 객체를 통해 클래스의 메소드를 호출하려면 a.setdata(4, 2)와 같이 도트(.)
+연산자를 사용해야 한다.
+ 
+# class실습 			(들여쓰기를 주의하기)
+class FourCal:
+    def setdata(self, first, second):        #메소드의 매개변수
+        self.first = first                 	 #메소드의 수행문
+        self.second = second                #메소드의 수행
+    def add(self):
+        result= self.first + self.second
+        return result
+
+a = FourCal()
+a.setdata(4,2)
+print(a.add())		#출력: 6 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 사칙연산 + , x , - , / 실행하기 (add, mul, sub, div)
+addition multiplication substract division
+class FourCal:
+    def setdata(self, first, second):       #메소드의 매개변수
+        self.first = first                  #메소드의 수행문
+        self.second = second                #메소드의 수행
+    def add(self):
+        result= self.first + self.second
+        return result
+    def mul(self):
+        result = self.first * self.second
+        return result
+    def sub(self):
+        result = self.first -  self.second
+        return result
+    def div(self):
+        result = self.first / self.second
+        return result
+a = FourCal()
+a.setdata(14,10)
+
+print(a.add())			#결과 : 24	14+10
+print(a.mul())			#결과 : 140	14*10
+print(a.sub())			#결과 : 4	14-10
+print(a.div())			#결과 : 1.4      14/10
+#####################################################################
+# 3. 생성자(Constructor), 초기화      _ _ init _ _
+생성자(Constructor)란?
+객체가 생성될 때 자동으로 호출되는 메소드를 의미한다.
+파이썬 메소드 이름으로 __init__를 사용하면 이 메소드는 생성자가 된다.
+※__init__ 메소드의 init 앞뒤로 붙은__는 언더스코어(_) 두 개를 붙여 쓴 것이다.
+
+  #FourCal 클래스에 생성자를 추가한 실습
+class Fourcal:
+    def __init__(self, first, second):
+        self.first = first
+        self.second = second
+    def add(self):
+        result = self.first + self.second
+        return result
+    def mult(self):
+        result = self.first * self.second
+        return result
+    def sub(self):
+        result = self.first - self.second
+        return result
+    def div(self):
+        result = self.first / self.second
+        return result
+ # __add__ 메소드 구현
+    def __add__(self, other):
+        return Fourcal(self.first + other.first, self.second + other.second)
+
+a = Fourcal(14, 10)
+b = Fourcal(5, 7)
+result = a + b
+
+print(f"a + b 결과: first={result.first}, second={result.second}")
+#  a + b 결과: first=19, second=17   (19, 17)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+>>추가로 add뿐 아니라 sub, mul, div도 추가하고자 하면
+ def __sub__(self, other):
+        return Fourcal(self.first - other.first, self.second - other.second)
+ def __div__(self, other):
+        return Fourcal(self.first / other.first, self.second / other.second)
+def __mul__(self, other):
+        return Fourcal(self.first * other.first, self.second * other.second)
+ 을 class Fourcal: 하위탭에 추가하고
+sub_result = a - b
+div_result = a / b
+mult_result = a * b
+ 으로 객체를 연산으로 조작한뒤, 
+print(f"a - b 결과: first={sub_result.first}, second={sub_result.second}")
+print(f"a / b 결과: first={div_result.first}, second={div_result.second}")
+print(f"a * b 결과: first={mult_result.first}, second={mult_result.second}")
+를 입력해주면 될 것이다.
+
+#결과값이 오류가 나게 됨. 이유는 무엇인가?
+정답:
+def __truediv__(self, other):
+        return Fourcal(self.first / other.first, self.second / other.second) 
+를 __div__ 메소드와 교체하기.
+__div__ 메소드에서 오류가 발생하는 이유는 Python 3 버전 이상에서는 나눗셈 연산을 나타내는 스페셜 메소드로 __truediv__ 메소드를 사용해야 한다. 따라서 __div__ 대신 __truediv__ 메소드를 구현해야 한다.
+#새로 구현하면
+a + b 결과: first=19, second=17
+a - b 결과: first=9, second=3
+a / b 결과: first=2.8, second=1.4285714285714286
+a * b 결과: first=70, second=70		가 출력된다.
+#####################################################################
+# 4. 클래스의 상속
+² "물려받다"라는 뜻으로, "재산을 상속받다"라고 할 때의 상속과 같은 의미이다.
+² 어떤 클래스를 만들 때 다른 클래스의 기능을 물려받을 수 있게 만드는 것이다.
+² 상속은 기존 클래스는 그대로 놔둔 채 클래스의 기능을 확장시킬 때 주로 사용.
+class New_클래스 이름(상속할 클래스 이름):
+클래스를 상속하기 위해서는 클래스 이름 뒤 괄호 안에 상속할 클래스 이름을 넣음.
+
