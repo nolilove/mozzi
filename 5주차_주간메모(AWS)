@@ -188,10 +188,184 @@ OR
 
 #######################################################################################################################
 
-#아마존 리눅스 EC2 학습 예정
-#우분투 EC2 학습 예정
+# 아마존 이벤트 _AWS Training and Certification
+https://aws.amazon.com/ko/certification/?nc2=sb_ce_co  AWS SAA C03자격증 설명이 있다.
+230920 수요일 학습 개요
+
+-aws 콘솔열기
+루트계정 로그인
+EC2 : AWS 리눅스 기본 구성
+ 동일한 서브넷 : 172.31.0.0 /20 할당
+  $ sudo -s
+Tab Key 자동 완성 설치
+  # yum install bash-completion
+  # source /etc/profile.d/bash_completion.sh
+-방화벽 설치
+  #
+  #
+-NetworkManager 설치
+  #
+  #
+-httpd 설치 및 테스트
+  #
+  #
+-EBS(블럭 스토리지) 만들기
+-AMI 이미지 만들기
+-----------------------------------------
+-ELB 추가하기
+-오토 스케일링 그룹 만들기
+-S3(객체 스토리지) 만들기
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# 인스턴스 시작 (아마존 리눅스 생성)
+>AWS-amazon-1 생성
+>Amazon linux AMI로 선택
+>서브넷 172.31.0.0/20로 선택
+>보안그룹 이름이 자동으로 생성되는데, launch-wizard-aws-1 로 변경
+>인바운드 보안그룹규칙 ssh 
+>스토리지 구성- 스토리지유형 EBS 10GB 추가.	- standard EBS볼륨 선택.
+종료시 삭제를 '아니오'로 선택 후 인스턴스 생성.
+ 
+~~~~~~~
+>아마존 리눅스 인스턴스 실행 (2개 리눅스 인스턴스 모두)
+Xshell 을 실행 > 초기화
+ >이름: AWS-1
+ >호스트: 퍼블릭 ip주소 (EC2)
+ >사용자인증> ec2-user - public key 설정>가져오기>연결>수락 및 저장.
+
+>XShell에서
+~]$ hostname 입력
+~]$ cat /etc/hostname
+sudo -s로 root 계정으로 이동 (직렬콘솔에서는 의미없으니 exit)
+~]$ sudo passwd root
+pw를 redhat으로 설정.
+~]$ su  - root 를 입력하고 pw redhat을 입력하여 root로 진입
+> ~]# yum install bash-completion 로 설치.   *자동완성(tab기능)을 설치하는것임
+> ~]# source /etc/profile.d/bash_completion.sh 	로 리프레쉬를 실행한다.
+
+>방화벽 설치
+iptables를 입력해봤을때 나오지 않는다면 방화벽이 없는것임.
+[root@ip-172-31-11-197 ~]# df -hT
+/dev/xvda1     xfs       8.0G  1.5G  6.5G  19% / 를보면 설치된 프로그램이 1.5G밖에안되므로 설치가 되지 않은 기능일수도 있다는 추론이 가능.
+[root@ip-172-31-11-197 ~]# yum install firewall* -y   로 방화벽서비스 설치.
+[root@ip-172-31-11-197 ~]# systemctl status firewalld.service  로 확인하면
+     Active: inactive (dead)	상태임.
+[root@ip-172-31-11-197 ~]# systemctl enable --now  firewalld.service  로 활성화.
+
+>네트워크 매니저 설치
+[root@ip-172-31-11-197 ~]# yum install network-scripts.x86_64 -y
+[root@ip-172-31-11-197 ~]# yum install httpd* -y
+[root@ip-172-31-11-197 ~]# systemctl enable --now httpd.service  로 활성화
+[root@ip-172-31-11-197 ~]# firewall-cmd  --permanent --add-service=http
+success
+[root@ip-172-31-11-197 ~]# firewall-cmd  --reload
+success
+
+>퍼블릭 dns에 접속 시도하기
+[root@ip-172-31-11-197 ~]# curl http://localhost  를 입력 시 
+<html><body><h1>It works!</h1></body></html>		출력되면 ok
+그런데 웹에 퍼블릭 dns에 접속하지는 못함. 
+> EC2대시보드로 이동.
+보안그룹> 인바운드 규칙 편집 > 규칙 추가
+http(port : 80) , anywhere ipv4( 0.0.0.0 ) 규칙을 추가함.
+>이후 http://ec2-13-124-114-47.ap-northeast-2.compute.amazonaws.com/ (퍼블릭dns) 에 접속시 It works! 가 출력됨.
+
+>스토리지를 확인 ( EBS 관련 )
+AWS amazon-1은 스토리지 8+10으로 설정해뒀다. 디바이스를 확인해보면 
+/dev/xvda 가 8GB 볼륨,  /dev/sdb가 10GB볼륨을 가지고 있다. 
+>Elastic Block Store 탭으로 이동
+10GB 확인
+>스토리지에 볼륨 생성
+gp2, 5GB로 설정하기 > Name 편집에서 AWS-2
+10GB를 > AWS-1로 설정
+>생성한 AWS-2를 볼륨연결 > 인스턴스를 선택(AWS-2)  
+/dev/sdf :default 로 되어있다.
+/dev/sdb 로 수정함. 
+>인스턴스에서 아마존2를 확인하면 스토리지에 볼륨5기가가 마운트되었음을 알 수 있다.
+종료 시 삭제 : 아니오로 되어있는것이 보임.
+
+>ping (ICMP 활성화)
+인바운드 규칙 편집> 규칙 생성
+>모든 icmp ipv4 유형, anywhere ipv4 후 규칙 저장.
+이후 핑으로 두 서버간 통신하면 잘 된다. (쌍방 인바운드 허용)
+
+인스턴스에서 이미지 생성하기(AMI 생성)
+>MY-AmazonLinux-1 , 
+>재부팅 안함 활성화와 비활성화 차이가 있으나 체크 안함
+>이미지생성
+이 상태에서 AWS amazon 3을 생성할때 이 이미지를 선택하면 똑같은 설정으로 생성됨.
+>MY-AmazonLinux-2 도 동일하게 생성
+>인스턴스 생성하기(aws 3)
+>내 AMI 탭으로 이동
+>MY-AmazonLinux-1 머신 이미지로 이동
+서브넷 설정이 혹시나 풀려있다면, 탬플릿 설정을 해야 함.
+>생성 후 인스턴스에 연결 시도하면, 사용자 이름이 root로 바뀌어있는 것을 알 수 있음.
+[root@ip-172-31-4-122 ~]# systemctl status httpd
+[root@ip-172-31-4-122 ~]# firewall-cmd --list-services 
+[root@ip-172-31-4-122 ~]# lsblk			를 입력해서
+NAME      MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+xvda      202:0    0   8G  0 disk 
+├─xvda1   202:1    0   8G  0 part /
+├─xvda127 259:0    0   1M  0 part 
+└─xvda128 259:1    0  10M  0 part 
+xvdb      202:16   0  10G  0 disk 
+10GB가 들어와있는것을 확인 할 수 있다.
+>보안그룹에 규칙추가한  http(포트 80), ICMP  두가지는 기존 인바운드에서 선택해야 적용됨을 알도록 하자.
+
+>AWS 3,4 를 종료해도, EBS의 볼륨탭으로 들어가면 
+ 
+내 AMI가 남아있는것을 알 수 있다.
+
+#RedHat 이미지로 인스턴스 생성
+>RedHat-1 이름으로 ami는 redhat으로 설정
+>RedHat-1-key 키페어 생성
+>서브넷 172.31.0.0/20 설정
+>보안그룹 AWS-1에서 설정한 기존 보안그룹을 선택.(default X)
+>스토리지 구성 > 인스턴스 시작.
+인스턴스 연결에서 AWS-1로 EC2인스턴스연결은 가능하다.
+but, RedHat 으로 EC2인스턴스연결을 시도하면 실패 알림이 뜨게된다.(미설치기 때문)
+>SSH 클라이언트 탭으로 이동
+XSHELL로 이동
+세션만들기로 RedHat-1 /호스트에 퍼블릭dns를 붙임 
+> 사용자인증에서 퍼블릭 키 선택후 설정> 키를 가져옴.  
+ 
+*만약 보안규칙이 적용되지 않았다면 확인하기 = icmp , http(port 80)
+>sudo -s 입력 후 exit
+>sudo passwd root
+redhat을 패스워드설정
+>su - or su - root로 루트계정 진입
+[root@ip-172-31-12-15 ~]# yum install bash-completion	으로 자동완성,탭키 활성화
+[root@ip-172-31-12-15 ~]# source /etc/profile.d/bash_completion.sh  로 Refresh 실행.
+[root@ip-172-31-12-15 ~]# yum -y install firewall*   로 방화벽기능을 설치
+[root@ip-172-31-12-15 ~]# systemctl enable --now firewalld
+[root@ip-172-31-12-15 ~]# yum -y install httpd	로 httpd 기능 설치
+[root@ip-172-31-12-15 ~]# systemctl enable --now httpd
+[root@ip-172-31-12-15 ~]# firewall-cmd --permanent --add-service=http
+success
+[root@ip-172-31-12-15 ~]# firewall-cmd --reload
+success
+[root@ip-172-31-12-15 ~]# yum install vim* -y
+[root@ip-172-31-12-15 ~]# yum install tree* -y
+* [root@ip-172-31-12-15 ~]# yum install epel-release -y 은 레드햇에서 설치되지 않는다. 아마도 상업적인 이유인듯(구독해야 외부 프로그램 제공)
+
+>이미지 생성 RedHat
+MY-RedHat-AMI-1 로 설정하고 생성하면 
+이미지>AMI> MY-RedHat-AMI-1 라는 AMI가 생성되어있는 것을 확인가능하다
 
 
+[root@ip-172-31-11-197 html]# vim index.html
+[root@ip-172-31-11-197 html]# su - ec2-user
+[ec2-user@ip-172-31-11-197 ~]$ sudo scp /var/www/html/index.html 172.31.9.161:/var/www/html/	을하면 
+~~
+The authenticity of host '172.31.9.161 (172.31.9.161)' can't be established.
+ED25519 key fingerprint is SHA256:glSm5vPs7ZcboXDnvN21NywzqzdiYPHOjpQs2eXg+ME.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? 
+root@172.31.9.161: Permission denied (publickey,gssapi-keyex,gssapi-with-mic).
+Connection closed
+오류가 뜨는데,
+[ec2-user@ip-172-31-11-197 ~]$ ssh ec2-user@172.31.9.161 으로도 원격접속이 권한부여되지 않는다.
+~~
 
 
 
