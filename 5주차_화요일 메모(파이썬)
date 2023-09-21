@@ -1,0 +1,149 @@
+
+5주차_화요일 메모(파이썬)
+오늘의 복기_ i for i in range(0, 10)는 0부터 9까지의 수를 생성해준다.{(x, y)면 x부터 y-1까지}
+
+파이썬 04장 입력과 출력
+#1. input 함수의 사용
+input()
+input("입력할 내용 메시지")
+input("입력할 내용 메시지").split() # 여러 개의 항목을 공백으로 구분
+input("입력할 내용 메시지").split(‘,’) # 여러 개의 항목을 ‘,’ 로 구분
+~~~
+input() 함수는 사용자로부터 키보드로 입력을 받는 함수다.
+input() 함수는 항상 문자열을 반환하고 사용자가 숫자를 입력하더라도 문자열로 취급된다.
+
+중요 : 입력한 값을 계산하려면 숫자 자료형으로 변환을 해야 한다
+number = int(number)			>int는 정수형 1 , -1, 0 ,42 등
+number = float(number)		>float는 부동소수점 3.14, -0.15, 1.23e-4 등
+##############################################################
+#2. print 자세히 알기
+큰따옴표(")로 둘러싸인 문자열은 + 연산과 동일하다
+print("life" "is" "too short") # ①
+lifeistoo short
+print("life"+"is"+"too short") # ②
+lifeistoo short
+문자열 띄어쓰기는 콤마로 한다
+print("life", "is", "too short")
+life is too short
+한 줄에 결과값 이어서 출력하기
+매개변수 end 옵션을 사용해 끝 문자를 지정해야 한다.
+for i in range(10):
+print(i, end=' ')    
+
+>>>print에는 \n 문자열이 포함되어있으며, 
+menu = "1. 메뉴 1\n2. 메뉴 2\n3. 메뉴 3"
+print("메뉴 목록:\n" + menu)				와 같이 쓰인다.
+
+~~~~~~~
+
+num = input("숫자들 ? ").split()
+total = 0
+for data in num :  
+    total =total + int('data')
+print(f'합은 {total} 입니다')
+>얼마   > 
+~~~~~~~
+list1 = input("이름 국어 영어 수학 차례로 입력 \n").split()
+hap = 0
+for jum in list1 [1:4]:
+    hap = hap + int(jum)
+list1.append(hap)
+ave = hap / 3
+list1.append(ave)
+print ('Name Kor Eng Mat Total Ave')
+print(list1)
+>>이름 국어 영어 수학 차례로 입력 
+LEE 100 90 95
+Name Kor Eng Mat Total Ave
+['LEE', '100', '90', '95', 285, 95.0]
+
+#3. 파일 경로 표기법 (절대경로와 상대경로)
+1) 절대경로
+import os
+print(os.getcwd()) 		로 확인이 가능하다.
+표기법의 경로 예시로 C:\Python project\BASIC FILES>
+2) 상대경로
+파일의 위치. 
+
+파일 경로와 슬래시(/)
+리눅스 OS 에서 실행할 때
+슬래시(/) : "/py/new_file.txt"
+MS OS 에서 실행할 때
+역슬래시(\ ) : "C:\\py\\new_file.txt"
+r 문자(Raw String) : r"C:\py\new_file.txt"
+
+#4. 파일 모드 문자열 : 가장 먼저 파일의 사용 용도를 결정하는 문자열,
+생략할 경우 파일은 읽기 전용 모드(read mode)로 열린다.
+r (read mode) : 읽기 전용 모드 (기본값, default)
+w (write mode) : (항상 새로) 쓰기 전용 모드(overwrite)
+a (append mode) : 파일의 마지막에 새로운 데이터를 추가하는 모드
+t (text mode) : 파일의 데이터를 텍스트 파일로 인식하고 입.출력함. (기본값)
+b (binary mode) : 해당 파일의 데이터를 바이너리 파일로 인식하고 입출력함.
+
+ 마지막으로 다음과 같은 파일 모드 문자열을 추가할 수 있다.
+x (exclusive mode) : 열고자 하는 파일이 이미 존재하면 파일 개방에 실패함.
++ (update mode) : 파일을 읽을 수도 있고 쓸 수도 있도록 개방함.
+파일 모드 문자열 중 파일 사용 용도의 기본값은 'r'(읽기 전용 모드)
+파일 양식의 기본값은 't'(텍스트 모드)
+보기 : 'r', 't', 'rt' , encoding=’utf-8’
+
+파일을 열고 닫는 파일객체 메소드(데이터를 쓰는 작업 수행)	*FilePointer
+# 파일을 쓰기 모드로 열기
+fp = open("example.txt", "w")
+# 데이터 쓰기
+fp.write("안녕하세요, 파일에 데이터를 쓰는 예제입니다.")
+# 파일 닫기
+fp.close()
+>>꼭 쓰기모드 W로 연 다음에는, 파일 닫기 close( ) 메소드를 사용해서 파일을 닫아야 한다.
+
+#5. 람다함수
+하나의 인자를 받아서(연산자) 그것을 간단하게 반복해준다. 함수를 딱 한줄만으로 만들어주는 식임.  주로 고차 함수에 인자(argument)로 전달되거나 고차 함수가 돌려주는 결과값으로 쓰인다. **람다식을 남용하면 코드 이해가 어려울 수 있으므로, 주석 다는것이 권장된다.
+ 
+쓰이는 방법은  주로  //    함수 : 인자 형태이다 lambda arguments: expression 
+lambda 함수와 map 함수의 응용) 
+만약 입력이 여러개라면 for 문을 돌면서 함수를 여러번 호출할 수 있지만, map 함수를 통해 좀 더 쉽게 할 수 있다. 
+
+덧셈함수 
+ 
+add = lambda x, y: x + y
+result = add(3, 5)
+print(result)  # 출력: 8
+
+제곱함수
+ 
+square = lambda x: x**2
+result = square(4)
+print(result)  # 출력: 16
+
+리스트정렬에서의 람다함수
+ 
+reverse=True(내림차순정렬)
+ 
+reverse=False(오름차순정렬)
+students = [
+    {"name": "Alice", "score": 95},
+    {"name": "Bob", "score": 88},
+    {"name": "Charlie", "score": 92}
+]
+students.sort(key=lambda student: student["score"], reverse=True)
+print(students)
+>>높은 점수부터 출력된다.
+
+student = [
+    {"name": "alice", "score":95},
+    {"name": "mike", "score":60},
+    {"name": "alpha", "score":45}
+]
+student.sort(key=lambda student: student["score"], reverse=False)
+print(student)
+>> [{'name': 'alpha', 'score': 45}, {'name': 'mike', 'score': 60}, {'name': 'alice', 'score': 95}] 이 출력된다. (높은 순이 아니라 낮은 순부터 출력)
+
+리스트 컴프리헨션에서 람다 함수 사용:
+numbers = [1, 2, 3, 4, 5]
+doubled = list(map(lambda x: x * 2, numbers))
+print(doubled)  # 출력: [2, 4, 6, 8, 10]
+>만약 x**2면 squared(제곱) 으로 출력[1, 4, 9, 16, 25]가 된다.
+numbers=[1,2,3,4,5]
+doubled=list(map(lambda x: x ** 2, numbers))
+print(doubled)  # 출력: [3, 6, 9, 12, 15]
+
