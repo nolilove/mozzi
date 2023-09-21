@@ -366,8 +366,133 @@ Connection closed
 오류가 뜨는데,
 [ec2-user@ip-172-31-11-197 ~]$ ssh ec2-user@172.31.9.161 으로도 원격접속이 권한부여되지 않는다.
 ~~
+####################################################################
+230921 목 메모
 
+AWS 실습    #로드밸런싱
+AWS 비용관리 항목에서 AWS 프리티어 확인을 하면, 현재 내가 사용한 사용량을 볼 수 있음
+>EC2에서 인스턴스 > 종료로 초기화
+>EBS에서 볼륨을 모두 삭제하여 초기화 한다.
+>이미지에서 AMI 를 확인한다
+>보안그룹에서 default 제외하고 모두 삭제하여 초기화
+	'My-All-Access-SG' 하나만 사용할것임.
+	인바운드 : 모든 트래픽 허용, 소스는 anywhere ipv4
+>네트워킹 및 콘텐츠 전송
+	VPC항목 이동
+	서브넷 탭 이동
+>EC2 시작 스크립트를 생성함	
+~~~~~~리눅스내용~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[root@server-1 ~]# echo "hello \n linux"
+hello \n linux
+[root@server-1 ~]# echo -e "hello \n linux"
+hello 
+ linux
+>>-e는 \n로 하여금 문자가아니라 명령어임을 각인시켜준다. (escape)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#!/bin/bash
+echo 'redhat' | sudo passwd --stdin root
+sudo -s
+yum install httpd firewall* vim bash-completion -y
+systemctl enable --now httpd
+systemctl enable --now firewalld
+firewall-cmd --permanent --add-service=http
+firewall-cmd --reload
+echo "Web Server Name $(hostname -f)" >> /var/www/html/index.html
+systemctl restart httpd
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+>인스턴스 구축실습 (3개)
+이름 AWS-Server / 아마존리눅스ami
+키페어  All-Machine-Key  유일하게 사용
+서브넷 기본설정없음
+보안그룹 > 기존 보안그룹선택 MY-All-Access-SG 
+고급세부정보> 사용자데이터(optional)에 스크립트를 적어넣기
+인스턴스 개수> 3개의 인스턴스 한번에 생성
 
+이 과정이 순탄하게 되었다면 각각의 퍼블릭 ip로 도메인에 접속했을 때
+Web Server Name ip-172-xx-xx-xx.ap-northeast-2.compute.internal
+라는 문구가 나타나게 된다.
+
+# AWS ELB(Elastic Load Balancer)와 Auto Scaling Group 실습
+
+>Application Load Balancer (로드밸런싱) 
+대시보드> '대상 그룹 ' 탭으로 이동
+대상 그룹 생성 > 대상유형 '인스턴스' > 'Web-TG' 로 생성 , HTTP :80 (port) 
+3개의 인스턴스를 택하고 , '아래에 보류 중인 것으로 포함'을 클릭해야 대상에 포함됨
+>그룹 Web-TG 가 최종적으로 생성되었다.
+
+'로드밸런서' 탭으로 이동 
+>로드 밸런서 생성 클릭
+웹서버의 교통정리를 위한 Application Load Balancer (ALB)를 생성하기 
+로드밸런서 이름을 'Web-ALB' 로 설정
+매핑- 2개이상의 서브넷을 지정해야함. 여기서 실패하게 된다.
+>로드밸런서 생성을 위한인스턴스 시작( 2c 가용영역 생성)
+동일하게 하고 고급세부정보에 스크립트를 넣고, 인스턴스 2개 생성
+생성된 인스턴스 4, 5를 '아래에 보류중인것으로 포함' 후 보류중인 대상 등록
+
+>로드밸런서 생성
+Web-ALB 
+ap-northeast-2a (apne2-az1)
+ap-northeast-2c (apne2-az3)		가용영역 선택
+>보안그룹 My-All-Access-SG
+>리스너 및 라우팅 - 대상그룹 Web-TG로 추가
+>로드밸런서가 생성되었다.
+ 
+>여기서 중요한 것은 
+Web-ALB-690483713.ap-northeast-2.elb.amazonaws.com 이라는 DNS이름 이다.
+이를 복사해서 콘솔창옆 탭에서 입력을 하면 5가지 인스턴스에 할당된 5가지 IP가 랜덤하게 나타난다.(새로고침 시 변경됨)
+>리스너 및 규칙, 네트워크 매핑, 모니터링 등을 통해서 웹서버를 관리할 수 있다.
+>대상그룹 탭으로 들어가서 보면, Healthy 상태의 인스턴스들을 관찰할 수 있다.
+ 
+
+>로드밸런서 삭제
+로드밸런서 탭에서 로드밸런서 삭제를 실행
+대상그룹 탭에서 해당 Web-TG를 삭제해서 완료할 수 있다.
+
+> AWS Auto Scailing 
+스케일링 이란 인스턴스 혹은 컴퓨팅 파워를 늘리는 것을 말하며 
+
+>스케일 업 (Scale UP)
+*cpu가 하나이고 memory 1기가인 인스턴스가 있다고 가정하자.
+만일 인스턴스의 성능을 16배로 늘려야할 상황이 온다면, 말 그대로 16배 큰 인스턴스를 사용함으로서 성능을 올리는 것을 스케일 업이라고 한다. 하지만 이는 성능과 비용이 비례하지 않는다는 단점이 있다. 간단히 예를 들면 그래픽카드를 볼 수 있다.
+ 
+ >스케일 아웃(Scale Out)
+위의 물리적인 문제를 해결하는것이 바로 스케일 아웃 이다.
+스케일 아웃은 규모를 늘리는 것이다.
+따라서, 클라우드 환경에서는 Scale Out을 항상 염두하며 설계를 해야 한다.
+수요에 따라 인스턴스를 덜 쓸 수도, 더 쓸 수도 있음으로서 유연성을 가질 수 있기 때문이다.
+
+>스케일 인(Scale In)
+scale out으로 늘린 인스턴스를 다시 줄이는 행위로 이해하면 된다.
+오토 스케일링(Auto Scaling)은 바로 Scale Out을 자동화(Auto) 하기 위해 나온 서비스라고 보면 된다.
+
+># 오토스케일링 실습
+auto scaling 탭으로 먼저 이동하지 않는다.
+>시작 템플릿 탭으로 먼저 이동 > 시작 템플릿 생성
+' MY-Temp-1 ' , 오토스케일링 가이던스 체크
+인스턴스유형과 키페어, 보안그룹 설정 후 탬플릿 생성
+
+>오토스케일링 생성 
+'MY-ASG-1' 로 그룹 이름 생성
+시작 탬플릿 my-temp-1 선택
+네트워크 가용영역을 하나 선택(2b) << 오류같음.실패
+네트워크 가용영역을 2a or 2c로 선택 <<trouble shooting 성공 
+>로드밸런싱을 같이 구성할 수 있다.
+>'그룹크기 및 크기 조정 정책 구성'
+원하는용량 3, 최소용량1, 최대용량 6으로 설정.
+>대상 추적 크기 조정 정책
+지표유형을 평균 cpu사용률로 선택. 대상값 60
+>검토( summary) > 오토스케일링 그룹 생성
+ 
+
+ 2b(실패)
+ 2c(성공)
+>인스턴스에 가서 확인을하면, 아까전의 3개의 인스턴스가 올라와있는 것을 확인가능하다.
+ 
+amazon linux 연결해서 터미널에서 yum install stress -y 로 스트레스 서비스 설치
+[root@ip-172-31-42-151 ec2-user]# stress -c 10 --time-out 600s 를 입력
+인스턴스 갯수가 왔다갔다 3> 1 >6 까지도 가변하게 됨.   오늘 실습은 굉장히 재밌었다.
+<<stress --cpu $(nproc) --timeout 600s >>  예제코드
+########################################################################
 
 
 
