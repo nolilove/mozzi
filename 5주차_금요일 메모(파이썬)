@@ -1,0 +1,264 @@
+5주차_금요일 메모(파이썬)  
+이번시간에는 내장함수 (chapter 05)를 다룬다   중요- Filter 함수 
+https://wikidocs.net/32 를 참고(내장함수모음_ 점프투 파이썬)
+
+# 응용 예시) a ~ z 출력
+예제 1)
+alpha = ord('A')
+for i in range(26):
+    print( chr( alpha ), end = ' ' )
+    alpha += 1
+print('\n')  
+#end = ' '는 임의로 한칸씩 띄어쓴 것이고, 기본은 붙은상태 ''이다(\n줄바꿈)
+A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+예제 2)
+alpha = ord('A')
+list1 =[]
+for i in range(1, 27):
+    list1.append(chr(alpha))
+    alpha += 1 
+print(list1)
+['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+~~~~
+예제 3)
+str1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"  
+이라는 문자열을 리스트 자료형으로 만들면 어떻게 되는가?
+>>str1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+list1 = list(str1)		로 짜면 된다.
+
+그래서 
+str1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+list1 = list(str1)
+print(list1)   		를 하면
+['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']	이라는 결과가 동일하게 도출된다.
+
+#리스트 자료형에서 사용할 수 있는 함수들
+dir : 객체가 자체적으로 가지고 있는 변수나 함수를 보여 준다. (나열 방식)
+print(dir([1, 2, 3])
+['append', 'count', 'extend', 'index', 'insert', 'pop',...]
+print(dir({'1':'a'})
+['clear', 'copy', 'get', 'has_key', 'items', 'keys',...]
+
+divmod : divmod(a, b)는 2개의 숫자를 입력으로 받는다.
+a를 b로 나눈 몫과 나머지를 튜플 형태로 돌려주는 함수이다.
+a, b = divmod(10,3)
+print(a,b)		#결과 : (3, 1)
+
+print(divmod(7, 3))	#결과 : (2, 1)
+
+예제1) 
+a= 10
+b= 3
+mok = a // b  (몫)
+na = a % b  (나머지)
+print(mok, na)		 	이것과  동일한 함수를 찾는다
+
+mok, na = divmod(a,b)로 규정해주면(두줄> 한줄 코딩) 
+값이 같게 나온다.   #결과 : 3 1
+
+enumerate : enumerate는 "열거하다"라는 뜻이다.
+순서가 있는 자료형(리스트, 튜플, 문자열)을 입력으로 받아
+인덱스 값을 포함하는 enumerate 객체를 돌려준다	(당연히 인덱싱,슬라이싱 개념포함 )
+*예제처럼 for문과 함께 자주 사용한다.
+
+예제1)
+my_list = ["apple", "banana", "cherry"]
+for index, value in enumerate(my_list):
+    print(f"Index {index}: {value}")
+Index 0: apple
+Index 1: banana
+Index 2: cherry
+
+예제2) 
+list1= ['body', 'foo' , 'bar']
+for i, name in enumerate(['body', 'foo', 'bar']):
+	print(i, name)
+0 body
+1 foo
+2 bar
+
+예제3)
+list1= [10,20,30,40,50]
+for i, v in enumerate(list1):
+	print(i,v)
+0 10
+1 20
+2 30
+3 40
+4 50
+여기서 데코레이션을 한다면
+list1= [10,20,30,40,50]
+for i, v in enumerate(list1):
+	print(f'list[{i}] = {v}')
+list[0] = 10
+list[1] = 20
+list[2] = 30
+list[3] = 40
+list[4] = 50		가 출력된다.
+
+filter : filter란? 무엇인가를 걸러낸다는 뜻으로 filter 함수도 동일한 의미를 가진다.
+² filter 함수는 첫 번째 인수로 함수 이름을, 두 번째 인수로 그 함수에 차례로 들어갈
+반복 가능한 자료형을 받는다.
+² 두 번째 인수인 반복 가능한 자료형 요소가 첫 번째 인수인 함수에 입력되었을 때 반
+환 값이 참인 것만 묶어서(걸러 내서) 돌려준다.
+
+함수는 lambda를 사용하면 더욱 간편하게 코드를 작성할 수 있다.
+print( list( filter ( lambda x : x > 0 , [1, -3, 2, 0, -5, 6] ) )
+
+ 예제1) positive.py 함수로, 리스트를 입력값으로 받아 양수값만 돌려줌
+def positive(list_data):
+    result = []
+    for i in list_data:
+        if i > 0:
+            result.append(i)
+    return result
+print(positive([1,-3,2,0,-5,6]))
+# 결과값: [1, 2, 6]
+ 예제2) filter 함수를 사용하면 위 내용을 다음과 같이 간단하게 작성할 수 있다.
+#filter1.py
+def positive(x):
+    return x > 0
+list5 = [1, -3, 2, 0, -5, 6]
+print(list( filter(positive, list5)) )
+# 결과값: [1, 2, 6]
+
+예제3) 람다 함수를 사용한 경우(간편화)
+print( list ( filter ( lambda x : x > 0 , [1, -3, 2, 0, -5, 6] ) ) ) 
+# 결과값: [1, 2, 6]
+
+#예제 1-1) 일반적인 코딩유형
+def positive_func(data_list):
+    result = []
+    for i in data_list:
+        if i > 0 : result.append(i)
+    return result
+print(positive_func(list1))
+#예제 2-1) 필터함수를 활용한 코딩
+def positive_func2(x):
+    return x>0
+print(list(filter(positive_func2,list1))) 
+#예제 3-1) 람다함수 활용한 코딩
+print(list(filter(lambda x : x>0 , [1,-3,2,0,-5,7])))    #결과: [1, 2, 7]
+print(list(filter(lambda x : x>0 ,  list1))) 		#결과: [30, 40, 50]
+>>람다함수는 앞에 조건을 부여하고, 뒤에 적용할 요소들만 리스트화하면 간단하게  조회됨.
+
+# hex : hex(x)는 정수 값을 입력받아 16진수(hexadecimal)로 변환하여 돌려주는 함수이다.
+16진수는 2진수의 약칭 진법이다 ( 아래의 0xea에서 0x에 해당)
+0 ~ 9 , A ~ F
+print(hex(234))
+'0xea'
+print(hex(3))
+'0x3'
+
+len : len(s)은 입력값 s의 길이(요소의 전체 개수)를 돌려주는 함수이다.
+print( len("python") )
+# 6
+Print(len([1,2,3]))
+# 3
+t1 = (1, ‘a’ )
+print(len(t1))
+# 2
+list : list(s)는 반복 가능한 자료형 s를 입력받아 리스트로 만들어 돌려주는 함수이다
+
+map : map(func, iterable)은 함수(f)와 반복 가능한(iterable) 자료형을 입력으로 받는다.
+map은 입력받은 자료형의 각 요소를 함수 func 가 수행한 결과를 묶어서 돌려주는 함수이다.
+
+sorted : sorted(iterable) 함수는 입력값을 정렬한 후 그 결과를 리스트로 돌려주는 함수..
+참고 : 리스트 자료형의 sort 함수는 리스트 객체 그 자체를 정렬만 할 뿐 정렬된 결과를 돌려주지는 않는다
+print(sorted([3, 1, 2]))
+print(sorted(['a', 'c', 'b']))
+print(sorted("zero"))
+[1, 2, 3]
+['a', 'b', 'c']
+['e', 'o', 'r', 'z'] 로 출력
+~
+list1 = [2,5,4,1,3]
+print('정렬전',list1) #오름차순이 디폴트
+list1.sort(reverse=True)
+print('정렬후',list1)   #내림차순으로 변경
+정렬전 [2, 5, 4, 1, 3]
+정렬후 [5, 4, 3, 2, 1]
+~
+list1 = [2,5,4,1,3]
+print('정렬전',list1) 
+list2 = sorted(list1)
+print('정렬후',list2)   #오름차순으로 정렬
+정렬전 [2, 5, 4, 1, 3]
+정렬후 [1, 2, 3, 4, 5]
+
+str : str(object)은 문자열 형태로 객체를 변환하여 돌려주는 함수이다.
+print(str(3))
+print(str('hi')
+print(str('hi'.upper())
+
+tuple : tuple(iterable)은 반복 가능한 자료형을 입력받아 튜플 형태로 바꾸어 돌려주는 함수이다. 튜플이 입력으로 들어오면 그대로 반환함.
+print(tuple("abc")
+('a', 'b', 'c')
+print(tuple([1, 2, 3])
+(1, 2, 3)
+print(tuple((1, 2, 3))
+(1, 2, 3)
+#####################################################################
+chapter 06 라이브러리 (표준 라이브러리, 외부 라이브러리)
+※ 파이썬 라이브러리는 파이썬을 설치할 때 자동으로 컴퓨터에 설치한다.
+sys
+sys 모듈은 파이썬 인터프리터가 제공하는 변수와 함수를 직접 제어할 수 있게 해주는 모듈이다. 명령 행에서 인수 전달하기 : sys.argv
+
+#VMware 실습     _ $,  유저추가 및 비밀번호생성
+[root@server-1 test]# vim test1.sh
+[root@server-1 test]# cat test1.sh
+#!/bin/bash
+echo $#
+echo $@
+echo $1
+echo $2
+echo $3
+[root@server-1 test]# chmod -v a+x test1.sh
+mode of 'test1.sh' changed from 0644 (rw-r--r--) to 0755 (rwxr-xr-x)
+
+-출력결과는 아래처럼 나온다.
+[root@server-1 test]# ./test1.sh a1 a2 a3
+3
+a1 a2 a3
+a1
+a2
+a3
+[root@server-1 test]# cat -n test1.sh 
+     1	#!/bin/bash
+     2	echo $#
+     3	echo $@
+     4	echo $1
+     5	echo $2
+     6	echo $3
+이걸 세팅한다음, vim my_useradd.sh로 들어간다. 
+#!/bin/bash
+useradd $1
+echo "add $1 user complete"
+echo $2 | passwd --stdin $1
+echo "user ${1} password setting complete" 	하고 저장
+[root@server-1 test]# chmod -v a+x my_useradd.sh 
+mode of 'my_useradd.sh' changed from 0644 (rw-r--r--) to 0755 (rwxr-xr-x)
+
+이후 [root@server-1 test]# ./my_useradd.sh  user22 1234    를 입력하면
+add user22 user complete
+user22 사용자의 비밀 번호 변경 중
+passwd: 모든 인증 토큰이 성공적으로 업데이트 되었습니다.
+user user22 password setting complete
+
+[root@server-1 test]# tail -2 /etc/passwd
+user3:x:4227:4227::/home/user3:/bin/bash
+user22:x:4228:4228::/home/user22:/bin/bash	확인해보면 user22가 성공적으로 추가됨.
+
+# echo $? 란
+[root@server-1 test]# mkdirr		이라고 잘못 입력해본다.
+bash: mkdirr: command not found...
+Similar command is: 'mkdir'
+[root@server-1 test]# echo $?
+127
+>> 왜 127이 출력되는가?  위의 명령어를 실행하지 못했기 때문에 0이 아닌 다른수가 뜬다.
+정상출력되면 0이 뜬다.
+
+echo$! : 마지막으로 백그라운드에서 실행된 명령어의 PID 값을 출력한다.
+echo$? : 마지막으로 종료된 명령어의 종료 상태를 말해주는데, 종료상태란 정상적인 종료0과 비정상적 종료인 0을 제외한 다른 값을 의미한다.
+echo$$ : 현재 쉘의 PID값을 출력한다.
