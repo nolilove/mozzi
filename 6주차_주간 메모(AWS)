@@ -1,0 +1,135 @@
+6주차_주간 메모(AWS) 
+230925 월요일
+
+개요: S3의 기능을 다시 실습하도록 함.
+AWS cloudfront에 대해서 알아보도록 함.     ***tip) index.html은 /var/www/html에 있다.
+동적
+
+# Cloud Front 란?  ***중요
+S3 버킷에 개발자가 구현한 HTML, CSS, JavaScript 등 웹페이지를 보여주기 위해서 필요한 파일을 사용자에게 정적&동적인 웹사이트 호스팅을 하는데 사용되는 콘텐츠 전송 네트워크형 웹 서비스(Content Delivery Network, CDN) 이다.   즉 cloudfront=CDN 
+
+#CDN 
+웹 페이지 요청이 발생했을 때 각 나라(리전)에 따라 웹 페이지 내용을 전달해주는, 분산 네트워크 시스템에 속한다(DNS). 각 리전 근처 IP주소를 참고하여 가장 가까운 곳에 있는, 엣지 로케이션(EDGE location)을 통해 속도를 향상시킨다. 목적은 유저에게 최소한의 지연시간, 최고의 성능을 이끌어 콘텐츠를 보여주기 위한 용도이다.
+
+#엣지 로케이션
+서버와 물리적으로 사용자들이 빠르게 받을 수 있도록 전세계 곳곳에 위치한 캐시 서버에 복제해주는 서비스이고, CDN 서비스인 CloudFront를 위한 캐시 서버(Cache Server)의 모임이라고 생각하면 된다. 		   멀리떨어진 Origin 과    User(나) 사이의 중간다리 역할.
+Origin = S3, EC2, ELB, Route 53 등 실제 컨텐츠가 존재하는 근원
+
+#Cloud Front 실습
+>인스턴스 시작 
+  Web-Server-1
+  키페어:All-Machine-Key
+  서브넷 172.31.0.0/20 (2a)
+  방화벽:기존보안그룹 선택 My-All-Access-SG
+스크립트는 넣지 않았다.
+>인스턴스 연결 (ec2-user)
+>sudo -s
+[root@ip-172-31-15-46 ec2-user]# yum install httpd -y
+[root@ip-172-31-15-46 ec2-user]# systemctl enable --now httpd
+[root@ip-172-31-15-46 ec2-user]# yum install firewall*
+[root@ip-172-31-15-46 ec2-user]# systemctl enable --now firewalld
+[root@ip-172-31-15-46 ec2-user]# firewall-cmd --permanent --add-service=http
+[root@ip-172-31-15-46 ec2-user]# firewall-cmd --reload 	
+(***방화벽은 보안그룹에서 설정되어있으면 안해도 된다.)
+
+[root@ip-172-31-15-46 ec2-user]# cd /var/www/html/
+[root@ip-172-31-15-46 html]# vim index.html
+	<H1> NETFLIX </H1>
+[root@ip-172-31-15-46 html]# systemctl restart httpd
+
+[root@ip-172-31-15-46 html]# cd /var/log/httpd
+[root@ip-172-31-15-46 httpd]# ll
+total 8
+-rw-r--r--. 1 root root  477 Sep 25 05:38 access_log
+-rw-r--r--. 1 root root 1506 Sep 25 05:36 error_log
+
+[root@ip-172-31-15-46 httpd]# tail -f access_log 를 치면
+퍼블릭 ip 도메인에 접속한사람의 로그가 뜬다.( 라인번호 추가가 새로고침마다 이뤄짐. )
+C^로 그만볼 수 있다.  
+>> 전세계에 있는 클라이언트들은 이 리전의 엣지 로케이션에서 컨텐츠를 가져가기 때문에, 원 소스가 서울에 있더라도 아프리카 리전에 있는 사람은 아프리카 엣지 로케이션에서 액세스하고, 클라이언트가 직접 서울로 안오기 때문에 서울리전에 로그가 남지 않는다.
+ 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#클라우드 프론트 세팅 실습
+
+-CloudFront CDN 생성하기
+배포생성 > 원본 도메인, 원본 경로, 이름 설정
+>인스턴스에서 퍼블릭dns 입력 , HTTP만해당 (포트80)
+>원본경로 추가x
+오리진 실드 활성화0>아시아태평양 서울리전
+>캐시설정은 옵티마이즈
+>보안보호 비활성화 >생성하면 배포를 생성하게 되었음.
+
+배포 도메인 이름
+https://d261wmhuzouc1k.cloudfront.net
+arn:aws:cloudfront::979191294468:distribution/E2JMUSH2VF8SLN
+>배포 도메인을 웹에 적으면 NETFLIX 가 도출됨.
+>EC2에서 확인해본다
+[root@ip-172-31-15-46 httpd]# tail -f access_log 를 입력하면 
+기존에 서울리전 도메인 http://3.38.168.146/ 에서 접속하면 바로 로그가 남는 것과 달리,    다른 리전의 엣지로케이션에 해당하는 해당 도메인https://d261wmhuzouc1k.cloudfront.net/ 에서는 로그가 전혀 남지 않는 것을 알 수 있다. 
+
+#클라우드프론트 실습(무효화)
+배포>id>무효화로 들어가본다 >무효화 생성
+>객체경로를 추가 
+Object Paths 에서 /* 이 아닌 특정 경로나 특정 파일 포맷만 무효화 하고 싶다면 해당 경로를 지정하거나 파일 포맷을 지정하면 된다.  아래는 예시이다.
+/img/*.png -> img 폴더에 있는 png 확장자만 캐시 무효화 처리 한다.
+/*.html -> 모든 html 파일의 캐시를 무효화 처리한다.
+이렇게 캐시 무효화 작업을 한 뒤 다시 접속하게 되면 엣지에 있는 캐시를 가져오는게 아닌 Origin 에 있는 파일을 불러오게 된다,
+
+CloudFront는 파일의 캐시를 사용하는 AWS의 CDN 서비스이다.
+S3 버킷의 정적 호스팅을 하고 CDN으로 연결한 상태에서 정상적으로 배포가 되지 않았다면 캐시파일이 업데이트 되지 않았을 것이다.
+CloudFront의 기본 캐시 유지시간은 24시간이다.
+하지만 무효화 설정을 통해 캐시파일을 새 파일로 갱신할 수 있다.
+무효화에서 /index.html 을 경로로 추가 하면?  >>안됨
+/*  를 추가를 해보면?  netflix-2로 갱신되었다.
+업데이트로 새로 캐싱된 내용을 클라이언트에게 새로 배포해줌.
+
+#S3와 연동한 cloudfront 
+s3 버킷 생성> 버킷이름을 web-gayoiki-gmail-com 으로 생성
+모든 퍼블릭엑세스 차단 해제. 후 버킷만들기.
+>web-gayoiki-gmail-com 속성> 맨 밑에 "정적 웹 사이트 호스팅"을 찾기.
+이를 활성화로 바꾸고 인덱스 문서 : index.html  / 오류 문서 : error.html   입력후 저장.
+http://web-gayoiki-gmail-com.s3-website.ap-northeast-2.amazonaws.com 엔드포인트 복사
+
+>cloudfront로 다시 돌아온다.
+버킷에 업로드할 용도로, index.html을 새로 만들어둔다. error.html도 마찬가지
+이를 버킷에 업로드한다!
+>원래 클라우드프론트를 비활성화 및 삭제  / 다시 생성( 원본 유형 S3 )
+https://d3bhxgrtosed98.cloudfront.net 배포 도메인을 웹에 입력
+>accessdenied 경고가 등장 > S3클릭 후 권한> 버킷 정책 설정
+정책생성기> allow, * , all actions, arn:aws:s3:::web-gayoiki-gmail-com/* 을 입력후 add statement를 하면 생성되는 스크립트를 붙여넣는다. 그후 저장.
+>cloudfront에 다시 와서 무효화에 /*를 추가하고 웹을 새로고침해본다.
+>>오류 흑흑
+
+
+#안됐던 부분 복기
+S3   : web2-gayoi-com 버킷만들기
+속성>정적 웹 사이트 호스팅 편집>활성화>
+index.html / error.html  >저장 
+버킷 정책> 정책생성기   미리복사 : arn:aws:s3:::web2-gayoi-com
+{
+  "Id": "Policy1695630091665",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Stmt1695630090539",
+      "Action": "s3:*",
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::web2-gayoi-com/*",
+      "Principal": "*"
+    }
+  ]
+}				수정후 저장
+index.html과 error.html 업로드
+액세스지점 생성> http://web2-gayoi-com.s3-website.ap-northeast-2.amazonaws.com 복사 
+
+cloudfront> 배포생성 >웹사이트 엔드포인트 사용>Origin Shield 리전 >서울 리전 선택
+원본액세스> OAI-3 생성
+배포>활성화됨 확인후 정책> 배포 도메인 이름복사 후 웹에 붙이면 index.html이 나타남.
+
+index를 내용을 바꿔서 s3에 다시 업로드함.
+>cloud front 무효화에서 /*를 생성함.
+>다시 도메인https://d2dr1jvzuynqf5.cloudfront.net/에 접속하면,
+the simpson server가 the donald server로 바뀌게 되었음. (해결)
+#####################################################################
+#클라우드프론트는 HTTPS도 지원하고, Lambda@Edge도 지원한다.
+
