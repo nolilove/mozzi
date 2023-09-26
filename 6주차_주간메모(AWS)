@@ -130,6 +130,107 @@ index를 내용을 바꿔서 s3에 다시 업로드함.
 >cloud front 무효화에서 /*를 생성함.
 >다시 도메인https://d2dr1jvzuynqf5.cloudfront.net/에 접속하면,
 the simpson server가 the donald server로 바뀌게 되었음. (해결)
+
+스터디> @Amazon S3 static hosting은 정적인 웹 컨텐츠를 호스팅하는 기능이고, 별도 서버없이(서버리스) 웹사이트 호스팅이 가능하다. 대규모 접속이 예상되는 사전예약 등이 사용된다 할 것.
+퍼블릭으로 공개시 - 권한이 필요(불특정 다수) > s3 퍼블릭액세스제한 해제, bucket 정책o
+일반적으로 cloudfront를 이용해서 연동해서 프로토콜을 구현(https) 
+OAI, OAC 등을 활용해서 보안을 강화함.
+(실습: s3버킷의 정적 호스팅기능 활성화> 퍼블릭 공개용 권한 및 설정 적용> S3버킷에 샘플 static 웹사이트 파일 작성 및 업로드> S3 정적 호스팅 웹 주소를 사용, 웹사이트 동작확인)
+
 #####################################################################
 #클라우드프론트는 HTTPS도 지원하고, Lambda@Edge도 지원한다.
+AWS에서 제일 중요한 세가지를 꼽으라면 첫째 EC2, 둘째 S3, 셋째로 Lambda 라고 생각됨.
+
+# OSI 7 레이어 계층설명 (복습, 73page)
+위로갈수록 사람, SW와 관련된 규칙 / 아래로 갈수록 하드웨어와 관련된 규칙
+OSI 7 LAYER				TCP/IPv4 Protocol
+7 Layer Application	|	HTTP	SSH
+6 Layer Presentation	|	TELNET	DHCP			5~7 application
+5 Layer Segment	|	SNMP	FTP			
+4 Layer Transport	|	TCP	UDP			4 Transport
+3 Layer Network	|	IP ARP ICMP			3 Internet
+2 Layer Data Link 	|	Ethernet	WiFi		
+1 Layer Physical 	|	Modem		Cable		1~2 Network Interface
+
+Classless Inter-Domain Routing(CIDR)은 
+인터넷상의 데이터 라우팅 효율성을 향상시키는 IP 주소 할당 방법(각 네트워크대역 구분+구분된 네트워크간 통신) *사이더란 192.168.0.0/24 여기서 /24에 해당한다. (0~32까지)
+
+# AWS VPC 실습
+VPC > 서브넷으로 가면 
+VPC 옆 IPv4 CIDR (사이더) 를 확인할 수 있다. 
+172.31.0.0/20 등등을 발견할 수 있는데 /20에 해당한다.
+AWS vpc는 완전히 격리된 네트워크이다. 외부와 격리되어있는 데이터센터임.
+하나의 서브넷은 하나의 가용영역안에 위치한다.
+
+인스턴스 시작> SVR-1 네트워크 설정에서 172.31.0.0/20  서브넷3   2a
+인스턴스 시작> SVR-2 네트워크 설정에서 172.31.32.0/20  서브넷3   2c
+보안그룹> all-Protocol 생성후 모든트래픽 허용, anywhere ipv4 로 생성
+
+172-31-47-198
+172-31-11-5		서로의 아이피에 핑해보기
+라우팅 테이블에서 확인하기
+######CIDR 계산해보기. 
+192.168.3.221/25 의 CIDR계산을 해본다. 
+1. 32-25 =7
+2. 7
+3.2의 7승(와일드카드) 128
+4.와일드카드값 128은 255/128은 256이므로 0~255까지를 2개로 분할한 것을 의미 
+5. 8을 0회뺐다면 옥텟4의 값 221을 확인. 221은 128~255에 포함이 되는 수이다.
+8을 1회빼면 옥텟3, 8을 2회빼면 옥텟2, 8을 3회빼면 옥텟1을 본다.
+옥텟4는 최소값0~최대값255이므로 192.168.3.128~ 192.168.3.255
+===========================================================
+#참조강의 
+https://www.youtube.com/watch?v=WY2xoIClOFA&t=321s VPC와 Subnet
+https://www.youtube.com/watch?v=3VXLD0-Iq8A 사설IP NAT CIDR
+https://www.youtube.com/watch?v=0hXYfi55_Ww&t=1s 보안그룹 NACL
+
+#VPC 실습
+확인법은 EC2 인스턴스 생성해서, SSH로 접근해 통신확인한다 
+
+NetA-VPC 를 만들어본다.
+테넌시: 기본과 전용으로 이루어지는데, 하드웨어가 공유하드에서 실행되는지 전용하드웨어에서 실행되는지를 선택하는 것이다. IPv4 CIDR : 10.0.0.0/24
+>서브넷 생성
+VPC ID 바인딩: NetA-VPC
+>서브넷 설정
+NetA-Sub-1/ 가용영역 2a/ 10.0.0.0/24 > 서브넷 생성으로 만들어낸다.
+ 
+>인터넷 게이트웨이로 이동
+NetA-IGW-1 생성후 들어가서 작업>vpc에 연결> 사용가능한 vpc (NetA-VPC)
+:AWS Command Line Interface(AWS CLI) 도구 명령을이용해
+aws ec2 attach-internet-gateway --vpc-id "vpc-0f5a022145c371d71" --internet-gateway-id "igw-020ace3aed4a3b7c3" --region ap-northeast-2   도 가능
+>라우팅 테이블에서 NetA-RT(라우팅)을 클릭하여 서브넷연결> 서브넷연결편집(명시적) 서브넷을 추가함.
+>인스턴스 생성 시 , 퍼블릭 IP 자동 할당을 '활성화'해야함
+퍼블릭RT는 IGW(인터넷게이트웨이)에 0에 대한 모든것을 넘김.
+
+
+#퍼블릭을 만들었었고, 이제 프라이빗을 만들어보겠다. (NAT)
+>서브넷설정을 새로만듦. NetA-Private-sub1
+10.0.1.0/24 을 CIDR블록으로 만든다 가용영역도 2b로 생성.
+ nat 게이트웨이 설정탭에 들어가서 생성한다.
+>라우팅테이블 생성 NetA-NAT  +라우팅 편집에서 0.0.0.0/0 대상에 NAT 게이트웨이 ID 붙 
+nat-09dbcb85473dfc493  ( 0에대한 모든것을 nat 게이트웨이에 넘긴다)
+
+오류: IPv4 CIDR 블록정보 <<10.0.1.0/24가 안넣어짐.
+
+분해는 조립의 역순
+나트 게이트웨이>프라이빗 삭제 >라우팅테이블 >프라이빗 삭제(명시적 서브넷연결 삭제)>
+
+서브넷부터 만든다
+net-private-sub1>2c 가용영역>10.0.1.0/24
+라우팅테이블
+neta-private-rt-1> 서브넷연결편집> 프라이빗 체크후 저장 >라우팅 편집 (나트 게이트웨이 만들기) 
+나트 게이트웨이>생성>neta-natgw-1>private-sub1>탄력적 ip할당>게이트웨이 생성
+다시 라우팅편집>펜딩을 기다렸다가 0.0.0.0 
+
+^고급 세부정보에 박을것^   >>프라이빗 인스턴스EC2 세부정보구성에 들어가서 검증. 
+#!/bin/bash
+(
+echo "1234"
+) | passwd --stdin root
+sed -i "s/^PasswordAuthentication no/PasswordAuthentication yes/g" /etc/ssh/sshd_config
+sed -i "s/^#PermitRootLogin yes/PermitRootLogin yes/g" /etc/ssh/sshd_config
+service restart sshd		>>> 116page인듯함   프라이빗으로 접속하는것>8.8.8.8 핑
+#####################################################################
+https://kimjingo.tistory.com/175 이사이트를 참조하고 복기하도록 하겠다. 교재로는 87page.
+
 
