@@ -1,0 +1,216 @@
+6주차_화요일 메모(git)
+
+Git을 사용하고, Github에 연동하는 법을 알아보는 시간을 가진다.
+요약
+적당한 곳에 폴더 만들기 (mkdir)
+local에서 vi 편집기(vim)사용해서 텍스트 만들기
+git status 명령어로 파일이 Tracked 되고있는지 확인 (default: untrackted)
+git add '텍스트명'
+git status 명령어로 파일이 Tracked 되고있는지 확인
+5의 git 커밋을 위해 git commit -m "first version"
+내용 업데이트: cat >> '텍스트명' 으로 수정 후 git commit -am "2nd commit"
+텍스트 이름을 abc.txt에서 abc.md로 바꾸고싶다: git mv abc.txt abc.md
+~
+#git_branch 명령어
+git branch 를 처음 확인차 입력하면 master가 뜸
+git branch -M main 입력하면 명칭을 변경할 수 있음
+개인의 리포지토리에서 <>code 버튼에서 자신의 github링크를 복사후
+깃배쉬에서 git remote add origin "자신의 깃허브링크"
+git push -u origin main 을 입력하면 되는데, 빨간색으로 오류가 뜰수도있다
+이는 https://doozi316.github.io/errorlog/2019/09/30/error1/ 참조
+임시방편으로 git push -u origin +main 입력시 잘 커밋된다.
++git clone : 해당 프로젝트를 로컬(내컴퓨터)에 복사함. git clone "자신의 깃허브링크"
+=======================================================
+
+USER@KDP-SOLDESK1-02 MINGW64 /
+$ cd /c/Users/USER/
+
+USER@KDP-SOLDESK1-02 MINGW64 ~
+$ pwd
+/c/Users/USER
+
+USER@KDP-SOLDESK1-02 MINGW64 ~
+$ mkdir git_repo1 git_repo2
+
+USER@KDP-SOLDESK1-02 MINGW64 ~
+$ cd git_repo1
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo1
+$ git init
+Initialized empty Git repository in C:/Users/USER/git_repo1/.git/
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo1 (master)
+$ ls -l .git
+total 7
+-rw-r--r-- 1 USER 197121  23 Sep 26 09:17 HEAD
+-rw-r--r-- 1 USER 197121 130 Sep 26 09:17 config
+-rw-r--r-- 1 USER 197121  73 Sep 26 09:17 description
+drwxr-xr-x 1 USER 197121   0 Sep 26 09:17 hooks/
+drwxr-xr-x 1 USER 197121   0 Sep 26 09:17 info/
+drwxr-xr-x 1 USER 197121   0 Sep 26 09:17 objects/
+drwxr-xr-x 1 USER 197121   0 Sep 26 09:17 refs/
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo1 (master)
+$ git config user.name lee1
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo1 (master)
+$ git config user.email lee1@local.co.kr
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo1 (master)
+$ cd ..
+
+USER@KDP-SOLDESK1-02 MINGW64 ~
+$ ls git_repo2
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo2
+$ git config user.name
+Lee				<< --global로 설정한녀석이 드러남
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo2
+$ git init
+Initialized empty Git repository in C:/Users/USER/git_repo2/.git/
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo2 (master)
+$ git config user.name lee2			다시설정
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_repo2 (master)
+$ git config user.email lee2@local.co.kr
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+USER@KDP-SOLDESK1-02 MINGW64 ~
+$ mkdir git_project
+
+USER@KDP-SOLDESK1-02 MINGW64 ~
+$ cd git_project/
+
+#깃 windows용 CRLF 와,  linux용 LF 구분하기		(실습)
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git config --global user.name nolilove
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git config --global user.email dldlswo1126@gmail.com
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ vim abc.txt
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git status
+On branch master
+No commits yet
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        abc.txt
+nothing added to commit but untracked files present (use "git add" to track)
+
+untrackted상태일때 add명령을 쓴다.
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git add abc.txt
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git status
+On branch master
+No commits yet
+Changes to be committed:
+  (use "git rm --cached <file>..." to unstage)
+        new file:   abc.txt
+
+이제 추적되는 깃을 커밋하려고 한다.
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git commit -m "Prototype Version"
+[master (root-commit) 2f153eb] Prototype Version
+ 1 file changed, 3 insertions(+)
+ create mode 100644 abc.txt
+이러면 커밋이 된다.
+우리가 평소에 ls 명령으로 보면 똑같이 abc.txt가 뜨지만 
+여기에 업데이트를 해보자
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ cat >> abc.txt
+dddc				내용을 업데이트했다.
+trackted된 git의 상태를 보면
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git status
+On branch master
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   abc.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
+수정됐으니 커밋을 하라고 문구가 등장.
+(use "git add" and/or "git commit -a")
+
+저걸 쓰라는걸 눈여겨보자.
+최초로 파일을 커밋할때 스테이지드 하기위해서는 git add 명령만을 써야하고, 그 이외에는 git commit 명령어를 사용해도 된다.
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git commit -am "2nd Commit"
+warning: in the working copy of 'abc.txt', LF will be replaced by CRLF the next time Git touches it
+[master b887bd8] 2nd Commit
+ 1 file changed, 1 insertion(+)
+
+이제 깃허브로 들어간다. 새 레포를 만들어본다 (test_repo)
+Add .gitignore 이것은 버전확인이나 커밋 제외할 탬플릿이나 여러한 것들을 설정할 수 있다.
+https://github.com/nolilove/test_repo.git  
+ 
+
+echo "# Test" >> README.md
+git init
+git add README.md				>>마크다운
+git commit -m "first commit"			>>버전커밋
+git branch -M main				>>branch이름을 main이라고 설정함
+git remote add origin https://github.com/nolilove/test_repo.git
+git push -u origin main
+
+다시 배쉬로 넘어와서
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git mv abc.txt abc.md
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ ls
+abc.md
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git status
+On branch master
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+        renamed:    abc.txt -> abc.md
+깃은 레포에서 이 파일의 변경사항을 이미 알고있다.
+
+#Git _ Branch 명령어
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git branch
+* master
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (master)
+$ git branch -M main
+으로 master> main 으로 이름을 바꾼다.
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (main)
+$ git branch
+* main
+
+https://github.com/nolilove/test_repo.git 를 복사하고 깃 배쉬로 넘어와서, 커밋하면된다.
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (main)
+$ git remote add origin  https://github.com/nolilove/test_repo.git
+
+ -u, --set-upstream    set upstream for git pull/status  를 알아두자
+
+USER@KDP-SOLDESK1-02 MINGW64 ~/git_project (main)
+$ git push -u origin +main		(+붙인건 임시방편으로 강제로 실행)
+Enumerating objects: 6, done.
+Counting objects: 100% (6/6), done.
+Delta compression using up to 16 threads
+Compressing objects: 100% (2/2), done.
+Writing objects: 100% (6/6), 444 bytes | 444.00 KiB/s, done.
+Total 6 (delta 0), reused 0 (delta 0), pack-reused 0
+To https://github.com/nolilove/test_repo.git
+ + 4ffa6b3...b887bd8 main -> main (forced update)
+branch 'main' set up to track 'origin/main'.
+
+~~~~
+#git clone  
+USER@KDP-SOLDESK1-02 MINGW64 ~/test3
+$ git clone https://github.com/nolilove/test_repo.git
+클론 명령어를 쓰면, 해당 프로젝트를 복제해버린다
+>> 깃허브에 올라와있는 폴더와 파일을 모두 로컬로 다운로드(복사) 한다.
+
+clone : GitHub repository에 있는 내용을 내 로컬(컴퓨터)에 ‘복제’하는 명령어다. 즉, repository에 있는 파일을 내 로컬의 특정 디렉토리로 가져올 수 있다.
+remote : Git 홈페이지에 보면 “Manage set of tracked repositories”라고 나와있다. 원격 저장소와의 작업들을 관리하는 명령이다. remote 명령어로 원격 저장소를 연결/확인/변경할 수 있다.
+remote add와 clone의 차이에 대해서 묻는다면,
+clone은 remote add를 한 다음 pull(또는 fetch & merge)까지 하는 것이라고 할 수 있겠다.
