@@ -234,3 +234,227 @@ service restart sshd		>>> 116page인듯함   프라이빗으로 접속하는것>
 https://kimjingo.tistory.com/175 이사이트를 참조하고 복기하도록 하겠다. 교재로는 87page.
 
 
+230927 수요일 메모
+#!/bin/bash
+sudo  -s
+echo "1234"  | passwd --stdin root
+sed -i "s/^PasswordAuthentication no/PasswordAuthentication yes/g"   /etc/ssh/sshd_config
+echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+systemctl  restart  sshd
+라는 스크립트가 있었다.
+
+#리눅스, 우분투 설치하고 사전설정할 때 참조
+원격 로케일 설치시에
+로키리눅스 설치- ssh로 root계정 접속 허용체크를 안하고 이를 명령어로 설정해본다.
+/etc/ssh/sshd_config
+PasswordAuthentication yes
+PermitRootLogin yes 
+
+우분투 이미지 다운로드.
+[student@localhost ~]$ sudo passwd root
+[student@localhost ~]$ sudo -s
+[root@localhost student]# grep wheel /etc/sudoers
+## Allows people in group wheel to run all commands
+%wheel	ALL=(ALL)	ALL
+# %wheel	ALL=(ALL)	NOPASSWD: ALL
+[root@localhost student]# grep wheel /etc/group
+wheel:x:10:student
+**리눅스에는 wheel 탭이 있지만, 우분투에는 wheel이 없다. 
+
+<기본 네트워크 설정>
+[root@localhost student]# nmcli con mod ens160 ipv4.addresses 172.25.3.15/24
+[root@localhost student]# nmcli con mod ens160 ipv4.gateway 172.25.3.2
+[root@localhost student]# nmcli con mod ens160 ipv4.dns 172.25.3.2
+[root@localhost student]# nmcli con mod ens160 ipv4.method manual
+[root@localhost student]# nmcli con up ens160
+연결이 성공적으로 활성화되었습니다 (D-버스 활성 경로: /org/freedesktop/NetworkManager/ActiveConnection/3)
+
+
+[root@localhost student]# vim /etc/ssh/sshd_config   로 들어가서
+ 40 #PermitRootLogin prohibit-password  를 찾는다. 주석을 해제하고 prohibit 이후를 삭제
+ 40 PermitRootLogin yes  로 변경한다.
+
+ 65 #PasswordAuthentication yes    
+ 66 #PermitEmptyPasswords no		를 찾는다. 주석을 모두 해제하고 
+
+ 65 PasswordAuthentication yes
+ 66 PermitEmptyPasswords yes		로 변경하고 리스타트한다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# VPC 고급
+VPC엔드포인트 등을 알아본다.
+
+>1. 인스턴스 시작
+Private-Server-1
+네트워크설정 편집>서브넷을 2a >퍼블릭아이피 자동할당을 비활
+나머지설정은 늘 먹던대로 
+>인스턴스로 들어가면
+퍼블릭ip주소가 없고 프라이빗 주소,dns만 나와있다.
+>인스턴스 연결 클릭
+EC2인스턴스 연결은 불가능(퍼블릭ipv4주소가 없음)
+그러면, EC2 인스턴스 연결 엔드포인트를 사용하여 연결을 살펴본다.
+
+>2. VPC탭> 엔드포인트 로 넘어감.
+엔드포인트 생성>엔드포인트 입력 my-endpoint-1 >서비스범주 5개중 위에 해당하는
+'EC2 인스턴스 커넥트 엔드포인트' 서비스범주를 선택. 
+vpc는 대충 위에 했던 defalut vpc 선택한다. 
+보안그룹은 my-all-access-sg
+서브넷은 2a			하여 엔드포인트를 생성함.
+>다시 EC2 대시보드로 넘어온다
+
+>3. IAM 콘솔화면 넘어가본다
+iam 역할 생성> AWS서비스 > EC2 사용사례 
+권한추가: SSM 을 검색한다. AmazonEC2RoleforSSM AmazonSSMFullAccess 체크
+AmazonSSMManagedInstanceCore 도 들어가면된다.
+AmazonSSMManagedEC2InstanceDefaultPolicy
+역할이름: EC2-SSM-1
+>인스턴스> private어쩌구 작업>보안>iam 역할수정 EC2-SSM-1 역할업데이트
+>system manager (SSM) 으로 이동 Session Manager 연결하기.
+세션 관리자> 세션시작>  안나옴 또 안 나 와 
+
+오답복기 VPC Endpoint용 Security group 생성 https://honglab.tistory.com/168참조
+AWS Systems Manager
+HTTPS 엔드포인트를 사용해서 인터넷과 연결되지 않는 프라이빗 서브넷에 접근할 수 있도록 관리형 인스턴스를 만들기 위해서는 아마존 웹 서비스의 Systems Manager 서비스를 통해서 SSM 에이전트가 설치된 EC2 인스턴스를 관리형 인스턴스로 등록하여 관리되도록 구성해야합니다.
+VPC Endpoint에도 보안 그룹을 붙여야 한다
+이 보안 그룹은 서비스와 통신하는 VPC의 리소스에서 인바운드 HTTPS(포트 443) 트래픽을 허용해야 한다고 한다
+아래와 같이 해당 VPC 대역 내에서의 HTTPS(443 port) 트래픽을 허용하는 보안 그룹을 만들기
+AWS 콘솔 > VPC > 엔드포인트 > 엔드포인트 생성
+인터페이스 엔드포인트 중 com.amazonaws.<region>.ssm 을 선택한 후 VPC와 보안 그룹을 선택해 생성을 완료해주자. com.amazonaws.<region>.ssmmessages, com.amazonaws.<region>.ec2messages 엔드포인트도 생성해준다 사용 가능 상태가 될 때까지 좀 기다려줘야 한다
+ Private EC2 접속 ,  EC2 > 연결 > Session Manager로 가보자 . 연결 버튼이 활성화 되어있다(블로그 글 참조)
+
+
+>4. VPC를 새로 생성
+test-vpc-1   이름
+10.0.0.0/16    CIDR			로 새로만든다.
+>서브넷을 새로만듬 (퍼블릭, 프라이빗)
+test vpc 1를 선택하고 서브넷이름 test-public-subnet1 가용영역 2a CIDR 10.0.0.0/24
+바로 아래에 서브넷추가가 있음
+test vpc 1를 선택하고 서브넷이름 test-private-subnet1 가용영역 2c CIDR 10.0.1.0/24
+를 하면 제대로 만들어진다.
+
+>5.서브넷을 만들었으니 라우팅테이블로 들어간다 별명을 test-RT로 바꿔주기
+라우팅을 보면 10.0.0.0/16으로 local하게 활성화되어있다.
+>인터넷 게이트웨이 
+인터넷게이트웨이 생성 >test-igw-1 로 생성> vpc에 연결해준다.
+
+>6.탄력적 IP 로 들어간다
+탄력적 아이피 할당> 네트워크경계그룹(엣지그룹)은 그대로둠 으로 할당
+52.78.27.223 이라는 아이피를 할당받음 > 이름을 test- eip로 설정함
+
+>7. NAT 게이트웨이 로 들어간다 
+NAT 게이트웨이 생성> test-NAT-1  로 명명. 서브넷: 프라이빗 서브넷1선택
+연결유형 : 퍼블릭 / 탄력적 ip 는 6에서 받은걸 이용한다 / 생성
+이러면 비용꽤 나가는 nat게이트웨이가 생성됨. 
+
+>8.라우팅테이블 로 들어간다
+라우팅테이블을 또만듬 test-NAT-RT   라고
+ vpc -test vpc		로 생성하면 로컬이 들어온다.
+라우팅 편집> 라우팅 추가 0.0.0.0/0  nat-08222b14b26d0e935  로 하고 저장.
+> test -rt에도 0.0.0.0/인터넷 게이트웨이 설정해준다.
+요약:
+  test-RT | 0.0.0.0/0	igw-0048ccee4303a8702
+  test-NAT-RT | 0.0.0.0/0	nat-08222b14b26d0e935
+이렇게 세팅하였다. (네트워크 인프라의 설정 완료) 
+
+>9. 인스턴스 새로 시작
+test-public-server-1
+네트워크설정 test-vpc-1
+서브넷 test-public-subnet1
+퍼블릭아이피자동할당 활성화
+방화벽-기존보안그룹 디폴트				인스턴스 생성
+>하나더만듬 
+test-private-server-1
+네트워크설정 test-vpc-1
+서브넷 test-private-subnet1
+퍼블릭아이피자동할당 비활성화
+방화벽-기존보안그룹 디폴트				인스턴스 생성
+
+>>EC2 퍼블릭 인스턴스에서 연결로 리눅스창 띄워본다. 됨
+>>EC2 프라이빗 인스턴스(test)에서 '엔드포인트 연결'로 리눅스창 띄워본다. 됨
+
+>10. vpc > 엔드포인트 탭에서 생성- my-endpoint-2 생성
+ec2 instance connect endpoint 로 범주선택 후
+test vpc 선택  서브넷은 private
+해서 엔드포인트 생성 후  활성화를 기다리자. 
+>활성화가 되면, test-private-server-1 인스턴스에 연결(엔드포인트 사용)
+접속이 잘 된다. 
+
+해결해야할것 : AWS SSM (세션매니저)로 private EC2 인스턴스에 연결하기**
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+>인스턴스 시작
+my-vpc를 이용해봄
+퍼블릭-역할수정 iam > ec2 ssm
+
+Public Subnet 인스턴스 접근
+public subnet 안에 있는 인스턴스에 접근할 때는 다음의 것들만 적용되어 있으면 됩니다.
+인스턴스에 AmazonSSMManagedInstanceCore 역할 권한 부여
+인스턴스 Outbound 443 오픈
+
+Private Subnet 인스턴스 접근
+private subnet 안에 있는 인스턴스에 접근할 때는 당연히 public subnet에 접근할 때 필요했던 것들은 기본적으로 가지고 있어야 하며 추가적으로 vpc endpoint 설정이 이루어져야 합니다.
+위에 설정한 것들 중에서 인스턴스만 private subnet에 들어가도록 재 생성을 하고 vpc endpoint를 위한 설정을 추가적으로. 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+VPC 설정  (VPC peering)
+VPC > Virtual Private Cloud > 피어링 연결 로 들어간다. 적어도 vpc두개가 있어야 한다.
+VPC 피어링 연결은 두 VPC 간에 트래픽을 비공개로 라우팅할 수 있게 하는 두 VPC 간의 네트워킹 연결이다.
+
+>1. VPC 등 을선택하면 자동으로 생성해주는 패키징이 있다.
+이름태그 자동생성 : net-a 등으로 설정하면 vpc부터 net-a-vpc 로 자동생성된다.
+가용영역(AZ)수 : 사용자 지정에서 2b를 빼고 2a,2c로 설정
+서브넷 수 2/2개로 설정후 비트수를 20에서 24로 설정해준다.
+엔드포인트는 설정해도되나 없는것으로 하자.
+dns옵션에서 호스트이름 활성화, 확인 활성화 체크되어있는지 확인.
+
+2. 두번째 VPC 를 생성해본다.
+net-b로 설정하고 CIDR를 앞에 10.0.0.0/16과 다르게 10.1.0.0/16으로 설정한다.
+가용영역(AZ)수 : 사용자 지정에서 2b를 빼고 2a,2c로 설정
+서브넷 수 2/2개로 설정후 비트수를 20에서 24로 설정해준다.
+나머지 동일.
+
+#3. 피어링 연결 생성 _ 293Page.
+이름은 뭐 아무렇게나 만들고
+피어링할 로컬 VPC(요청자) - net-a-vpc
+피어링할 다른 vpc 선택 : 계정/리전을 선택한후
+VPC(수락자) - net-b-vpc 를 선택.
+
+피어링연결을 누르면 요청수락/거절 메뉴가 뜬다.
+
+#점프 서버 또는 배스천 호스트(바스티온)  107쪽(AWS정석ocr.89page)
+net -a- vpc
+private1 subnet  인스턴스 만들어봤다.
+xshell에서 로그인해봤는데 permission deny
+점프서버키를 c드라이브에 key폴더를 만들어서 넣고,
+
+파워쉘 실행>cd 명령어로 c:/key
+PS C:\Users\USER> cd c:/key
+PS C:\key> ls
+-a----      2023-09-21   오후 2:45           1678 All-Machine-Key.pem
+PS C:\key> ssh -i .\All-Machine-Key.pem ec2-user@43.200.252.107  를 쳤더니
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE KEY FILE!          @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Permissions for '.\\All-Machine-Key.pem' are too open.
+It is required that your private key files are NOT accessible by others.
+This private key will be ignored.
+Load key ".\\All-Machine-Key.pem": bad permissions
+이 등장했다.
+PS C:\Users\USER> ssh -i .\All-Machine-Key.pem ec2-user@43.200.252.107 폴더변경으로해봄 >> 이번엔 된다.
+PS C:\Users\USER> scp -i .\All-Machine-Key.pem .\All-Machine-Key.pem ec2-user@43.200.252.107:~/  입력하면 vastion hosts를 만들었다고 봐도 된다.
+>>넘어와서 Xshell에서 실습
+[ec2-user@ip-172-31-10-69 ~]$ ssh -i All-Machine-Key.pem ec2-user@43.200.252.107 를 입력했더니 오류가 뜬다.
+The authenticity of host '43.200.252.107 (43.200.252.107)' can't be established.
+ED25519 key fingerprint is SHA256:JoqPhJaZX31oDjdZb7g9CWcqYualtn7BGLWco4debq4.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '43.200.252.107' (ED25519) to the list of known hosts.
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE KEY FILE!          @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Permissions 0664 for 'All-Machine-Key.pem' are too open.
+It is required that your private key files are NOT accessible by others.
+This private key will be ignored.
+Load key "All-Machine-Key.pem": bad permissions
+ec2-user@43.200.252.107: Permission denied (publickey,gssapi-keyex,gssapi-with-mic).
+이건 해결이 안되었음.
+
+#######################################################################
+
