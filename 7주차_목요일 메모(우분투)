@@ -1,0 +1,291 @@
+7주차_화요일 메모 
+
+개요- 우분투(Ubuntu) 수업을 나간다.
+Ubuntu-1   172.25.3.21/24
+Ubuntu-2   172.25.3.22/24		를 default 설정으로 기억하기
+
+**오늘의팁: CMD > convert E: /fs:ntfs 를 입력하면 
+E드라이브에 있는 ISO file을 손실없이(FAT32포맷) 변환할 수 있다.
+
+#1. 우분투 설치단계
+>Ubuntu-1
+vmware preference에 들어가서, 기본 로케이션(가상머신 폴더)를 c:\Ubuntu로 설정한다(C드라이브에 폴더 새로만들면됨.)
+student /student   > 20GB , single file >커스텀 하드웨어(4GB메모리)설정>CD/DVD에서iso파일을 선택했는지 재확인
+-GUI가 뜨면 키보드레이아웃 선택: korean , 101/104병용 > 나머지는 기본설정
+-who are you> 아까 설치단계에서 입력한 student/student 입력하면 설치완료  
+
+>Ubuntu-2
+두번째 우분투-2도 위와 동일하게 한다. who are you에서는 컴퓨터이름을 ubuntu-1.example.com으로 설정
+나머지 동일과정으로 설치한다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#2. 기초설정 (@뒤 가상머신이름을 변경)
+-student/student로 들어가고 뜨는건 싹다 스킵, 
+cmd창과 설정창을 좌측 작업표시줄에 추가해주자
+-cmd에 들어가서 sudo -s로 루트권한으로 들어갈때 student의 암호가 필요하다.
+student@student-virtual-machine:~$ sudo hostnamectl  	에서 tab*2하면
+chassis     deployment  hostname    icon-name   location    status     가 뜨고,
+여기서 
+student@student-virtual-machine:~$ sudo hostnamectl hostname ubuntu-1.example.com 입력후 cmd창을 다시 킨다.
+
+>1. 암호를 필요로하지 않게 만드는 명령 조회
+student@ubuntu-1:~$ grep student /etc/passwd /etc/group   		입력시
+/etc/passwd:student:x:1000:1000:student,,,:/home/student:/bin/bash
+/etc/group:adm:x:4:syslog,student
+/etc/group:cdrom:x:24:student
+/etc/group:sudo:x:27:student				sudo
+/etc/group:dip:x:30:student
+/etc/group:plugdev:x:46:student
+/etc/group:lpadmin:x:122:student
+/etc/group:lxd:x:135:student
+/etc/group:student:x:1000:
+/etc/group:sambashare:x:136:student			다양한곳에 속해있다.
+주목할 것은 sudo가 들어있는 곳이며,
+
+tudent@ubuntu-1:~$ grep root /etc/passwd			를 조회하면
+root:x:0:0:root:/root:/bin/bash
+nm-openvpn:x:121:127:NetworkManager OpenVPN,,,:/var/lib/openvpn/chroot:/usr/sbin/nologin
+
+student@ubuntu-1:~$ grep root /etc/shadow
+grep: /etc/shadow: Permission denied			조회에 접근거부가 뜨면 루트로들어감
+student@ubuntu-1:~$ sudo grep root /etc/shadow
+[sudo] password for student: 
+root:!:19635:0:99999:7:::
+
+student@ubuntu-1:~$ sudo passwd root			로 루트의 암호를 새로정함
+ubuntu로 변경하자.
+student@ubuntu-1:~$ su - root 		로 루트로 들어가고자하면 암호를 요구한다.
+**sudo -s는 암호를 요하지 않지만 권장은 아니며,  su - root가 FM이다
+
+>2. 사용자 전환
+우측상단을 보자. 그리고 로그아웃을 한다. not listed? 로 들어가서 root/ubuntu로 로그인을 시도하면 실패한다. 암호가 정해져있어도 GUI창에서는 일반 사용자 student로 로그인을 강제하고 있는게 우분투의 특징.
+
+>3.  권한부여, 암호 프롬포트 안나오게
+root@ubuntu-1:~# ll /etc/sudoers
+-r--r----- 1 root root 1671  2월  8  2022 /etc/sudoers
+root@ubuntu-1:~# chmod a+x /etc/sudoers
+root@ubuntu-1:~# ll /etc/sudoers
+-r-xr-x--x 1 root root 1671  2월  8  2022 /etc/sudoers*		로 권한변경이 가능하다.
+반대로 chmod a-x 명령어로 롤백이 가능하다.
+
+root@ubuntu-1:~# vim /etc/sudoers 를 입력해보면 vim 이 깔리지 않았다고 뜬다.
+바로 apt install vim* -y 로 다운갈겨준다.	얌전히 vim만 깔자 (vim*붙이지말것)
+*삭제하려면 sudo apt remove 명령어를 쓰면된다.(혹은 apt-get remove --purge ###)
+vim /etc/sudoers 로 다시 들어가서 
+50번째 라인에 수정한다
+ 50 %sudo   ALL=(ALL:ALL) NOPASSWD: ALL		하고 저장
+
+root@ubuntu-1:~# sudo useradd test1
+root@ubuntu-1:~# exit 로 나와본다
+student@ubuntu-1:~$ sudo useradd test2 를하면 더이상 암호를 안물어보고 된다.
+(읽기전용이 해제됨!)   반대로는 userdel 명령어가 있따.
+>사용자 확인(user 확인)
+cat /etc/passwd ( | tail -2 정도를 하면 빨리확인가능 )
+cut -f1 -d: /etc/passwd 도 있다.
+
+
+student@ubuntu-1:~$ su - root 	로 루트계정으로 넘어간다.
+root@ubuntu-1:~# pwd
+/root
+root@ubuntu-1:~# echo $PS1			<<환경변수를 저장하는곳 조회하는 명령어
+\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\u@\h:\w\$
+
+>4.파일 설치
+리눅스에서는 yum 명령어 .rpm 으로 패키지를 설치한것과는 달리,
+우분투에서는 apt-get 명령어로  .deb 파일을 설치한다. 
+root@ubuntu-1:~# apt-get install httpd 와 같은게 apache2이고 nginx가 현장에서 쓰인다.
+apache2 2.4.52-1ubuntu4.6 를 설치해보도록 한다
+
+root@ubuntu-1:~# apt-get install apache2* -y		로 설치.
+root@ubuntu-1:~# systemctl status apache2.service  로 상태를 보도록 한다.
+ apache2.service - The Apache HTTP Server
+     Loaded: loaded (/lib/systemd/system/apache2.service; enabled; vendor preset: enabled)
+     Active: active (running) since Thu 2023-10-05 11:40:41 KST; 34s ago
+왜 설치하자마자 작동하는지는 vendor preset: enabled 이 활성화되어있기 때문이라고 보면됨.
+
+>우분투는 로키리눅스와 달리 방화벽(firewall)이 없다.
+대신 ufw 라는 것으로 되어있고,
+root@ubuntu-1:~# ufw 			탭*2로 조회하면 
+allow      delete     --dry-run  --help     logging    reload     show       
+app        deny       enable     insert     prepend    reset      status     
+default    disable    --force    limit      reject     route      version	등이 있다.  
+root@ubuntu-1:~# ufw status 
+Status: inactive				로 비활성화되어있는 것을 알 수 있다. 활성화하자.
+root@ubuntu-1:~# ufw enable 				로 활성화해주자.
+Firewall is active and enabled on system startup
+root@ubuntu-1:~# ufw reload
+Firewall reloaded
+ufw 명령어 옵션중 allow [ARGS] 를 참조해보자.
+
+>5. 네트워크 변경, 방화벽 설정
+>우분투-1 머신       
+root@ubuntu-1:~# ip addr 를 입력하면
+2: ens33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:7d:39:55 brd ff:ff:ff:ff:ff:ff
+    altname enp2s1
+    inet 172.25.3.133/24 brd 172.25.3.255 scope global dynamic noprefixroute ens33
+       valid_lft 1165sec preferred_lft 1165sec
+    inet6 fe80::7fa5:373a:734e:fc33/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+같이 아이피가 할당된것을 볼 수 있다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+>우분투-2 머신에서 확인해볼것은
+root@Ubuntu-1:~# sudo apt-get install vim -y로 vim을 설치하고
+50라인에  50 %sudo   ALL=(ALL:ALL) NOPASSWD: ALL 로 수정해주면 암호입력을 없앤다.
+root@Ubuntu-1:~# ip a		로 아이피주소를확인
+2: ens33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:0c:29:d2:3c:e5 brd ff:ff:ff:ff:ff:ff
+    altname enp2s1
+    inet 172.25.3.134/24 brd 172.25.3.255 scope global dynamic noprefixroute ens33
+       valid_lft 1126sec preferred_lft 1126sec
+    inet6 fe80::8754:7c4f:f23:1bda/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+위 우분투1머신과같이 나란히 133, 134 아이피를 가졌다. 이부분을 
+setting에서 manual설정후 
+>우분투1은 
+address :172.25.3.21 / 24 / 172.25.3.2
+dns :172.25.3.2				설정한다
+>우분투2는 
+address :172.25.3.22 / 24 / 172.25.3.2
+dns :172.25.3.2				설정한다.
+
+root@ubuntu-1:/home/student# ufw status verbose		를 입력하면
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip  						라고 나오며
+
+root@ubuntu-1:/home/student# ufw default allow	로 기본을 허락으로설정하면
+Default incoming policy changed to 'allow'
+(be sure to update your rules accordingly)
+기본정책을 allow로 바꾸어준다.
+
+>우분투 2에서 파이어폭스를 열고 우분투1의 아이피 http://172.25.3.21/를 열면
+아파치 기본페이지가 나온다.
+
+다시 거부로 설정해주자.
+root@ubuntu-1:~# ufw default deny
+Default incoming policy changed to 'deny'
+(be sure to update your rules accordingly)
+root@ubuntu-1:~# ufw status verbose
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip			
+로 설정해주고 우분투 2의 아이피에 접속하면 (쿠키삭제가 되어야 함) 
+방화벽이 모두 막아버리기때문에 접속되지 않는다.
+
+우분투1에서 
+root@ubuntu-1:~# ufw allow  80/tcp			를 입력하면 http를 허용하고
+Rule added
+Rule added (v6)		
+root@ubuntu-1:~# ufw status verbose			에서
+To                         Action      From
+--                         ------      ----
+80/tcp                     ALLOW IN    Anywhere                  
+80/tcp (v6)                ALLOW IN    Anywhere (v6)  		를 확인가능하다.
+
+>우분투2에서 핑으로
+root@Ubuntu-1:~# ping 172.25.3.21 하면 잘 된다.  
+오른쪽에있는놈을 hostnamectl hostname Ubuntu-2.example.com 으로 변경
+>ssh접속시도
+root@Ubuntu-2:~# ssh root@172.25.3.21 시 접근이 거부된다.
+이 이유는 로키리눅스는 ssh접속이 기본으로 가능한데 비해서 우분투는 막혀있다는 뜻이다.
+ssh도 허락을 해줄 필요가 있다. 
+>우분투1로 다시 온다.
+root@ubuntu-1:~# ufw allow 22/tcp
+Rule added
+Rule added (v6)
+>우분투2로 다시와서 해보면
+root@Ubuntu-2:~# ssh root@172.25.3.21
+ssh: connect to host 172.25.3.21 port 22: Connection refused	로 루트가 거절당한다.
+>이러면, 우분투1로 다시와보면 거절의 이유를 보안에서 찾아보도록 한다.
+
+>6. 보안설정
+우분투1로 돌아와서 vim /etc/ssh/ssh_config.d		입력
+25라인에  25 #   PasswordAuthentication yes 에서 주석을 빼버린다.
+일종의 환경설정파일을 수정했으니 재실행해준다.
+root@ubuntu-1:~# systemctl restart sshd
+Failed to restart sshd.service: Unit sshd.service not found.	안깔렸대.
+***source /etc/bash_completion : 탭탭 자동완성이 안되면 입력
+root@ubuntu-1:~# apt-get install  openssh-server -y  를 설치
+root@ubuntu-1:~# systemctl status sshd 	로 살펴보면 기본적으로 활성화되어있다.
+
+>우분투2로 넘어와서 student로 접근해본다.
+root@Ubuntu-2:~# ssh student@172.25.3.21	입력하면 암호창이뜨고 입력하면 잘 접속된다.
+이번엔 root로 접근해본다.
+root@Ubuntu-2:~# ssh root@172.25.3.21
+root@172.25.3.21's password: 
+Permission denied, please try again.  왜 안되는걸까?
+>우분투 1로 넘어와서 다시
+root@ubuntu-1:~# vim /etc/ssh/ssh_config 		로 들어감.
+ 라인에 PermitRootLogin yes 를 추가해준다(실패)
+편집기에 넣어도 안될때 참조링크 : https://nomad-programmer.tistory.com/517
+아예 sshd_config.d 디렉토리에 conf 파일을 새로만들어서 PermitRootLogin yes 한줄을 입력하고 나오니 성공했음
+
+**팁) 포트번호등 정확한것을 찾으려고할때		grep -w 명령어를 쓴다.
+[root@server-1 ~]# grep -w 80 /etc/services 
+http            80/tcp          www www-http    # WorldWideWeb HTTP
+http            80/udp          www www-http    # HyperText Transfer Protocol
+http            80/sctp                         # HyperText Transfer Protocol
+
+root@ubuntu-1:~# ufw allow domain  로
+우분투는 로키리눅스와 다르게 도메인을 방화벽에 추가 할 수 있다.
+Rule added
+Rule added (v6)
+root@ubuntu-1:~# ufw allow dns		dns는 추가가 안되는데,
+ERROR: Could not find a profile matching 'dns'
+이 결과는 반대로 로키 리눅스에서는 도메인이 불가, dns는 가능하다.
+
+root@ubuntu-1:~# tree /etc/ssh 를 처음 입력하면 오류가 뜨는데,
+root@ubuntu-1:~# apt  install tree 로 설치하면 더이상은 안뜬다. (apt-get 도 가능)
+root@ubuntu-1:~# tree /etc/ssh
+/etc/ssh
+├── moduli
+├── ssh_config
+├── ssh_config.d
+├── sshd_config
+├── sshd_config.d
+│   └── 01-permitrootlogin.conf
+├── ssh_host_ecdsa_key
+├── ssh_host_ecdsa_key.pub
+├── ssh_host_ed25519_key
+├── ssh_host_ed25519_key.pub
+├── ssh_host_rsa_key
+├── ssh_host_rsa_key.pub
+└── ssh_import_id
+를 확인할 수 있다.
+
+우분투-2로 들어가서 root@ubuntu-1:~# vim /etc/ssh/sshd_config 로 편집기를 연다.
+ 33 PermitRootLogin yes 라인으로 변경하고 저장한 뒤에 ubuntu-1 로 들어가서 원격접속을 해보도록 한다.
+
+> 7. SSH와 SSHD의 차이
+ssh - 원격 시스템에서 클라이언트의 환경
+sshd - daemon(원격데몬) 의 환경 이므로 둘의 차이가 좀 있다.
+ssh_config : 나가는 설정 (outbound)
+sshd_config : 들어오는 설정 (inbound)
+
+>우분투-2로 온다.
+root@Ubuntu-2:~# ufw enable 			로 활성화
+Firewall is active and enabled on system startup
+root@Ubuntu-2:~# ufw allow ssh		ssh를 허락
+Rule added
+Rule added (v6)
+>>>이후 초기설정을 완료했다 (스냅샷 각각 1, 2에 만듦)
+
+>apt-get install selinux로 설치했다.
+root@ubuntu-1:/etc/selinux# ll
+-rw-r--r--   1 root root   584 10월  5 16:13 config    
+config파일을 열어본다. 
+
+** root@ubuntu-1:/etc/selinux# echo $PS1
+\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\u@\h:\w\$
+리눅스는 간단한데 우분투는 복잡하다정도
+
+[root@server-1 ~]# cd /etc/selinux
+[root@server-1 selinux]# echo $PS1
+[\u@\h \W]\$			이건 리눅스에서 하는것
+[root@server-1 selinux]# PS1='[\u@\h \w]\$'  를 입력하면
+[root@server-1 /etc/selinux]#  로 바뀐다 (전체경로가 나타난다)
+[root@server-1 /etc/selinux]#PS1='[\u@\h \W]\$' 를 입력하면 원상복귀됨.
+config로 가서 인포싱으로 바꾸고, 리붓한다 
+
