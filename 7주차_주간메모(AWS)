@@ -236,4 +236,56 @@ dns옵션에서 호스트이름 활성화, 확인 활성화 체크되어있는�
 VPC(수락자) - net-b-vpc 를 선택.
 성공적으로 진행해서, 피어링연결을 누르면 요청수락/거절 메뉴가 뜬다. 요청을 수락하자.
 **주의 : 해당 실습 후 제거를 잘해야 한다. 자동생성이기 때문에 관련 유료서비스를 꼼꼼히 삭제해야함
-~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#############################################################################################
+
+7주차_목요일 메모 _23.10.05 (AWS 자습)
+aws 액세스키는 터미널에서 aws 액세스를 가능하게 한다. sdk는 aws소프트웨어 개발자킷이다.
+Access key ID ~ = 유저이름
+Secret Access Key~ = 패스워드
+#1. AWS CLI = 상호작용할 수 있게 도와주는 명령도구 (aws s3 cp 로 시작하는 shell)
+Command Line Interface 의 약자이며 파워쉘등에서 명령어로 쓸 수 있다.
+1. aws s3 ls
+현재 계정의 S3 버킷 목록을 보여주는 명령어.
+2. aws s3 sync s3://<버킷이름> <디렉터리>
+다음과 같이 s3에 있는 potato-image 라는 버킷에 있는 파일들을 가져올 수 있다.
+3. aws s3 cp <파일명> s3://<버킷이름>
+반대로 현재 디렉터리에 있는 파일을 S3에 cli명령어를 통해서 업로드 시켜보자
+다음과 같이 명령어를 입력하면,,, 버킷 폴더에 파일이 업로드 된 것을 확인할 수 있다.
+AWS 콘솔에 직접 접속하지 않아도 작업이 가능하다. (오픈소스다)
+
+windows에서 CLI를 실습해본다> msi 인스톨러로 설치한뒤 cmd에서 확인하면 된다.
+aws--version 입력. 버전이 잘 뜨면 성공이다.
+>CLI를 통해 Access Key를 만들어본다
+유저네임을 클릭> security credentials로 이동 >액세스키 생성> 여러 선택지가 있는데, cli의 경우 cloudshell을 통해 설치해도 된다.
+aws configure 명령어를 사용해서 나머지를 아마존에서 복사붙여넣는다.
+리전까지 설정하면 aws iam list-users를 입력하면 json파일처럼 정리된다.
+
+>아시아 태평양(서울)리전에서 cloudshell이 작동된다.
+[cloudshell-user@ip-10-4-47-83 ~]$ aws --version		입력시
+aws-cli/2.13.21 Python/3.11.5 Linux/5.10.192-182.736.amzn2.x86_64 exec-env/CloudShell exe/x86_64.amzn.2 prompt/off
+버전이 잘뜬다.
+[cloudshell-user@ip-10-4-47-83 ~]$ aws iam list-users		입력시 
+{
+    "Users": [
+        {
+            "Path": "/",
+            "UserName": "admin01",
+            "UserId": "AIDA6H7CZNICFETD5RWKF",
+            "Arn": "arn:aws:iam::979191294468:user/admin01",
+            "CreateDate": "2023-09-18T07:19:46+00:00",
+            "PasswordLastUsed": "2023-09-18T07:33:11+00:00"
+        }
+    ]
+}				루트계정을 제외한 유저가 등장한다.
+[cloudshell-user@ip-10-4-47-83 ~]$ echo "test" > demo.txt
+[cloudshell-user@ip-10-4-47-83 ~]$ cat demo.txt
+test
+[cloudshell-user@ip-10-4-47-83 ~]$ rm -rvf demo.txt
+removed ‘demo.txt’
+터미널창처럼 똑같이 동작하는것을 볼 수 있다.
+
+IAM Roles는 인스턴스를 위한 정책을 설정하는 단계이다.
+역할을 부여하면 해당 정책(역할)과 인스턴스를 하나의 객체로 묶는다.
+
+#############################################################################################
