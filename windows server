@@ -1,0 +1,48 @@
+7주차_금요일 메모(Win server)
+윈도우즈 서버를 알아본다.
+
+#윈도우즈 서버 (Windows Server) 기본 설정단계
+이것은 회사의 온프레미스 모의시설이라고 생각하자.
+윈도우즈서버 iso를 다운받아 가상머신에 설치.
+operating system> standard evaluation 시스템(Desktop Experience는 GUI가 포함되어있다.)
+Datacenter Evaluation(Desktop Experience) 은 기능이 다르다. 이거로 설치해서 서버두개만들기
+첫 설치이므로 Custom을 선택해야 한다.
+Administrator (고정) / 패스워드 설정.
+  
+서버매니저 대시보드가 뜨는데 이곳에서 할건없다
+https://lucycle.tistory.com/228 참조해서 windows iso를 마운트해서 
+vmware tools를 설치한다.
+언어팩을 다운받고(한글) , 리젼을 korea 로,date and time을 서울로 설정, windows 표시 언어를 한국어로 설정 한뒤 reboot 하면 기본설정이 완료됨.
+정보> 이 pc의 이름바꾸기 탭>현재 pc 이름을 win-server-1 /2로 바꿈
+C:\Users\Administrator>whoami
+win-server-1\administrator
+C:\Users\Administrator>whoami
+win-server-2\administrator
+>ncpa.cpl 을 열면 네트워크 연결,속성이 나옴
+1은 172.25.3.31 /255.255.255.0/172.25.3.2 로 설정
+2은 172.25.3.32 /255.255.255.0/172.25.3.2 로 설정한뒤 인터넷을 끊었다가 다시연결.
+cmd에서 ipconfig (/all)로 확인이 가능하다.
+>작업표시줄>MMC(콘솔)로 들어가서 '스냅인 추가/제거'로 들어가면 툴들이 많이 있다.
+컴퓨터 관리> 로컬에 추가/ 서버1에서 서버2도 관리하고싶으면
+컴퓨터 관리> 다른 컴퓨터 추가 172.25.3.32 를 해서 서버2도 관리할 수 있다.
+>처음에 들어가고자하면 방화벽문제가 있기 때문에 접속이 안된다. 때문에 권한을 부여받아야 한다. 
+ 
+그러면 살펴봐야할 것을 서버2에서 찾아본다.
+
+>스토리지(디스크)관리를 하려면 저장소의 디스크관리를 추가하면된다.
+>MMC의 설정을 저장할 수 있다. 이 콘솔의 설정을 다른이름으로 설정 가능.(.msc file)
+
+#툴 살펴보기 (서버 관리자 대시보드)
+대시보드 우측상단 '도구'를 살펴본다
+역할 및 기능추가, 모든 서버, 등에 대해서 살펴봄
+-독립 실행형(stand-alone) 설치관리자 
+-Domain controller
+	=active directory 
+-Member server 응용서버 
+>역할 및 기능추가에서 서버 역할에 active directory domain service 체크하고 
+넘겨서 설치. '도메인컨트롤러로 승격'을 선택한다.
+'새 포리스트를 추가'한다
+domain23.co.kr 루트도메인을 정함
+dsrm암호는 admin 암호와 같이설정
+domain23.co.kr
+
