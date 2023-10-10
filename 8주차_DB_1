@@ -1,0 +1,64 @@
+8주차_월요일 메모(DB)
+
+23.10.10 오늘은 DB에 대해서 배운다
+tip) ll /etc/yum.repos.d/ 로 설치된 레포팩(외부패키지,프로그램)을 볼 수 있따.
+
+maria DB를 검색 후 다운로드 redhat linux 버전) 
+레포파일을 복사 붙여넣기 한뒤, 다운로드
+~~~
+# MariaDB 11.1 RedHatEnterpriseLinux repository list - created 2023-10-10 00:43 UTC
+# https://mariadb.org/download/
+[mariadb]
+name = MariaDB
+# rpm.mariadb.org is a dynamic mirror if your preferred mirror goes offline. See https://mariadb.org/mirrorbits/ for details.
+# baseurl = https://rpm.mariadb.org/11.1/rhel/$releasever/$basearch
+baseurl = https://mirrors.xtom.com.hk/mariadb/yum/11.1/rhel/$releasever/$basearch
+# gpgkey = https://rpm.mariadb.org/RPM-GPG-KEY-MariaDB
+gpgkey = https://mirrors.xtom.com.hk/mariadb/yum/RPM-GPG-KEY-MariaDB
+gpgcheck = 1~~~
+이를 
+sudo dnf install MariaDB-server MariaDB-client 를 입력해서 설치한다.
+
+[root@server-1 yum.repos.d]# vim MariaDB.repo 
+[root@server-1 yum.repos.d]# sudo dnf install MariaDB.repo
+
+[root@server-1 yum.repos.d]# systemctl status mariadb
+[root@server-1 yum.repos.d]# systemctl enable mariadb
+[root@server-1 yum.repos.d]# systemctl restart mariadb	로 재부팅
+
+[root@server-1 yum.repos.d]# netstat -anpt |grep maria 
+[root@server-1 yum.repos.d]# firewall-cmd --permanent --add-port=3306/tcp
+[root@server-1 yum.repos.d]# firewall-cmd --permanent --add-service=mysql
+[root@server-1 yum.repos.d]# firewall-cmd --reload 
+
+#비밀번호 설정하기
+[root@server-1 yum.repos.d]# which mysqladmin 
+/usr/bin/mysqladmin
+[root@server-1 yum.repos.d]# echo $PATH
+/root/.local/bin:/root/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin
+로 확인가능하다.
+
+[root@server-1 yum.repos.d]# mysqladmin -u root password 
+mysqladmin: Deprecated program name. It will be removed in a future release, use '/usr/bin/mariadb-admin' instead
+New password: 		로 비밀번호를 설정해준다.(root)
+
+[root@server-1 yum.repos.d]# mysql -u root -p 	로 루트로 접속(비밀번호 필요)
+
+MariaDB [(none)]> show databases;    or schemas;   
+로 데이터베이스(schema에 들어간다)
+
+MariaDB [(none)]> use mysql  (또는 mariadb)
+MariaDB [mysql]> show tables like 'user';
+MariaDB [mysql]> select host, user, password from user;
++----------------------+-------------+----------+
+| Host                 | User        | Password |
++----------------------+-------------+----------+
+| localhost            | mariadb.sys |          |
+| localhost            | root        | invalid  |
+| localhost            | mysql       | invalid  |
+|                      | PUBLIC      |          |
+| localhost            |             |          |
+| server-1.example.com |             |          |
++----------------------+-------------+----------+
+
+등으로 확인
