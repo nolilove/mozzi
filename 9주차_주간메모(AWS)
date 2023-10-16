@@ -1,0 +1,129 @@
+AWS_23.10.16 (mon) 유데미자습
+
+-보안 섹션에 대해서 자습한다.
+AWS KMS 
+모든 비밀을 KMS키로 암호화 가능하며, 코드와 환경에 접목할 수 있다.
+<KMS>
+1. 대칭 KMS키(암호화, 복호화 모두 사용됨)
+2. 비대칭 KMS키(키가 두개임, 하나는 암호화_퍼블릭 키에, 하나는 복호화에 사용_프라이빗)
+-활용사례; AWS cloud외부에서 KMS API 키에 액세스할 수 없는 사용자에 의해 암호화 하려는 경우, 퍼블릭키를 써서 데이터 암호화 및 전송/ 콘솔안의 우리는 aws 프라이빗 키로 이를 복호화한다.
+<Type>
+1.아마존 자체 소유의 키 ( SSE-S3 , SSE-SQS , SSE-DDB 를 사용할때 )_default, free key
+이는 KMS는 아니다.
+2.AWS 관리형 키 (aws/service-name ... 앞에 aws/가 붙어서 제공)_free key, 1년 자동순환
+키 지정된 서비스에서만 사용가능.
+3. 고객이 관리하는 키 (kms : 1$ / month) 1년 자동순환
+3-1. 가져오고싶으면 import 할 수 있음.수동순환
+- 서비스에 이루어진 API호출 건에 대해 지불
+
+S3 bucket policy와 similar하지만, kms key policy가 없으면 아무도 접근할 수 없다는 점
+-기본값(default)은 계정에 있는 모든 사람이 이 키에 액세스가 가능하게 허용함.
+-커스텀은 User, roles를 규정한다( KMS 키 액세스)
+예를 들어 암호화된 스냅샷을 EBS볼륨간이나 계정들 간에 복사하고 싶을 때 사용한다.
+
+1년마다 자동순환 (key rotation)이 있다는것을 알아두기
+code_console 인코딩
+aws kms encrypt --key-id alias/tutorial --plaintext fileb://ExampleSecretFile.txt --output text --query CiphertextBlob --region ap-northeast-2 > ExampleSecretFileEncrypted.base64
+디코딩(linux)
+cat ExampleSecretFileEncrypted.base64 | base64 --decode > ExampleSecretFileEncrypted
+복호화
+aws kms decrypt --cipertext-blob fileb://ExampleSecretFileEncrypted --output text --query Plaintext > ExampleSecretFileEncrypted.base64 --region ap-northeast-2
+디코딩
+cat ExampleSecretFileDecrypted.base64 | base64 --decode > ExampleFileDecryted.txt 
+
+다중 리전 키)
+키 ID가 아예 똑같다. 다른리전에서도 사용가능한 교차 키이다. 다만 전역으로 사용은불가
+기본키가 있고, 복제본이 있는 것으로 각각 독립적으로 관리된다. 따라서 특정 목적이아니면 자제하는 것이 좋음.
+
+AMI는 소스 계정에 있고 KMS키로 암호화 된 것. 
+어떤방식으로 A ami에서 B 의 EC2 인스턴스를 시작하는지? > 시작권한을 B계정에 부여. KMS키도 공유해야 하므로 일반적으로 키정책으로 실행, 권한을 가진 역할이나 사용자를 생성 >액세스 권한(DescribeKey, ReEncrypted, CreateGrant, Decrypted) 획득 > EC2 인스턴스 생성. 
+
+<AWS Systems Manager Parameter Store> _보안 관련, 중앙집중화 
+Parameter Store는 구성 데이터 관리 및 암호 관리를 위한 안전한 계층적 스토리지를 제공합니다. 암호, 데이터베이스 문자열, Amazon Machine Image(AMI) ID, 라이선스 코드와 같은 데이터를 파라미터 값으로 저장할 수 있습니다.
+-그래서 API호출을 통해 이용이 가능하다.
+-TTL로 어떤 매개변수가 삭제되기 전에/ EventBridge로 알림을 받을 수 있고, 삭제되기전 업데이트 할 수 있을만큼 시간여유가 생긴다.
+>CLI 와 Lambda함수를 이용하여 실습할 수 있다. 이때 유의해야할 것은 IAM 권한과 역할 부여에 신경 써야한다. 그래야 에러가 일어나지 않는다.
+
+<AWS secrets manager>
+요약: X일마다 강제로 암호를 교체하는 기능이 있는 암호 저장서비스다.
+이를 위해서 새 암호를 생성할 Lambda함수를 정의해야한다.
+-AWS 서비스(교체,관리,DB: RDS,MySQL,PostgreSQL,Aurora)등과 긴밀하게 통합된다.
+-KMS를 이용해서 암호화된다.
+>서비스와 KMS를 융합(RDS와 AURORA의 통합&암호에 대한 내용이면 이걸 떠올리기)
+
+>다중 리전 암호(multi-region secrets)
+복수리전에 암호 복제가능/ 시크릿매니저가 '기본암호+동기화된 읽기전용 복제본 유지'
+기존암호가 있는 AZ가 뻗어버리면 암호 복제본이 있는 AZ에서 독립실행형 암호로 승격가능.
+
+<AWS Certificate Manager ACM> _ 엣지 최적화 및 리전 엔드포인트에 적합(같은AZ일때)
+AWS에서 프로비저닝, 관리, 배포를 하게 해준다. (TLS인증서 형태)
+ALB를 AWS ACM과 통합해 직접 TLS인증서를 지원하는 형태로 통합할 수 있음.
+퍼블릭은 무료, 자동으로 갱신기능 있음.
+-다만 EC2인스턴스에서는 사용불가함.(여기선 퍼블릭 인증서를 생성불가함)
+route53과 병합하여 DNS검증도 가능하다( 자동갱신으로 자동화 )
+만료 60일전에 자동으로 갱신해준다.
+-ACM 외부에서 생성된 인증서를 가져오면?
+외부에서 생성된 인증서를 ACM으로 가져오면, 자동 갱신은 불가하다. 따라서 인증서 만료이전에 직접 새 인증서를 가져와야함. ACM서비스가 만료 45일전부터 EventBridge에 알려주므로 나타나게되는데, 며칠 전부터 알려줄지는 마음대로 결정가능. 그 다음 EventBridge에서 Lambda 함수나 SNS, SQS를 사용 가능하다. 
+config서버에 룰을 설정해두면 이게 ACM을 검사해서 규칙위배되는 인증서가 있으면 규정을 비준수했다는 이벤트가 EventBridge로 전송된다.
+
+<#1. WAF _ web application firewall>
+_layer 7에서 일어나는 취약점 공격에서 웹어플 보호.
+즉, http에 대한 공격을 막는것이다. (계층 4는 tcp/udp protocol)
+waf의 배포는 -alb 애플리케이션로드밸런서, api 게이트웨이, cloudfront, Cognito userpool, Appsync GraphQL API에 할 수 있다. 
+배포를 했으면, ACL 웹 액세스 제어목록과 '규칙' 을 정의(define)해야한다
+규칙이란 ip주소를 기반으로 필터링하는 등이 예이다.
+=SQL 주입과 Cross-Site Scripting(XSS)과 지역 블락, 초당 x개의 요청금지(DDoS 방어)등 ACL을 설정할 수 있음.(리전에만 적용, 클라우드 프론트는 글로벌) 
++WAF는 L7에만 작동하므로 L4에 적용되는 NLB는 적용되지 않는다.
+-ALB는 아이피를 고정하지 못하는데, 이때 Global Accelerator를 사용하여(alb 앞에 둠) 고정 iP를 획득한다. 그뒤에 acl를 설정하고, aws waf를 병합시켜 동일AZ에 배치를하면?  
+아키텍쳐가 완성된다.
+
+<#2. AWS Shield> Std: 3,4layer에 대한 방어,     adv:7layer에 대한 DDoS 방어 특화
+디도스로부터 보호하기 위한 서비스 (분산 서비스 거부 공격)
+인프라에 과부하를 일으키므로 사용자들에게 서비스를 못하게끔 한다. 
+Standard_ free for customer/ SYN/UDP Floods나 반사공격(layer 3, 4에 대한)을 방어해줌.
+Advanced_ 유료( 3,000$ /month) /  정교한 디도스공격을 막아준다(EC2, ELB , AWS CloudFront, AWS Global Accelerator, Route 53) >그래서 ddos로 인한 사용량 스파이크를 방지할 수 있다. layer7에 대한 자동 애플리케이션 디도스 완화도 지원.
+
+<#3. AWS Firewall Manager> AWS Organization 모든 계정내 방화벽 규칙관리서비스
+로, 리전단위 보안정책을 설정할 수 있다. >
+-WAF규칙(ALB , API gateway, CloudFront 등) +
+-ALB, CLB, NLB, Elastic IP, CloudFront 를 위한 AWS Shield advanced 에 적용.
+-EC2, ALB, VPC의 ENI리소스 를 위한 보안그룹을 표준화하는 보안정책도 적용
+-VPC 수준의 AWS Network Firewall도 해당됨.
+-AWS Route53 resolver DNS Firewall도 해당
+정책은 리전당으로 생기며, 조직에 등록된 모든 계정에 적용이 된다.
+
+>>> WAF 와 FIREwall Manager 와 Shield의 차이점
+공통점: 모두 포괄적인 계정보호를 위한 서비스
+WAF- Web ACL 규칙을 정의한다 (리소스 별 보호를 구성하는데 제일 적절)
+Firewall Manager- 여러계정에서 WAF를 사용하고 구성 가속, 새 리소스 보호 자동화에 적절
+		모든 계정과 모든 리소스에 자동으로 적용해주기 때문.(여러개일때 적절)
+AWS Shield- DDoS로부터 고객을 보호, 보고서, 자체 SRT팀 대응지원, WAF 규칙 자동생성등 		기능을 추가로 이용이 가능함. 디도스공격이 자주 예상될때 제일 적절.
++ firewall manager은 모든 계정에 aws shield 배포에도 도움을 줌
+이 세 서비스를 잘 구분하여야 한다.
+
+WAF - Web ACL을 생성_ 기본값 default는 위의 규칙에 해당하지않으면 기본적으로 '허용'상태이고 이를 'block'으로 바꿀 수 있다.(허용상태일 때 위반되면 차단됨)
+shield - 구독시 월 3000달러 지불_ 
+firewall manager -  모든정책이 조직내의 모든계정에 해당하는지만 알면 됨.
+
+*DDoS가 진행될때 Auto Scaling의 역할(BP7)- 인스턴스의 수를 극적으로 늘림
+*DDoS가 진행될때 Elastic Load Balancing의 역할(BP6)- 급증한 트래픽을 많은 인스턴스로 뿌려줌
+-CloudFront는 정적 컨텐츠의 전송 시 엣지로케이션에서 이를 전송하여 백엔드를 보호.
+ALB나 CloudFront에 WAF를 사용하여 특정 IP,요청유형만 차단설정이 가능하다.
+-WAF rate-based 규칙으로 (속도기반규칙) 악성사용자 IP를 자동으로 차단 가능.
+-평판으로 차단, 익명 IP를 차단 // CloudFront로 특정 지역,국가 등을 차단
+
+-백엔드: API Gateway로 람다함수, EC2 등 어떤것이나 엔드포인트라도 지킬 수(감출 수) 있다.
+엣지 최적화 모드 사용시 이미 글로벌로 설정되어있음 + WAF와 같이 사용하면 모든 HTTP요청을 필터링 가능하다.(버스트 제한, 헤더 필터링,API키 사용을 강제)
+*API키는 API클라이언트의 트래픽을 식별하기위한 고유식별자
+
+<AWS GuardDuty> 'log'붙은거 전부파악,
+머신러닝 알고리즘으로 서드파티 데이터로 위협을 탐지. 30일 평가판이 가능
+-CloudTrail Event Logs 같은 많은 입력데이터를 확인, 비정상 API호출과 무단배포 색출
+-관리이벤트_ creat VPC 서브넷, creat Trail 등 관리명령어 
+-S3데이터이벤트를 검색 _ GetObject, ListObject, DeleteObject 등 API호출에 관한것
+-VPC Flow Logs - 비정상 인터넷 트래픽,IP 색출
+-EventBridge규칙 설정으로 결과를 자동으로 알림받을 수도 있다.(AWS lambda, SNS주제같이 타겟화 할 수 있는 모든것)
+-암호화폐를 공격하는부분에 모든 입력데이터를 분석하는법을 안다.
+*CloudWatch- "AWS에서 무슨일이 일어나고있나요" : AWS 서비스 및 리소스의 '활동'에 중점을 두고, 상태 및 성능을 보고한다. 애플리케이션과 리소스 활동이 있으면 그것을 모니터링함. 지표수집 및 추적, 로그파일 수집 및 모니터링, 경보설정이 가능, 리소스 변경사항을 설명하는 시스템 이벤트의 거의 실시간 스트림을 보여준다
+*CloudTrail- "AWS에서 누가 무엇을 했나요" : AWS 환경 내에서 발생한 '모든 작업의' 로그. 해당 계정의 거버넌스, 규정 준수, 운영 감사 및 위험감사를 지원함. API활동을 기록하는 웹 서비스. AWS계정 생성시부터 기본적으로 활성화되며 API호출 후 15분 이내에 이벤트 전달. 
+
