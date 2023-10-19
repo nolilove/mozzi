@@ -1,0 +1,408 @@
+9주차 10월 19일 _도커 메모 
+
+개요: 리눅스와 우분투 가상머신에서 , docker 를 설치 및 실행해본다
+- 도커이미지 : 실행이 가능한 도커 이미지
+- 컨테이너 : 실행되어 있는 상태의 도커이미지
+>도커를 왜 쓰나요?
+1. 개발 환경 표준화
+2. 운영 환경의 복잡성 감소
+3. 빠른 어플리케이션 배포
+4. 리소스 최적화
+5. 이식성
+>기본개념
+이미지(Image): 컨테이너를 생성하기 위한 실행 환경을 패키징한 것 (내용물이 든 상자)
+컨테이너(Container): 이미지를 실행한 상태(컨테이너)
+레지스트리(Registry): 도커 이미지를 저장하고 공유하기 위한 저장소
+도커 엔진(Docker Engine): 도커 이미지를 생성하고 컨테이너를 실행하는 도구
+볼륨(Volume): 도커 컨테이너에서 데이터를 저장하기 위한 디렉토리 또는 파일을 의미한다. 보통 호스트의 파일시스템과 연결된 디렉토리를 사용한다.
+
+# 로키리눅스에서 설치
+dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+
+dnf -y install docker-ce docker-ce-cli containerd.io
+
+설치가 끝났으면 ,실행해본다
+
+[root@sulinux01 ~]# systemctl enable docker
+[root@sulinux01 ~]# systemctl status docker   로 돌아가는지 확인후
+systemctl restart docker				재시작.
+
+서비스 시작이 되었으면, 도커가 잘 작동하는 지 테스트한다.
+[root@server-1 ~]# docker run hello-world			입력
+
+Unable to find image 'hello-world:latest' locally
+latest: Pulling from library/hello-world
+719385e32844: Pull complete 
+Digest: sha256:88ec0acaa3ec199d3b7eaf73588f4518c25f9d34f58ce9a0df68429c5af48e8d
+Status: Downloaded newer image for hello-world:latest
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+To try something more ambitious, you can run an Ubuntu container with:
+ $ docker run -it ubuntu bash
+Share images, automate workflows, and more with a free Docker ID:
+ https://hub.docker.com/
+For more examples and ideas, visit:
+ https://docs.docker.com/get-started/
+잘되는 것 같다.
+
+-도커이미지 다운해서 Container 생성해보기
+[root@server-1 ~]# docker pull centos		
+Using default tag: latest
+latest: Pulling from library/centos
+a1d0c7532777: Pull complete 
+Digest: sha256:a27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177
+Status: Downloaded newer image for centos:latest
+docker.io/library/centos:latest
+
+[root@server-1 ~]# docker run -it centos bash
+[root@cae9af70fd3f /]#    
+[root@cae9af70fd3f /]# cat /etc/redhat-release 
+CentOS Linux release 8.4.2105
+[root@cae9af70fd3f /]# ls -l		로 확인
+total 4
+lrwxrwxrwx.   1 root root    7 Nov  3  2020 bin -> usr/bin
+drwxr-xr-x.   5 root root  360 Oct 19 03:28 dev
+drwxr-xr-x.   1 root root   66 Oct 19 03:28 etc
+drwxr-xr-x.   2 root root    6 Nov  3  2020 home
+lrwxrwxrwx.   1 root root    7 Nov  3  2020 lib -> usr/lib
+lrwxrwxrwx.   1 root root    9 Nov  3  2020 lib64 -> usr/lib64
+drwx------.   2 root root    6 Sep 15  2021 lost+found
+drwxr-xr-x.   2 root root    6 Nov  3  2020 media
+drwxr-xr-x.   2 root root    6 Nov  3  2020 mnt
+drwxr-xr-x.   2 root root    6 Nov  3  2020 opt
+dr-xr-xr-x. 362 root root    0 Oct 19 03:28 proc
+dr-xr-x---.   2 root root  162 Sep 15  2021 root
+drwxr-xr-x.  11 root root  163 Sep 15  2021 run
+lrwxrwxrwx.   1 root root    8 Nov  3  2020 sbin -> usr/sbin
+drwxr-xr-x.   2 root root    6 Nov  3  2020 srv
+dr-xr-xr-x.  13 root root    0 Oct 19 03:17 sys
+drwxrwxrwt.   7 root root  171 Sep 15  2021 tmp
+drwxr-xr-x.  12 root root  144 Sep 15  2021 usr
+drwxr-xr-x.  20 root root 4096 Sep 15  2021 var
+exit
+위의 예는 CentOS 도커이미지를 다운로드 해서, 
+다운로드한 도커이미지를 실행한 것이다. 
+실행하면 CentOS 환경으로 변한다. 
+간단히 사용해보고  exit로 빠져 나온것
+
+다음은 간단한 자주사용하는 Container를 확인하고 삭제하는  도커 명령어들이다. 
+먼저, 현재 실행된 도커 컨테이너들을 확인하기 위해 "docker images"를 실행한 화면이다. 
+이 화면에서 보면 좀 전에 실행했던. centos 컨테이너가 보인다. 
+
+[root@server-1 ~]# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
+hello-world   latest    9c7a54a9a43c   5 months ago   13.3kB
+centos        latest    5d0da3dc9764   2 years ago    231MB
+
+[root@server-1 ~]# docker container ls -a	컨테이너들의 상세정보 확인
+CONTAINER ID   IMAGE         COMMAND    CREATED         STATUS                      PORTS     NAMES
+cae9af70fd3f   centos        "bash"     2 minutes ago   Exited (0) 56 seconds ago             keen_nash
+96e2b8c51648   hello-world   "/hello"   6 minutes ago   Exited (0) 6 minutes ago              relaxed_tu
+
+다음은 특정 컨테이너를 삭제하기 위해  "docker rm 컨테이너ID"를 실행한다. 
+여기서는 바로 앞에서 설치했던 centos 컨테이너를 삭제 해본다. 
+그런 다음 다시 한번 더 컨테이너들의 정보를 확인해 본 것이다. 
+centos 컨테이너가 삭제되고 없다는 것을 알 수 있다. 
+[root@server-1 ~]# docker rm cae9af70fd3f
+cae9af70fd3f
+[root@server-1 ~]# docker container ls -a
+CONTAINER ID   IMAGE         COMMAND    CREATED         STATUS                     PORTS     NAMES
+96e2b8c51648   hello-world   "/hello"   8 minutes ago   Exited (0) 8 minutes ago             relaxed_tu
+
+Docker는 OS의 자원을 사용하기 때문에 기본적으로 Root 사용자에서 명령어를 사용해야 함.
+한가지 개념정리를 해야 할 것은
+- 도커이미지 : 실행이 가능한 도커 이미지
+- 컨테이너 : 실행되어 있는 상태의 도커이미지
+     위의 개념을 정확히 정리하고 있어야 이해가 쉽다.
+
+#다음으로는  Ubuntu에 도커를 설치해본다. 
+
+1. 우분투 시스템 패키지 업데이트
+sudo apt-get update
+2. 필요한 패키지 설치
+sudo apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+3. Docker의 공식 GPG키를 추가
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+4. Docker의 공식 apt 저장소를 추가
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+5. 시스템 패키지 업데이트
+sudo apt-get update
+6. Docker 설치
+sudo apt-get install docker-ce docker-ce-cli containerd.io
+7. Docker 설치 확인
+7-1 도커 실행상태 확인
+sudo systemctl status docker
+7-2 도커 실행
+sudo docker run hello-world
+
+* Permission 에러 발생할 시 sudo usermod -aG docker $USER 를 입력한뒤 cmd를 다시 실행하면 된다
+sudo usermod -aG docker $USER
+newgrp docker
+
+
+버전확인을 해보도록한다
+student@ubuntu-1:~$ sudo docker version
+Client: Docker Engine - Community
+ Version:           24.0.6
+ API version:       1.43
+ Go version:        go1.20.7
+ Git commit:        ed223bc
+ Built:             Mon Sep  4 12:31:44 2023
+ OS/Arch:           linux/amd64
+ Context:           default
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# container image 다운로드해보기 (예시는 nginx)
+$ docker pull ningx:latest
+
+student@ubuntu-1:/var/lib$ docker pull nginx:latest
+latest: Pulling from library/nginx
+a378f10b3218: Pull complete 
+4dfff0708538: Pull complete 
+2135e49ace4b: Pull complete 
+c843f6b280ce: Pull complete 
+6f35ab6f1400: Pull complete 
+6c538b49fa4a: Pull complete 
+d57731fb9008: Pull complete 
+Digest: sha256:b4af4f8b6470febf45dc10f564551af682a802eda1743055a7dfc8332dffa595
+Status: Downloaded newer image for nginx:latest
+docker.io/library/nginx:latest
+
+>>5개의 layer로 된 Container Image를 다운로드 했다.
+student@ubuntu-1:/var/lib$ docker images		로 확인해보면
+REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
+nginx         latest    bc649bab30d1   7 days ago     187MB
+hello-world   latest    9c7a54a9a43c   5 months ago   13.3kB			
+
+nginx 최신 버전, 7일 전에 Docker Hub에서 마지막으로 업데이트 된 187MB의 이미지 확인. 
+- /var/lib/docker/overlay2 아래 위와 같은 5개의 layer 디렉토리들이 추가된다.
+- 5개의 Layer들이 Container Image를 이루며,
+- 해당 Image를 실행하면 Container 가 된다. 
+
+student@ubuntu-1:~$ docker run --name web -d -p 80:80 nignx
+Unable to find image 'nignx:latest' locally
+^[[Adocker: Error response from daemon: pull access denied for nignx, repository does not exist or may require 'docker login': denied: requested access to the resource is denied.
+See 'docker run --help'.
+컨테이너를 실행하고 확인해보려고 했는데, 리소스에대한 액세스 디나이가 떴다. 이때는 루트사용자로 들어가지 않아서 그런 것 같다. sudo -s로 루트로 가보자
+
+root@ubuntu-1:/home/student# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
+nginx         latest    bc649bab30d1   7 days ago     187MB
+hello-world   latest    9c7a54a9a43c   5 months ago   13.3kB
+root@ubuntu-1:/home/student# docker run --name web -d -p 80:80 nignx
+Unable to find image 'nignx:latest' locally
+docker: Error response from daemon: pull access denied for nignx, repository does not exist or may require 'docker login': denied: requested access to the resource is denied.
+See 'docker run --help'.		루트계정이면 될줄 알았더니, 리파지토리가 없거나 도커 로그인이 필요하다는 알림이 계속 뜬다.
+https://nirsa.tistory.com/46  참조해서 오류를 해결, docker login이 필요해 보인다.
+https://hub.docker.com/ 에서 sign up 하고 아이디를 생성해주자.
+mozzidocker /mozzi  라는 리파지토리를 생성했다.
+
+root@ubuntu-1:/home/student# docker login		으로 도커에 로그인
+Docker ID 또는 이메일 주소로 로그인하여 Docker Hub에서 이미지를 밀고 당깁니다. Docker ID가 없는 경우 https://hub.docker.com/ 로 이동하여 이미지를 만듭니다.
+비밀번호로 로그인 할 수 있습니다
+뭐 이런 알림이 뜨는 것 같다.
+https://learn.microsoft.com/ko-kr/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package  로 가서, 'x64 머신용 최신 WSL2 Linux 커널 업데이트 패키지' 를 받아서 도커를 다시 실행시키면 잘 된다.
+ 
+WARNING! Your password will be stored unencrypted in /home/student/.docker/config.json. 
+이라는 경고알림이 뜬다. 
+
+student@ubuntu-1:~$ cd /home/student/.docker/
+student@ubuntu-1:~/.docker$ ll
+total 12
+drwx------  2 student student 4096 10월 19 14:45 ./
+drwxr-x--- 19 student student 4096 10월 19 14:41 ../
+-rw-------  1 student student  123 10월 19 14:45 config.json
+student@ubuntu-1:~/.docker$ vim config.json  를 가서 확인해보면, 
+실제로 암호화된 내용을 base64를 통해 복호화하면 그대로 ID, PW가 드러나니 유의할것.
+
+root@ubuntu-1:/home/student# cd /var/lib/docker/  를 입력하면 도커 디렉토리가 있다.
+root@ubuntu-1:/var/lib/docker# ls
+buildkit    engine-id  network   plugins   swarm  volumes
+containers  image      overlay2  runtimes  tmp
+여기서 overlay2 에 컨테이너 이미지 레이어가 들어감.
+ 
+root@ubuntu-1:/var/lib/docker# docker pull nginx:latest 	이미지를 받아본다.
+latest: Pulling from library/nginx
+Digest: sha256:b4af4f8b6470febf45dc10f564551af682a802eda1743055a7dfc8332dffa595
+Status: Image is up to date for nginx:latest
+docker.io/library/nginx:latest
+
+root@ubuntu-1:/var/lib/docker# docker run --name web -d -p 80:80 nginx   를 다시쳤는데
+docker: Error response from daemon: Conflict. The container name "/web" is already in use by container "2bb74c3e994cf3c585dff86dca17dd3edba860d834f33b2acf133594c2d743ea". You have to remove (or rename) that container to be able to reuse that name.		라는오류뜸.
+
+1. root@ubuntu-1:/var/lib/docker# docker ps -a	로 실행중인 존재하는 컨테이너 목록확인
+2. root@ubuntu-1:/var/lib/docker# docker run -p 8080:80 nginx:latest 로 컨테이너를 실행시켜보자. 이 명령어는 컨테이너가 구동된 채로 대기한다. 여기서 -p 옵션은 도커를 실행하는 호스트의 8080 포트를 컨테이너의 80 포트로 연결하도록 설정한다. nginx 이미지는 내부적으로 80 포트를 사용해서 웹 서버를 구동하는데 호스트의 8080 포트와 컨테이너의 80 포트를 연결한 것이다
+
+root@ubuntu-1:/var/lib/docker# docker run -d -p 8080:80 nginx:latest
+efa58fb3bb61e773131716b7eead164d218fc289e171610c08463e8aef8d5c03
+-d : 컨테이너를 백그라운드에서 실행합니다.
+-p : 호스트와 컨테이너의 포트를 매핑합니다. 호스트포트:컨테이너포트의 형식으로 지정합니다.
+
+3. 컨테이너 목록조회
+root@ubuntu-1:/var/lib/docker# docker ps
+CONTAINER ID   IMAGE          COMMAND                  CREATED          STATUS          PORTS                                   NAMES
+efa58fb3bb61   nginx:latest   "/docker-entrypoint.…"   37 seconds ago   Up 36 seconds   0.0.0.0:8080->80/tcp, :::8080->80/tcp   crazy_golick
+
+4. 네트워크
+-네트워크 목록의 확인
+root@ubuntu-1:/var/lib/docker# docker network ls
+NETWORK ID     NAME      DRIVER    SCOPE
+e3049cafa053   bridge    bridge    local
+6bb6652cdd52   host      host      local
+d0b604985943   none      null      local
+
+참조)
+컨테이너를 생성할 때, --network 옵션을 이용하여 컨테이너가 속해야 할 네트워크를 지정할 수 있습니다. 예를 들어, my-network라는 네트워크를 생성하고, 이 네트워크에 속한 my-container-1과 my-container-2라는 이름의 컨테이너를 생성하고자 할 때, 다음과 같은 명령어를 이용합니다.
+docker network create my-network
+docker run -d --name my-container-1 --network my-network nginx
+docker run -d --name my-container-2 --network my-network nginx
+--network 옵션을 사용하지 않고, 컨테이너를 생성하면 기본적으로 bridge라는 이름의 네트워크에 속하게 됩니다.
+컨테이너 간에 네트워크를 통해 서로 통신하게 하려면, 컨테이너 내부에서 사용되는 IP 주소를 이용하여 통신합니다. 예를 들어, my-container-1에서 my-container-2로 접근하기 위해서는 다음과 같은 명령어를 이용합니다.
+
+docker exec -it my-container-1 /bin/bash
+ping my-container-2
+위 명령어는 my-container-1에서 my-container-2로 접근하여 ping을 수행하는 명령어입니다. my-container-1에서 my-container-2로 접근하기 위해서는 my-container-2의 IP 주소를 알아야 합니다. 이는 docker inspect 명령어를 이용하여 확인할 수 있습니다.
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' my-container-2
+위 명령어는 my-container-2의 IP 주소를 확인하는 명령어입니다. 이를 이용하여 my-container-1에서 my-container-2로 접근할 수 있습니다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*자동완성기능 설치 (Bash 자동완성)
+sudo apt-get install -y bash-completion
+root@ubuntu-1:~# source /usr/share/bash-completion/bash_completion 를 입력해주자.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+root@ubuntu-1:~# cd hellojs
+root@ubuntu-1:~/hellojs# vim hello.js
+root@ubuntu-1:~/hellojs# cat hello.js 
+$ cat > hello.js
+const http = require('http');
+const os = require('os');
+console.log("Test server starting...");
+
+var handler = function(request, response) {
+  console.log("Received request from " + request.connection.remoteAddress);
+  response.writeHead(200);
+  response.end("Container Hostname: " + os.hostname() + "\n");
+};
+
+var www = http.createServer(handler);
+www.listen(8080);
+>>웹서비스를 지원해주는 node.js 소스코드를 입력해둔 것이다.
+- 코드를 실행하려면 컨테이너에 Node.js가 설치되어야 한다.
+※ Node.js는 Back-end 에서 운영하는 Application 에 많이 사용. 즉, Web server를 운영해주는 Application
+hub.docker.com 에 접속해보면 Node.js 자체도 하나의 컨테이너이며 이를 Base Image로 사용하면 된다.
+
+그래서 도커에 있는 코드를 실행하려면, docker pull node 로 설치해두자.
+root@ubuntu-1:~/hellojs# docker pull node
+Using default tag: latest
+latest: Pulling from library/node
+0a9573503463: Pull complete 
+1ccc26d841b4: Pull complete 
+800d84653581: Pull complete 
+7c632e57ea62: Pull complete 
+cfd71c20c2b4: Pull complete 
+ae0a12909e9d: Pull complete 
+e74902b676a6: Pull complete 
+578d79c23f53: Pull complete 
+Digest: sha256:bd20621deff56cb66c6cd10772d26db1a0d480f2b08609eb96b799ba6260f3ed
+Status: Downloaded newer image for node:latest
+docker.io/library/node:latest
+>노드 자체도 하나의 컨테이너이며, 이를 bash image로 사용하면 됨.
+
+다음으론 도커파일을 생성해보자.
+- FROM [베이스이미지] : 작성한 파일 hello.js 를 해석해서 실행해줄 수 있는 운영 환경을 제공해줄 컨테이너를 베이스 이미지로 입력
+  > FROM node:16
+- COPY [현재 디렉토리에 있는 파일] [컨테이너에서의 위치] : 현제 디렉토리의 파일을 컨테이너에서의 위치로 복사
+  > COPY hello.js / 
+- CMD ["명령어"]
+  > CMD ["node", "/hello.js"] : node라는 명령을 가지고 /hello.js 를 실행
+
+root@ubuntu-1:~/hellojs# vim dockerfile
+root@ubuntu-1:~/hellojs# cat dockerfile 
+FROM node:16
+COPY hello.js /
+CMD ["node", "/hello.js"]
+
+(4) docker build 해보기
+- t : 컨테이너 이미지와 버전을 태그로 입력.
+. : 현재 디렉토리 안에 파일을 기준으로 작업해라.
+
+root@ubuntu-1:~/hellojs# docker build -t hellojs:latest .
+[+] Building 1.7s (8/8) FINISHED                                                    docker:default
+ => [internal] load build definition from dockerfile                                          0.0s
+ => => transferring dockerfile: 93B                                                           0.0s
+ => [internal] load .dockerignore                                                             0.0s
+ => => transferring context: 2B                                                               0.0s
+ => [internal] load metadata for docker.io/library/node:16                                    1.6s
+ => [auth] library/node:pull token for registry-1.docker.io                                   0.0s
+ => [internal] load build context                                                             0.0s
+ => => transferring context: 30B                                                              0.0s
+ => [1/2] FROM docker.io/library/node:16@sha256:f77a1aef2da8d83e45ec990f45df50f1a286c5fe8bbf  0.0s
+ => CACHED [2/2] COPY hello.js /                                                              0.0s
+ => exporting to image                                                                        0.0s
+ => => exporting layers                                                                       0.0s
+ => => writing image sha256:11f9f4850f5fade8f7e2567cbbb070441195d58f65a6e2221bb675207f5abc6d  0.0s
+ => => naming to docker.io/library/hellojs:latest  
+잘 빌드된 것 같다.
+Dockerfile을 기준으로 Top-Down 방식으로 실행이 된다. ( FROM > COPY > CMD )
+Step 1/3 : FROM node:16
+node 16 을 베이스로 하는 컨테이너 이미지를 만들기 위해 node 16 을 pull 한다. 
+Step 2/3 : COPY hello.js /
+Step 3/3 : RUN["node", "/hello.js"]
+
+-다음으로 우분투 기반 웹서버컨테이너(인프라 컨테이너)를 만들어보자
+1.디렉토리를 만든다
+$ mkdir webserver
+$ cd webserver 
+$ vi dockerfile
+
+root@ubuntu-1:~/webserver# echo "hello dockerfile" > index.html
+root@ubuntu-1:~/webserver# vi dockerfile
+root@ubuntu-1:~/webserver# cat dockerfile 
+FROM ubuntu:focal
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update; apt install -y apache2
+ADD index.html /var/www/html/index.html
+EXPOSE 80/tcp
+CMD ["/usr/sbin/apache2ctl", "-DFOREGROUND"]
+
+root@ubuntu-1:~/webserver# docker images
+REPOSITORY    TAG       IMAGE ID       CREATED          SIZE
+myweb         ubuntu    f3bafa3f61f5   25 seconds ago   233MB
+webserver     v1        c478026ed748   43 minutes ago   205MB
+hellojs       latest    11f9f4850f5f   54 minutes ago   909MB
+node          latest    a946ef2b4780   14 hours ago     1.1GB
+nginx         latest    bc649bab30d1   7 days ago       187MB
+hello-world   latest    9c7a54a9a43c   5 months ago     13.3kB
+
+*이미지 삭제는 docker rmi 이미지id 이다.
+root@ubuntu-1:~/webserver# docker run -d -p 9321:80 myweb:ubuntu
+60f74175c9ce15f4500e1cc6abb1ad533a51022a16e3cbfd4a4e0973c9a27efc  
+
+이제 http://localhost:9321/ 을 웹에 입력해서 확인해보면 (:9321은 임의의 포트를 설정한것)
+hello dockerfile  이 출력된다.
+
+root@ubuntu-1:~/webserver# curl -l http://localhost:9321	curl 명령어로 불러오면
+hello dockerfile			똑같이 도출됨.
+
+>만들어놓은 컨테이너를 배포
+로그인하고 이미지를 확인해본다
+root@ubuntu-1:~/webserver# docker images
+root@ubuntu-1:~/webserver# docker tag myweb:ubuntu mozzidocker/myweb
+root@ubuntu-1:~/webserver# docker push mozzidocker/myweb
+: docker hub의 개인 repository 에 배포할 때에는 반드시 이미지 이름에 Tag(ID)가 붙어있어야 함.
+Using default tag: latest
+The push refers to repository [docker.io/mozzidocker/myweb]
+3e13cb364a82: Pushed 
+df8a156a6e00: Pushed 
+6c3e7df31590: Mounted from library/ubuntu 
+latest: digest: sha256:4c2fc6a54f0379f5ac96827e2897469eb879455cc91c60bf317638e34bd8b66f size: 948
+ 
+이렇게 나의 도커 레포지토리에 myweb이 생겼고, 이미지가 그 안에 들어있는 것을 알수있다.
+
