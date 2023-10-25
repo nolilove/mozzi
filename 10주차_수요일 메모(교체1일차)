@@ -1,0 +1,310 @@
+23 10 25 리눅스 (10주차_강사님 교체 1일차)
+<개요>
+오전= mv , grep , 정규표현식, 
+오후= /etc/fstab , 디스크에 대해서 다시 알아보는 시간을 가졌음
+마운트를 완료한경우는 다시 systemctl을 리로드하거나, 부팅을 다시 해야하며 
+설정이나 마운트 상 오타가 없는 지 확인후에 재부팅을 해야한다.
+오후-1 = 만약 설정오류로 부팅이 안된다 할때를 가정하고(fstab을 읽어들이지못할때) 실습함.
+>디스크관련 문제 발생 및 트러블슈팅 
+-유효하지 않은 장치파일 및 UUID 지정 시
+-존재하지 않는 마운트 포인트 지정 시 
+-파일 시스템 타입이 올바르지 않은 경우(헥사코드 등)
+-잘못된 마운트 옵션을 지정하는 경우
+
+20231025_과제1_홍길동 (리눅스 기초 테스트)
+1. /etc/ 디렉토리를 복사해서 /root/dir1에 넣으세요.
+2. /root/dir1/etc/passwd 파일을 /root/passwd1으로 이름을 바꾸어 이동시키시오.
+3. /root/passwd1 파일을 복사해서 /tmp에 이름 그대로 넣으시오.
+4. /tmp/passwd1 을 /root/dir1/etc/passwd 로 이름을 바꾸어 이동시키시오.
+5. /root/dir1/etc/안의 group 파일과 shadow 파일을 삭제하시오.
+6. /root/dir1/etc/sysconfig 디렉토리를 삭제하시오.
+#####풀이#####
+과제1
+mkdir /root/dir1
+cp -r /etc/ /root/dir1
+2.
+mv /root/dir1/etc/passwd /root/passwd1
+3.
+cp /root/passwd1 /tmp
+4.
+mv /tmp/passwd1 /root/dir1/etc/passwd
+5.
+rm -rvf /root/dir1/etc/group
+rm -rvf /root/dir1/etc/shadow
+(rm 도 맞다)
+6.
+rm -rvf /root/dir1/etc/sysconfig 
+(rm -rf 도 맞다)
+
+과제2
+1. /etc/passwd 파일에서 root가 포함된 라인을 검색하세요.
+2. /etc/passwd 파일에서 라인의 맨 끝이 nologin으로 끝나는 라인을 검색하세요.
+3. /etc/passwd 파일에서 p로 시작하고 x로(p와 x 사이에 5개의 문자가 있음.) 끝나는 단어가 포함된 라인을 검색하세요.
+4. /etc/passwd 파일에서 nologin이 포함된 라인을 제외하고 출력하세요.
+5. 전화번호의 패턴을 매치하는 표준정규표현식을 이용해서 작성해보세요. (010-XXXX-XXXX)
+##풀이###
+[root@server-1 ~]# cat /etc/passwd 로 확인할 수 있는데,
+1. 
+[root@server-1 ~]# cd /etc
+[root@server-1 etc]# grep -n "root" passwd
+1:root:x:0:0:root:/root:/bin/bash
+10:operator:x:11:0:operator:/root:/sbin/nologin
+2.  /bin/bash 는 사용자의 기본 쉘(bash쉘) 을 나타내는 필드이다.
+[root@server-1 etc]# grep ".*nologin" passwd
+>답 grep 'nologin$' /etc/passwd 
+3. (정규표현식이 들어감)
+[root@server-1 etc]# grep "p.....x" passwd
+tcpdump:x:72:72::/:/sbin/nologin
+apache:x:48:48:Apache:/usr/share/httpd:/sbin/nologin
+
+*정규표현식이란
+>찾고자 하는 문자열에 대해 조건을 지정하기 위한 표현식.(메타캐릭터, 메타문자)
+ . (dot) :'임의의 한 문자' 를 의미. 
+ ^(carrot) : '행의 맨 처음' 을 의미.
+ $(dollar) : '행의 맨 끝' 을 의미.
+ [ ](braket) : '어떤 범위에 해당하는 조건만 표현' 하는 것을 표현 ex) [a-zA-Z]영문자 대소문자 		[a-z]영문자 소문자 [A-Z]영문자 대문자 [0-9]숫자만 
+
+4.
+[root@server-1 etc]# grep -v 'nologin' passwd
+root:x:0:0:root:/root:/bin/bash
+sync:x:5:0:sync:/sbin:/bin/sync
+shutdown:x:6:0:shutdown:/sbin:/sbin/shutdown
+halt:x:7:0:halt:/sbin:/sbin/halt
+student:x:1000:1000:student:/home/student:/bin/bash
+
+5. 전화번호 표준정규표현식 작성하기.
+[root@server-1 etc]# vim test.txt
+[root@server-1 etc]# cat test.txt 
+010-3275-5100
+010-5444-6644
+010-7532-5412
+010-8392-6748
+qwer
+asdf
+zxcv
+df
+maple
+lostark
+bnb
+여기서 번호로된 부분만 뽑아내려고 한다.
+
+[root@server-1 etc]# grep "010-[0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]" test.txt 
+010-3275-5100
+010-5444-6644
+010-7532-5412
+010-8392-6748
+이렇게 하면 된다.
+중괄호로 지정해줄수도있는데, [root@server-1 etc]# grep "010-[0-9]{4}-[0-9]{4}" test.txt 
+처럼 {}중괄호로 묶어서 그안에 숫자(배수)를 입력하면된다.  확장된것이므로 -E를 붙임.
+[root@server-1 etc]# grep -E '010-[0-9]{4}-[0-9]{4}' test.txt   
+
+과제3  <파티셔닝, 스왑 문제>
+우선 이 문제를 풀기위해서는 시스템에 디스크를 추가하여야 한다(가상머신에 실제로 추가)
+기본적인 원칙은, 하드웨어를 추가할땐 시스템을 종료하고 확장하는것이다.(온프레미스=default)
+핫플러그인이나 핫스왑을 지원하면 끄지않고도 가능한 경우가 있다.
+이후 파티셔닝(추가한 디스크에 할당)을 하는 것. 파일시스템 에 따라서, 디스크를 포매팅을 한다.
+이후 논리적으로 연결해주는 마운트를 해야 한다. 마운트를 명령어로 할 수도 있으며, 파일에다가 저장하여 영구적으로 연결할 수도 있다.
+
+fdisk /dev/sdb 가 의미하는것은 인식된 '장치 디바이스'를 말하는것(dev)
+잘인식되었는가?를 확인하려면 cd /dev 로가서 그 목록들을 확인하는것
+[root@server-1 ~]# ls -l /dev/sd? 
+brw-rw----. 1 root disk 8,  0 10월 25 10:20 /dev/sda
+brw-rw----. 1 root disk 8, 16 10월 25 10:28 /dev/sdb
+brw-rw---- 는 권한을 나타내는데, b는 장치파일의 종류이다. (block device)=disk
+
+[root@server-1 ~]# fdisk /dev/sdb	로 파티셔닝을 시작해본다.
+새로 생성할 것이므로 n    /삭제는 d, 타입변경은 t, 목록은 p,         결과적으로 저장은 w이다.
+p 3개, e 1개 이다.
+>n p 엔터 엔터 +5G 
+>n p 엔터 엔터 +5G
+>n p 엔터 엔터 +5G
+>n e 엔터 엔터 +1G
+>p
+>w
+를 하면,
+Device     Boot    Start      End  Sectors Size Id Type
+/dev/sdb1           2048 10487807 10485760   5G 83 Linux
+/dev/sdb2       10487808 20973567 10485760   5G 83 Linux
+/dev/sdb3       20973568 31459327 10485760   5G 83 Linux
+/dev/sdb4       31459328 33556479  2097152   1G  5 Extended
+
+>e에 +1G만 할당하면 뭐 쓸수도 있긴한데, 20기가 중 5기가3개를 줘서 5기가만 남은상태에서
+1G만 할당된다면 나머지4기가가 사용불가해서 낭비된다. 그래서 나머지를 다 잡는것이 맞다.
+따라서 n e 엔터 엔터 엔터를 하여야 한다.
+하위에 로지컬 파티션 1G를 만들어야 함
+>n 엔터 +1G 
+를 하면 된다.
+Device     Boot    Start      End  Sectors Size Id Type
+/dev/sdb1           2048 10487807 10485760   5G 83 Linux
+/dev/sdb2       10487808 20973567 10485760   5G 83 Linux
+/dev/sdb3       20973568 31459327 10485760   5G 83 Linux
+/dev/sdb4       31459328 41943039 10483712   5G  5 Extended
+/dev/sdb5       31461376 33558527  2097152   1G 83 Linux
+
+>t 로 타입 변경
+>5
+>L
+>82 linux swap /so 로 되어있는 부분 (82)
+>p 를 하면 타입이 지정된다.
+>w
+Device     Boot    Start      End  Sectors Size Id Type
+/dev/sdb1           2048 10487807 10485760   5G 83 Linux
+/dev/sdb2       10487808 20973567 10485760   5G 83 Linux
+/dev/sdb3       20973568 31459327 10485760   5G 83 Linux
+/dev/sdb4       31459328 41943039 10483712   5G  5 Extended
+/dev/sdb5       31461376 33558527  2097152   1G 82 Linux swap / Solaris
+
+[root@localhost ~]# partprobe		로 파티션을 재부팅없이 인식한다.
+이제 영구 마운트를 하려고한다.
+[root@server-1 ~]# mkfs -t FSTYPE PARTITION_DEVICE
+[root@server-1 ~]# mkfs.FSTYPE PARTITION_DEVICE 등으로 파일시스템을 초기화 할 수 있음.
+[root@server-1 ~]# mkfs -t ext3 /dev/sdb1
+[root@server-1 ~]# mkfs -t ext3 /dev/sdb2
+[root@server-1 ~]# mkfs -t ext4 /dev/sdb3 		로 초기화하자.
+
+[root@server-1 ~]# mount -t FSTYPE DEVICE_FILE MOUNT_POINT ^C 로 마운트할때이다.
+[root@server-1 work]# mkdir /work/disk  a, b, c
+
+vim으로 /etc/fstab을 열고 (영구마운트 하는 법) 
+/dev/mapper/rl-root     /                       xfs     defaults        0 0
+UUID=65f46270-8a75-4025-96e9-511c431baeaf /boot                   xfs     defaults        0 0
+/dev/mapper/rl-swap     none                    swap    defaults        0 0
+/dev/sdb1       /work/diska     ext3    defaults        0 0
+/dev/sdb2       /work/diskb     ext3    defaults        0 0 
+/dev/sdb3       /work/diskc     ext4    defaults        0 0 		로 수정해준다.
+> systemctl daemon-reload 로 재시작.
+[root@server-1 ~]# mount -t ext3 /dev/sdb2 /work/diskb
+[root@server-1 ~]# mount -t ext4 /dev/sdb3 /work/diskc		
+[root@server-1 ~]# systemctl  daemon-reload 
+>mount 를 입력하면  지금까지 마운트된 것들의 목록이 드러난다. 
+/dev/sdb1 on /work/diska type ext3 (rw,relatime,seclabel)
+/dev/sdb2 on /work/diskb type ext3 (rw,relatime,seclabel)
+/dev/sdb3 on /work/diskc type ext4 (rw,relatime,seclabel)
+
+각각 마운트된폴더를 까보면
+
+[root@server-1 ~]# cd /work/diskc/
+[root@server-1 diskc]# ll
+합계 16
+drwx------. 2 root root 16384 10월 25 12:48 lost+found
+[root@server-1 diskc]# vim lost+found/
+" ============================================================================
+" Netrw Directory Listing                                        (netrw v170)
+"   /work/diskc/lost+found
+"   Sorted by      name
+"   Sort sequence: [\/]$,\<core\%(\.\d\+\)\=\>,\.h$,\.c$,\.cpp$,\~\=\*$,*,\.o$,\.obj$,\.info$,\
+"   Quick Help: <F1>:help  -:go up dir  D:delete  R:rename  s:sort-by  x:special
+" ==============================================================================
+../                                                                                            
+./
+대충 이런것이 나타난다.  
+lost+found 란 , 저널링 파일시스템(해당 파일시스템이 디스크에 어떤 데이터를 읽고쓰고하다가 시스템에 문제가 있어서 강제로 재부팅이 되던가 할때 실시간으로 데이터가 저장되지 않는데, 그것을 복구하기 위한 경로라고 보면 된다)
+[root@server-1 diskc]# cd /work/diska
+[root@server-1 diska]# mkdir diskadir1
+mkdir: created directory 'diskadir1'
+[root@server-1 diska]# touch diskafile1
+[root@server-1 diska]# echo "/dev/sdb1 file" > diskafile1
+/dev/sdb1 file
+
+마운트 연결해제를 위해 umount 를 쓰는데,
+# umount DEVICE_FILE 
+or 
+# umount MOUNT_POINT 두가지 방법이 있다.
+
+1)   mount |grep /dev/sd를 치면
+[root@server-1 ~]# mount | grep /dev/sd
+/dev/sda1 on /boot type xfs (rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota)
+/dev/sdb1 on /work/diska type ext3 (rw,relatime,seclabel)
+/dev/sdb2 on /work/diskb type ext3 (rw,relatime,seclabel)
+/dev/sdb3 on /work/diskc type ext4 (rw,relatime,seclabel)
+
+[root@server-1 ~]# umount /dev/sdb1		언마운트1
+[root@server-1 ~]# mount | grep /dev/sd
+/dev/sda1 on /boot type xfs (rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota)
+/dev/sdb2 on /work/diskb type ext3 (rw,relatime,seclabel)
+/dev/sdb3 on /work/diskc type ext4 (rw,relatime,seclabel)
+
+[root@server-1 ~]# umount /dev/sdb2		언마운트2
+[root@server-1 ~]# umount /work/diskc 	언마운트3 등을 하면되겠다.
+
+2. 로지컬 파티션> 스왑영역으로 초기화 + 영구마운트
+* 스왑영역(Memory_가상메모리)에 해당하는부분. 윈도우에서는 페이징sys가 있다.
+
+[root@server-1 ~]# fdisk /dev/sdb -l		를 입력하면,
+Device     Boot    Start      End  Sectors Size Id Type
+/dev/sdb1           2048 10487807 10485760   5G 83 Linux
+/dev/sdb2       10487808 20973567 10485760   5G 83 Linux
+/dev/sdb3       20973568 31459327 10485760   5G 83 Linux
+/dev/sdb4       31459328 41943039 10483712   5G  5 Extended
+/dev/sdb5       31461376 33558527  2097152   1G 82 Linux swap / Solaris
+
+[root@server-1 ~]# mkswap /dev/sdb5			스왑영역으로 초기화하기
+Setting up swapspace version 1, size = 1024 MiB (1073737728 bytes)
+no label, UUID=41a78e8a-a8a7-4e23-b13c-1d4c00196b34
+
+[root@server-1 ~]# free	free 명령어는 메모리 사용량과 남은 용량들을 알려준다.
+      total        used        free      shared  buff/cache   available
+Mem:         3722200     1781908     1391464       23916      830424     1940292
+Swap:        4116476           0     4116476
+*mem:물리적 메모리 / swap:가상 메모리 에 해당한다.
+free -h 옵션을 붙이면 간결하게 표현됨
+[root@server-1 ~]# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.7Gi       1.3Gi        23Mi       810Mi       1.8Gi
+Swap:          3.9Gi          0B       3.9Gi
+
+[root@server-1 ~]# swapon /dev/sdb5		swapon명령어로 해당폴더를 등록하고
+[root@server-1 ~]# swapon -s			-s는 요약(summary)하는 옵션이다.
+Filename				Type		Size		Used		Priority
+/dev/dm-1                               partition	4116476		0		-2
+/dev/sdb5                               partition	1048572		0		-3
+[root@server-1 ~]# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.7Gi       1.3Gi        23Mi       810Mi       1.8Gi
+Swap:          4.9Gi          0B       4.9Gi			살짝 올라갔다.
+
+vim /etc/fstab으로 들어가서 수정해야한다. (영구 마운트)
+/dev/sdb1       /work/diska     ext3    defaults        0 0
+/dev/sdb2       /work/diskb     ext3    defaults        0 0 
+/dev/sdb3       /work/diskc     ext4    defaults        0 0 
+/dev/sdb5       swap            swap    defaults        0 0	을 입력하고 저장.
+
+[root@server-1 ~]# swapon -s			를 입력하면
+Filename				Type		Size		Used		Priority
+/dev/dm-1                               partition	4116476		0		-2
+/dev/sdb5                               partition	1048572		0		-3
+[root@server-1 ~]# free -h			다음으로 메모리확인하면
+               total        used        free      shared  buff/cache   available
+Mem:           3.5Gi       1.7Gi       1.4Gi        23Mi       787Mi       1.9Gi
+Swap:          4.9Gi          0B       4.9Gi
+이렇게 나온것을 확인할 수 있다.
+
+#만약, 시스템 구성오류로 인해서 재부팅이 안된다?를 가정해본다.
+유효하지 않은 장치파일 및 UUID 지정 시
+존재하지 않는 마운트 포인트 지정 시 
+파일 시스템 타입이 올바르지 않은 경우(헥사코드 등)
+잘못된 마운트 옵션을 지정하는 경우
+
+유효하지 않은 장치파일 및 UUID 지정 시
+존재하지 않는 마운트 포인트 지정 시 
+파일 시스템 타입이 올바르지 않은 경우(헥사코드 등)
+잘못된 마운트 옵션을 지정하는 경우
+
+/dev/sdc        /work/diska     ext3    defaults        0 0
+/dev/sdb2       /work/diskb1     ext3    defaults        0 0 
+/dev/sdb3       /work/diskc     ext2    default        0 0 
+/dev/sdb5       swap            swap    defaults        0 0 		처럼 일부러 오류발생시켜본다.
+ 
+아니나다를까 이렇게 등장
+루트비밀번호를 입력하면 루트로 들어간다
+ 
+루트가 권한이 있는지 mount 명령어로 확인해주고,
+/etc/fstab을 열어본다.
+ 
+대충 이쁘게 틀린부분들이 있으면 수정을해서 바로 동작하면 괜찮으나, 일단 부팅이라도 되게 하기위해서는 어떻게 해야할까
+마운트 추가했던 dev/sdb에 모두 주석처리를해본다.
+ 
+이러면 부팅 자체가 가능해지고, cmd로 들어가서 fstab 수정을 시도하는것이 현명.
+
+
+전통적인 인프라 구성방법> 온프레미스에서 클라우드(인스턴스, 가상머신 )등으로 넘어가는 운영과 방식에서의 차이를 이해하고, 클라우드에서의 인프라와 서비스 구축하기가 목표임.
