@@ -1,0 +1,287 @@
+231026 10주차_목요일 메모(ver2. 2일차)
+
+<Synopsis _ 개요>
+다음주는 원래 Ansible을 나갈 plan이 계획되어있었으나, 오늘부터 나가는 것은 리눅스 전반을 다시 돌아보고 기초를 확실히 하고 가는 방법을 택해서 진행하도록 할 것
+오전- 교육의 목표를 복기함, 방향 재설정
+	vritual host , 인프라 구축하는데 필요한 서비스 등을 다시 보는 시간을 가짐.
+	각종 명령어들 찾아보기
+오후- find, locate 등 명령어
+	4:30~이후부터는 자습류로 복습등을 해보는것 
+##################################################################
+과목명							핵심내용			비고
+마이크로 아키텍처 인스턴스 운용		Linux OS, 기본 명령어 및 설정방법
+마이크로 아키텍처 인프라 구성			서비스 구축
+Terraform for 인프라 자동화			IaC (코드형 인프라 구축)
+데스크톱 가상화 환경을위한 윈도우서버		Window Server 기본 사용법, 서비스 구축
+						ActiveDirectoryDomain구축 및 운영
+온프레미스 네트워크 인프라 기술		네트워크 기초이론, packet tracer(RW,SW)
+가상화 및 클라우드 기술			'서버'의 가상화_가상머신등 도구(KVM, VMware,
+						RHV,ovirt)
+Ansible로 구성하는 코드인프라 시스템		IaC 도구에 속함.ANsible_CI/CD 등 효율적 서버
+						관리, 구성 자동화
+클라우드 네이티브 인프라 설계 및 운영		클라우드 (AWS,Azure)
+쿠버네티스 for MicroService Architect(MSA)	Docker, K8S_컨테이너 오케스트레이션, 
+						컨테이너 기술(쿠버네티스는 도커보다 어려움)
+멀티 리전 &하이브리드 클라우드 기반 MSA 인프라 구축 _ 프로젝트 
+프로그래밍 인프라 기반 배포 자동화 클라우드 환경 구축 _ 프로젝트 
+#################################################################
+Linux , WindowServer, Ansible, K8S, AWS, Azure, Docker
+
+#Unix/Linux 기본 환경
+-레드햇 계열 배포판 VirtualMachine이 많은 편
+공공기관, 여러 기관은 비교적 legacy한 Unix 기반 운영체제를 다수 사용함_도입이 먼저됐기 때문
+ctrl alt f1 = gui
+cltr alt f2 = cmd
+ctrl alt f3~ =console inter face (CLI)
+-기본적으로 CLI 를 기본으로 하는점
+CLI를 기반으로하는 서버운용능력을 갖추어야하는 것이 좋다. 리소스들을 최대한 절약해서 사용하는 경우가 많기도 하며, 텍스트 편집기 (VI에디터) 사용방법을 알고, 익숙해질 필요가 있다.
+Shell : 사용자가 application을 실행하고자할 때 명령어를 해석해서 필요한경우 커널에 요청해서 리소스에 접근하는 것을 지원하는 도구.(interpreter)_linux의 경우 기본 bash shell이 있음
+[root@server-1 ~]# COMMAND [OPTION]... [ARGUMENT]... 의 형태로 입력을 하게 된다
+... >한개가 올 수도 있으나 여러개가 올 수도 있다는 것을 의미함.
+[root@server-1 ~]# man ls    의 경우 MANNUAL 로 설명서에 해당한다. 예는 ls명령어의 매뉴얼.
+옵션에서 COMMAND --help의 형태로도 설명서를 불러낼 수 있다.
+
+현재 위치하는 디렉터리를 '작업 디렉터리'라고 한다. [root@server-1 ~]#  에 해당하고
+이를 확인하는게 pwd 명령어
+UNIX와 LINUX의 차이는 절대경로와 상대경로인데, 
+-절대경로는/로 시작해서 경로해서 파일이 위치하는곳까지 고정되어있는것을 말하며  
+-상대경로는 현재 작업디렉토리부터 원하는 파일이 있을때 찾아가는 상대적인 경로를 말한다.
+#절대경로
+[root@server-1 ~]# pwd
+/root					에서 
+[root@server-1 ~]# cd /var/log/로 들어가는것은 절대경로로 들어가는것이며
+[root@server-1 ~]# cd -는 이전디렉토리로 가는것
+
+#상대경로
+[root@server-1 ~]# ls -a 여기서 a는 숨김파일을 모두 알려주는 옵션이다.
+최상위 디렉토리를 가기위해선 cd../
+상대경로는 [root@server-1 /]# cd ../var/log/   로가는것을 알 수 있다.
+
+#CAT 명령어
+-파일의 전체 내용을 보는 cat 명령어
+#Head / Tail 명령어
+-파일의 첫부분만 보는 명령어 head /  마지막부분만 tail
+기본적으로 10줄을 보여준다.
+[root@server-1 log]# head -n 5 /var/log/messages	는 다섯줄을 보여준다(-n 숫자 옵션)
+[root@server-1 log]# tail -n 3 /var/log/messages	는 세줄을 보여준다
+
+#follow 옵션
+로그를 계속 보고싶다(실시간 확인)
+[root@server-1 ~]# tail -f /var/log/messages
+
+#su - 
+su - 기본은 루트로 이동하며 su - user 는 user계정으로 이동하는방법이다.
+
+#more 명령어
+[root@server-1 ~]# more /etc/ssh/sshd_config	를 하면 
+한 페이지를 나타내는데 
+-스페이스나 위아래 방향키로 더 페이지단위로 읽을수 있다.
+-다음줄을 보고싶은경우 엔터키로 한줄씩 볼 수 있다.
+#less 명령어
+[root@server-1 ~]# less /etc/ssh/sshd_config
+똑같이 한 화면 단위로 보이게 되며 차이점은 화면을 보여주는방식에 있다.
+more은 페이지 맨 끝으로 이동시 명령어가 종료되며 쉘로 이동하나
+less의 경우 쉘로 끝나지 않고 (end)라고 표현만 되니 q나 ctrl c로 나오면 된다.
+
+#wc 명령어
+텍스트 내용을 보는 명령어는 아니나, 텍스트파일이 단어가 몇개, 행이 몇개인지 등을 볼 수 있다.
+       wc [OPTION]... [FILE]... 형태이며 
+[root@server-1 ~]# wc /etc/ssh/sshd_config 			
+ 130  456 3667 /etc/ssh/sshd_config	
+이처럼 나타나는데,
+[ 행 ] [ 단어 수 ] [ 해당 file의 bytes 갯수 ] 순서로 나타내준다.
+ws -l : 행  / ws -w : 단어 수 / ws -c : bytes 수 _
+-글자 한글자는 몇바이트일까? >> 인코딩방식에 차이가 있으나
+영문기준 한글자 당 1byte_8bit (ASCII extended) 
+한글&한자&일어 기준 한글자 당 2byte_16bit 를 가진다(로케일 설정필요, UNICODE)
+wc -m : 글자 갯수
+[root@server-1 ~]# head /var/log/messages | wc -l
+10								처럼 응용이 가능하다.
+
+#ls -al,  
+파일의 종류를 확인 할 수 있는 명령어
+drwxr-xr-x. 135 root root     8192   를 예시로들면
+d는 파일의 종류/ r~x.까지는 권한 / 135은 하드링크의 개수 / root는 파일의 소유자 /
+다음root는 파일의 소유 그룹/ 8192는 파일의 용량을 가리킨다.
+-파일의 종류
+일반파일: -
+디렉터리: d
+(심볼릭)링크파일 : l 
+블록 장치 파일 : b
+캐릭터 장치 파일 : c    (뭘 의미하냐면, 키보드장치 등 문자를 입력,처리해주는 콘솔 장치)
+소켓 장치 파일 : s  (TCP 통신을 처리해주는 소켓 장치) 
+
+#file 명령어 
+파일이 어떤 파일인지 설명과함께 나타내준다. 상당히 중요한 명령어에 해당한다.
+[root@server-1 /]# file /etc/hosts 
+/etc/hosts: ASCII text
+[root@server-1 /]# file /usr/bin/cat
+/usr/bin/cat: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=30140185ffe0921c646e65d1e67f6c7619d23a3d, for GNU/Linux 3.2.0, stripped
+[root@server-1 /]# file /dev/sda
+/dev/sda: block special (8/0)
+[root@server-1 /]# file /test/my_useradd.sh 
+/test/my_useradd.sh: Bourne-Again shell script, ASCII text executable
+
+#which 명령어
+which cat 이면 명령어가 존재하는 위치를 알려준다.
+[root@server-1 /]# which cat
+/usr/bin/cat
+[root@server-1 /]# ls -l /usr/bin/cat
+-rwxr-xr-x. 1 root root 36312  4월 24  2023 /usr/bin/cat 
+
+#find 명령어
+이파일이 어디있는지 위치를 찾아준다.
+[root@server-1 /]# find / -name *.jpg
+포맷(확장자)를 알려주게된다.
+
+#grep 명령어
+[root@server-1 /]# grep ^root /etc/passwd 를 붙이면
+root:x:0:0:root:/root:/bin/bash  루트 사용자에 해단 부분만 뽑아낼 수 있다.
+
+#ps 명령어
+-현재 실행중인 프로세스의 목록을 보는 명령어이며
+[root@server-1 /]# ps
+    PID TTY          TIME CMD
+   6550 pts/0    00:00:00 bash
+   8915 pts/0    00:00:00 su
+   8918 pts/0    00:00:00 bash
+  10084 pts/0    00:00:00 ps
+전체 실행중인 프로세스 목록을 보는 명령어는 
+[root@server-1 /]# ps aux   이다.(UNIX 기준)
+[root@server-1 /]# ps -ef   이다.(Linux 기준)
+만약 bash .sh를 실행하는 프로세스 목록을 보고싶다면
+[root@server-1 /]# ps -ef |grep bash
+root        6550    6467  0 09:14 pts/0    00:00:00 bash
+root        8918    8915  0 10:54 pts/0    00:00:00 -bash
+root       10146    8918  0 12:32 pts/0    00:00:00 grep --color=auto bash  이렇게 볼 수있음.
+바로위에서 grep부분만 빼고싶다면? (응용예제)
+[root@server-1 /]# ps -ef | grep bash | grep -v 'grep' 
+root        6550    6467  0 09:14 pts/0    00:00:00 bash
+root        8918    8915  0 10:54 pts/0    00:00:00 -bash
+>바로 | 를 한번 더 필터링해서 검색제외를 해주는것.
+
+그렙 명령어 옵션 중에서 더 알만한 것이 있는데,
+[root@server-1 /]# grep -B 1 Password /etc/ssh/sshd_config  
+-B 1 : 찾은 단어 위에 1줄 보여줌
+-A 3 : 찾은 단어 아래 3줄 보여줌
+-C 5 : 찾은 단어 위 아래 5줄씩을 보여준다.
+grep -n 은 n번 행에 있다는 것을 보여준다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#find 명령어 
+파일을 디렉터리에서 검색하는 명령어.
+[root@server-1 /]# find PATH EXPRESSION [ACTION]
+PATH : 디렉터리에서 파일을 검색할 기준 경로
+EXPRESSION : 파일 검색 조건
+ACTION :  파일 검색 후 동작 지정
+EXPRESSION
+-name FILENAME  :  특정 파일 이름을 지정
+-type TYPE             :  특정 파일 종류를 지정
+                                   파일 : f,  디렉터리 : d,  심볼릭 링크 : l
+ -user USER           :  파일의 소유자를 지정하여 검색
+ -group GROUP      :  파일의 소유 그룹을 지정하여 검색
+  -size  [+|- ]SIZE     : 파일의 용량을 지정하여 검색
+                                   b  :  bytes,   k  : KB,   M  :  MB,   G  : GB
+[root@server-1 /]# find / -name profile -o -name hosts
+-0 : or 의 의미를 가진다.
+
+[root@server-1 /]# find / -type f -size 50M    로 파일사이즈 50MB이상인 파일을 찾는다.
+[root@localhost ~]# find / -name hosts
+[root@localhost ~]# find / -name profile -type f
+[root@localhost ~]# find / -name profile -o -name hosts
+[root@localhost ~]# find / -user user
+[root@localhost ~]# find / -group wheel
+[root@localhost ~]# find / -size 1M
+[root@localhost ~]# find / -size +1M
+[root@localhost ~]# find / -size -1M
+[root@localhost ~]# find / -size +1M -size -10M   1메가이상 10메가 미만인 파일들을 찾는다
+
+ACTION
+-print                          :  파일 검색 결과를 출력 (기본 동작)
+-ls                               : 파일의 각 속성들을 필드로 정리해서 출력(ls -l 과 비슷)
+-exec  COMMAND {} \;  : 찾은 파일에 대해 지정된 명령어를 수행
+-ok COMMAND {} \;      :  -exec과 같이 추가 작업을 실행하지만 각 파일에 대해 작업을 수행할지 확인 후 작업 수행 (y or n을 각각 입력해줘야 한다.)    >마치 rm 과 rm -rvf 차이와 비슷.
+
+[root@server-1 work]# find /etc/ -name "*.conf"
+[root@server-1 ~]# find /etc/ -name "*.conf" -exec cp {} /work/config/ \;
+[root@server-1 ~]# ls -l /work/config/  해보면     /work/config/폴더에 새로 추가되어있다.
+
+이제 ok옵션을 사용해보자
+[root@server-1 ~]# mkdir ~/testdir1
+mkdir: created directory '/root/testdir1'
+[root@server-1 ~]# touch ~/testdir1/test{a,b,c,d}      > test{a..d}해도된다. (연속적인경우)
+[root@server-1 ~]# ls -l ~/testdir1
+합계 0
+-rw-r--r--. 1 root root 0 10월 26 15:36 testa
+-rw-r--r--. 1 root root 0 10월 26 15:36 testb
+-rw-r--r--. 1 root root 0 10월 26 15:36 testc
+-rw-r--r--. 1 root root 0 10월 26 15:36 testd
+
+위의 소유그룹 root를 wheel로 바꿔보고자 한다.
+[root@server-1 ~]# find ~/testdir1/ -name "test?" -ok chgrp wheel {} \; 
+이후 각각 y 를 입력해준다
+< chgrp ... /root/testdir1/testa > ? y
+< chgrp ... /root/testdir1/testb > ? y
+< chgrp ... /root/testdir1/testc > ? y
+< chgrp ... /root/testdir1/testd > ? y
+[root@server-1 ~]# ls -l ~/testdir1
+합계 0
+-rw-r--r--. 1 root wheel 0 10월 26 15:36 testa
+-rw-r--r--. 1 root wheel 0 10월 26 15:36 testb
+-rw-r--r--. 1 root wheel 0 10월 26 15:36 testc
+-rw-r--r--. 1 root wheel 0 10월 26 15:36 testd
+
+[root@server-1 ~]# find /root/testdir1/ -name "test?" -print
+[root@localhost ~]# find /root/testdir1/ -name "test?" -ls
+   831980      0 -rw-r--r--   1 root     wheel           0 Oct 26 15:40 /root/testdir1/testa
+   831983      0 -rw-r--r--   1 root     wheel           0 Oct 26 15:40 /root/testdir1/testb
+   831984      0 -rw-r--r--   1 root     wheel           0 Oct 26 15:40 /root/testdir1/testc
+   831985      0 -rw-r--r--   1 root     wheel           0 Oct 26 15:40 /root/testdir1/testd
+
+[root@server-1 ~]# which COMMAND ^C
+[root@server-1 ~]# env |grep PATH
+PATH=/root/.local/bin:/root/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+
+#locate 명령어 _ 파일 색인 데이터베이스에서 파일을 검색하는 도구
+Usage: locate [OPTION]... [PATTERN]...  형태로 쓰인다.
+예시로는 .config 로 끝나는 파일을 찾아내는데 그 경로를 알려주는게 
+[root@server-1 ~]# locate *.config
+
+[root@server-1 ~]# locate login.defs
+/etc/login.defs
+/root/dir1/login.defs
+/root/dir1/etc/login.defs
+/usr/share/man/de/man5/login.defs.5.gz
+/usr/share/man/fr/man5/login.defs.5.gz
+/usr/share/man/it/man5/login.defs.5.gz
+/usr/share/man/ja/man5/login.defs.5.gz
+/usr/share/man/man5/login.defs.5.gz
+/usr/share/man/ru/man5/login.defs.5.gz
+/usr/share/man/zh_CN/man5/login.defs.5.gz
+/var/lib/docker/overlay2/5a83424757b59623df3f270d08761da0b770ec803f0fad24f89da2f83a84cac0/diff/etc/login.defs
+
+bash설정을 담고있는 파일을 검색하려면
+[root@server-1 ~]# locate .bashrc 
+/etc/skel/.bashrc
+/home/student/.bashrc
+/root/.bashrc
+/root/dir1/etc/skel/.bashrc
+/root/dir1/skel/.bashrc
+/var/lib/docker/overlay2/5a83424757b59623df3f270d08761da0b770ec803f0fad24f89da2f83a84cac0/diff/etc/skel/.bashrc
+/var/lib/docker/overlay2/5a83424757b59623df3f270d08761da0b770ec803f0fad24f89da2f83a84cac0/diff/root/.bashrc
+
+[root@server-1 ~]# locate -n 3 login.defs		맨앞 3개를 먼저 보여줄때 옵션
+/etc/login.defs
+/root/dir1/login.defs
+/root/dir1/etc/login.defs
+
+# VI editor 사용 _ 에디터, 커맨드, 익스텐디드 모드
+가장 기본이되는 모드는 커맨드모드에 해당. 
+이를 기준으로 다른 모드로 전환하게 된다.  command로 빠져나오는 것은 esc
+-Edit mode ( insert, replace )
+인서트: i 키부터 해서 다른키를 사용.( a, i , o/A, I, O 키 활용)
+
+-Command mode ( Ed>C : esc , Ex>C : esc )
+
+-Extended mode ( : 콜론으로 진입_일반 , / 슬래시로 진입_내용검색용 )
+
+-Visual mode( VIM에디터에 해당_마우스 드래그 등 기능이 가능. )
