@@ -1,0 +1,474 @@
+231027(금) llinux 메모
+
+<개요>
+오전- 전시간 과제문을 다시 복습한다
+Permission의 이해 및 사용 / 확장 퍼미션 
+오후- root에서 test1,test2유저를 useradd하고 실습하기위해서 /work/폴더를 이용해 /work/231027를 만들어서 실습함.
+  ACL ENTRY 
+
+###########################################################
+1. grep 명령어를 사용하여 /etc 디렉터리 하위의 파일에서 "HostKey" 내용이 포함된 파일 및 해당 내용을 검색하시오.
+2. /etc/login.defs 파일에서 "home"이 포함된 행을 대소문자 구별 없이 검색하시오.
+3. /etc/crontab 파일의 주석 행의 개수를 구하시오.
+4. /var/log/messages 파일에서 IP 주소가 포함된 행을 검색하시오.
+5. find 명령어를 사용하여 /var/log 디렉터리에서 파일 크기가 2MB 이상인 파일(디렉터리 제외)을 검색하시오.
+6. find 명령어를 사용하여 /work/contents/ 디렉터리에서 확장자가 "bak"인 파일을 찾고 해당 파일을 삭제하시오.
+    (1) /work/contents/ 디렉터리를 생성하시오.
+    (2) 위의 디렉터리에 다음 파일을 생성하시오.
+            - index.html
+            - test1.html
+            - index.html.bak
+            - test1.html.bak
+            - db.conn.php
+            - db.conn.php.bak
+        (3) /work/contents/ 디렉터리에서 확장자가 "bak"인 파일을 찾은 후 해당 파일을 삭제하시오.
+7. 시스템에서 파일의 소유자가 없는 파일을 찾아 파일의 소유자를 nobody로 지정하시오.
+
+풀이)
+1. grep -r 옵션을 사용/ recursive
+[root@server-1 ~]# grep -r "HostKey" /etc
+/etc/ssh/sshd_config:#HostKey /etc/ssh/ssh_host_rsa_key
+/etc/ssh/sshd_config:#HostKey /etc/ssh/ssh_host_ecdsa_key
+/etc/ssh/sshd_config:#HostKey /etc/ssh/ssh_host_ed25519_key
+/etc/ssh/ssh_config:#   StrictHostKeyChecking ask
+/etc/ssh/ssh_config:#   VisualHostKey no
+
+2. grep -i / ignore  OR 정규표현식으로 표현 
+[root@server-1 ~]# grep -i home /etc/login.defs 
+[root@server-1 ~]# grep [Hh][Oo][Mm][Ee] home /etc/login.defs 이렇게도 찾을 수 있다.
+
+3. 주석 행의 개수 (#)
+[root@server-1 ~]# grep '#' /etc/crontab  에 주석으로만 된것을 찾기위해서는
+[root@server-1 ~]# grep '^#' /etc/crontab
+# For details see man 4 crontabs
+# Example of job definition:
+# .---------------- minute (0 - 59)
+# |  .------------- hour (0 - 23)
+# |  |  .---------- day of month (1 - 31)
+# |  |  |  .------- month (1 - 12) OR jan,feb,mar,apr ...
+# |  |  |  |  .---- day of week (0 - 6) (Sunday=0 or 7) OR sun,mon,tue,wed,thu,fri,sat
+# |  |  |  |  |
+# *  *  *  *  * user-name  command to be executed
+>참고로 [^hH]의 경우에 쓰이는 ^는 마이너스(제외)의 옵션이므로 유의
+
+4. IP주소로 된 행 검색하기*** (확장 정규표현식에 해당함)
+[root@localhost ~]# grep -E '\b[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\b' /var/log/messages
+> \b    \b  (단어 구분자)
+> [0-9]{1,3}   : 중괄호에 있는것은 횟수에 해당한다.(1자리에서 3자리 수가 올 것을 의미)
+> . 닷은 임의의  글자가 온다는 메타문자인데, 메타문자의 기능을 없애(상쇄)하고 싶다면 메타문자 앞에 escape처리를 해야한다. \(백슬래시)를 붙여서 \. 로 표현.
+https://velog.io/@cha-suyeon/%EC%A0%95%EA%B7%9C-%ED%91%9C%ED%98%84%EC%8B%9D-%EB%A9%94%ED%83%80-%EB%AC%B8%EC%9E%90-A-Z-b-B 참조
+
+5. 2메가 넘는 파일 찾기
+[root@localhost ~]# find /var/log -size +2M -type f
+[root@localhost ~]# find /var/log -size +2M -not -type d
+[root@localhost ~]# find /var/log -size +2M ! -type d     형태로 사용가능 
+>!는 not의 의미이다.
+
+6. '.bak' 파일 삭제하기
+find /work/contents/ -name "*.bak" -exec rm -f {} \;   
+>exec 은 실행함수로 생각하면된다.
+
+7.
+[root@server-1 ~]# useradd testuser01
+[root@server-1 ~]# passwd testuser01      /test
+[root@server-1 ~]# su - testuser01 
+[testuser01@server-1 ~]$ touch /tmp/testuser01file1.txt
+[testuser01@server-1 ~]$ touch /tmp/testuser01file2.txt
+[testuser01@server-1 ~]$ mkdir /tmp/testuser01dir
+[testuser01@server-1 ~]$ exit
+로그아웃
+[root@server-1 ~]# userdel -r testuser01 
+[root@server-1 ~]# find / -nouser -o -nogroup
+find: ‘/proc/4788/task/4788/fd/6’: 그런 파일이나 디렉터리가 없습니다
+find: ‘/proc/4788/task/4788/fdinfo/6’: 그런 파일이나 디렉터리가 없습니다
+find: ‘/proc/4788/fd/5’: 그런 파일이나 디렉터리가 없습니다
+find: ‘/proc/4788/fdinfo/5’: 그런 파일이나 디렉터리가 없습니다
+/tmp/testuser01file1.txt
+/tmp/testuser01dir
+/tmp/testuser01file2.txt
+[root@server-1 ~]# find / -nouser -exec chown nobody {} \;
+find: ‘/proc/4807/task/4807/fd/6’: 그런 파일이나 디렉터리가 없습니다
+find: ‘/proc/4807/task/4807/fdinfo/6’: 그런 파일이나 디렉터리가 없습니다
+find: ‘/proc/4807/fd/5’: 그런 파일이나 디렉터리가 없습니다
+find: ‘/proc/4807/fdinfo/5’: 그런 파일이나 디렉터리가 없습니다
+
+[root@server-1 ~]# ls -l /tmp			로 확인하면
+drwxr-xr-x. 2 nobody 1001  6 10월 27 10:16 testuser01dir
+-rw-r--r--. 1 nobody 1001  0 10월 27 10:16 testuser01file1.txt
+-rw-r--r--. 1 nobody 1001  0 10월 27 10:16 testuser01file2.txt
+################################################################
+[user@localhost ~]$ ls -l /etc/passwd
+- r w -   r - -      r - - .      1 root root 2145 Oct 27 10:18 /etc/passwd
+ | user | group | other |		에 각각 해당하는 내용이다.
+r Read		4
+w Write		2
+x eXecute	1		
+r w - 를 예시로하면 옥텟과 똑같이 r: 2^2 / w: 2^1 / x: 2^0 으로 생각하면 된다.(8진수)
+
+ $ chmod  [OPTION]... PERMS   FILE 
+ $ chmod  [OPTION]... PERMS   DIRECTORY 
+
+8진수 표기법을 사용한 퍼미션 부여>
+$ chmod 664 = rw rw r		소유자와 소유그룹은 rw가능, 그외는 read만
+$ chmod 640 = rw r 		소유자는 rw가능, 소유그룹은 read, 그외는 deny
+$ chmod 777 = rwx rwx rwx    모두에게 권한을 풀어줌
+$ chmod 775 = rwx rwx rx
+$ chmod 755 = rwx rx rx
+
+심볼릭 기호 표기법을 사용한 퍼미션 부여>
+$ chmod  Who  What  Which  FILE
+
+$ chmod  u+rw  FILE
+
+소유자		 : u
+소유그룹	 : g
+기타사용자	 : o
+모든사용자 	 : a
+퍼미션 추가 :  +
+퍼미션 회수 :  -
+퍼미션 할당 :  =
+Read : r
+Write : w
+execute : x
+
+*파일과 디렉토리 의 권한에는 차이가 있다.
+파일: 어떤 데이터를 가지는 객체(object)
+디렉터리: 파일을 관리하는 목록을 가진 특별한 파일(파일의 한 종류)
+
+>파일
+Read: 파일 읽기(cat ... ) // Write : 파일 내용 쓰기  //Execute : 파일을 실행(run..shell, binary)
+
+>디렉터리
+Read: 디렉터리 내 파일 목록을 확인(ls 명령어)
+Write: 디렉터리 내 만들기와 삭제 
+Execute: 디렉터리 이동 및 접근 권한 (cp , mv 등)
+
+[root@server-1 ~]# mkdir /work/20231027
+[root@server-1 ~]# cd /work/20231027/
+[root@server-1 20231027]# pwd
+/work/20231027
+[root@server-1 20231027]# chmod 777 .    >>>>모든권한을 '이 디렉토리에' 부여하였음
+drwxrwxrwx. 2 root root 6 10월 27 11:20 .
+[root@server-1 20231027]# mkdir testdir1
+mkdir: created directory 'testdir1'
+[root@server-1 20231027]# cd testdir1
+[root@server-1 testdir1]# pwd
+/work/20231027/testdir1
+[root@server-1 testdir1]# ls -l
+합계 0
+-rw-r--r--. 1 root root 0 10월 27 11:24 rootfile1
+[root@server-1 testdir1]# cp /etc/hosts ./rootfile2
+[root@server-1 testdir1]# ll
+합계 4
+-rw-r--r--. 1 root root   0 10월 27 11:24 rootfile1
+-rw-r--r--. 1 root root 158 10월 27 11:24 rootfile2
+[root@server-1 testdir1]# chmod 400 rootfile2
+[root@server-1 testdir1]# cat rootfile2
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+[root@server-1 testdir1]# chmod 600 rootfile2
+[root@server-1 testdir1]# vim rootfile2
+[root@server-1 testdir1]# echo rootfile2
+rootfile2
+[root@server-1 testdir1]# echo "variety test" rootfile2
+variety test rootfile2
+[root@server-1 testdir1]# cat rootfile2
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+[root@server-1 testdir1]# echo "variety test" >  rootfile2
+[root@server-1 testdir1]# cat rootfile2
+variety test
+[root@server-1 testdir1]# ll
+[root@server-1 testdir1]# chmod 700 rootfile2
+[root@server-1 testdir1]# ls -l rootfile2
+-rwx------. 1 root root 13 10월 27 11:26 rootfile2
+[root@server-1 testdir1]# ./rootfile2 
+./rootfile2: 줄 1: variety: 명령어를 찾을 수 없음		>>입력했을때 명령어를해석해서 실행
+[root@server-1 testdir1]# echo "echo test" > rootfile2
+[root@server-1 testdir1]# ./rootfile2 
+test
+ 
+소유자 : 파일에 소유하는 사용자로 파일에 대한 전적인 권한을 가지는 사용자
+              일반적으로 파일을 생성하는 사용자
+소유그룹 : 파일을 소유하는 그룹으로 소유자 이외에 파일을 공동으로 
+관리할 수 있는 권한을 가진 그룹
+                  일반적으로 파일을 생성하는 사용자의 주그룹(Primary Group)으로 지정됨.
+파일의 소유자 변경
+chown [OPTION]... USER  FILE
+파일의 소유그룹 변경
+chown [OPTION]... :GROUP  FILE
+파일의 소유자, 소유그룹 동시에 변경
+chown [OPTION]... USER:GROUP  FILE
+파일 소유그룹 변경
+chgrp [OPTION]...  GROUP  FILE
+
+
+# -r (-R) 옵션
+recursive, 보통 -r 혹은 -R 로 동작하는 재귀 옵션은 리눅스 명령어를 해당 디렉토리 뿐만 아니라 포함된 하위 디렉토리 모두에 적용시키는 옵션이다.
+
+[root@server-1 testdir1]# chown student:student subdir1
+[root@server-1 testdir1]# ls -l
+drwxr-xr-x. 3 student student 69 10월 27 12:10 subdir1
+-rw-r--r--. 1 student wheel    0 10월 26 15:36 testa
+-rw-r--r--. 1 root    wheel    0 10월 26 15:36 testb
+-rw-r--r--. 1 root    wheel    0 10월 26 15:36 testc
+-rw-r--r--. 1 root    wheel    0 10월 26 15:36 testd
+
+#확장 퍼미션이란 
+drwxr-xr-x. 3 student student 69 10월 27 12:10 subdir1  의 경우처럼
+d / rwx / r-x / r-x 로 나뉜것이 보인다. 여기서 d 에 해당하는곳으로서
+확장된 퍼미션에 해당한다. 예를들면 755권한이였으면 4755 등..
+SetUID	 (4)      file: 파일의 소유자 권한으로 파일을 실행
+		directory:  x
+SetGID	 (2)      file: 파일의 소유그룹의 권한으로 파일을 실행
+		directory:  SetGID를 지정한 디렉터리하위에 파일생성시, 해당디렉터리 소유그룹
+		으로 파일의 소유그룹이 변경됨.
+StickyBit (1)    file: x
+		directory : StickyBit 가 설정된 디렉터리에서 파일을 소유한 사용자만 해당 파일			을 삭제할 수 있도록 하는 확장권한 
+
+[root@server-1 testdir1]# which cat
+/usr/bin/cat
+[root@server-1 testdir1]# ls -l /usr/bin/cat
+-rwxr-xr-x. 1 root root 36312  4월 24  2023 /usr/bin/cat
+파일에 접근해본다.
+[root@server-1 testdir1]# ls -l /etc/hosts
+-rw-r--r--. 1 root root 158  6월 23  2020 /etc/hosts
+[root@server-1 testdir1]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+[root@server-1 testdir1]# ls -l /etc/shadow
+----------. 1 root root 1182 10월 27 10:19 /etc/shadow
+권한없는 shadow 파일에 접근하려한다. 일반 유저는 저기에 접근이 불가하다.
+
+[root@server-1 testdir1]# cp /usr/bin/cat ./cat1
+[root@server-1 testdir1]# cp /usr/bin/cat ./cat2
+[root@server-1 testdir1]# cp /usr/bin/cat ./cat3
+
+-UID를 설정해보자(setuid)
+[root@server-1 testdir1]# chmod 4755 cat2
+
+-rwxr-xr-x. 1 root    root    36312 10월 27 12:30 cat1
+-rwsr-xr-x. 1 root    root    36312 10월 27 12:30 cat2
+-rwxr-xr-x. 1 root    root    36312 10월 27 12:31 cat3
+>’소유자’에 변화가 생긴다
+-GID를 바꿔보자(setgid)
+[root@server-1 testdir1]# chmod 2755 ./cat3
+-rwxr-xr-x. 1 root    root    36312 10월 27 12:30 cat1
+-rwsr-xr-x. 1 root    root    36312 10월 27 12:30 cat2
+-rwxr-sr-x. 1 root    root    36312 10월 27 12:31 cat3
+>소유자의 ‘소유그룹’에 변화가 생긴다.
+-StickyBit를 설정해보자
+[root@server-1 testdir1]# mkdir testdir3
+mkdir: created directory 'testdir3'
+[root@server-1 testdir1]# mkdir testdir4
+mkdir: created directory 'testdir4'
+[root@server-1 testdir1]# chmod 777 testdir3 >>> 권한만 적용
+[root@server-1 testdir1]# chmod 1777 testdir4 >>>> StickyBit 적용
+[root@server-1 testdir1]# ls -al
+drwxrwxrwx.  2 root    root        6 10월 27 14:19 testdir3
+drwxrwxrwt.  2 root    root        6 10월 27 14:19 testdir4
+>스티키 비트가 설정된 디렉터리에서 ‘파일삭제시’ 파일 소유 사용자만 해당파일 삭제 할 수 있음
+testdir4의 권한 other 에서 rwT < t는 스티키비트가 설정된 것임을 알 수 있다.
+[root@server-1 testdir1]# touch testdir3/rootfile1
+[root@server-1 testdir1]# echo "rootfile1" > testdir3/rootfile1
+[root@server-1 testdir1]# touch testdir3/rootfile2
+[root@server-1 testdir1]# echo "rootfile2" > testdir3/rootfile2
+[root@server-1 testdir1]# touch testdir3/rootfile3
+[root@server-1 testdir1]# echo "rootfile2" > testdir3/rootfile3
+3개의 파일을 만들어봤다.
+[root@server-1 testdir1]# cp testdir3/rootfile1 testdir3/rootfile2 testdir3/rootfile3 testdir4/
+[root@server-1 testdir1]# ls -l testdir4
+합계 12
+-rw-r--r--. 1 root root 10 10월 27 14:28 rootfile1
+-rw-r--r--. 1 root root 10 10월 27 14:28 rootfile2
+-rw-r--r--. 1 root root 10 10월 27 14:28 rootfile3
+그대로 복사해준다.
+[root@server-1 testdir1]# useradd test1
+[root@server-1 testdir1]# passwd test1			/1111  새로 유저를 만들어본다.
+[root@server-1 testdir1]# useradd test2
+[root@server-1 testdir1]# passwd test2			/1111 새로 유저를 만들어본다2.
+
+#POSIX ACL이란 뭘까
+[root@server-1 ~]# ls -l /etc/hosts
+-rw-r--r--. 1 root root 158  6월 23  2020 /etc/hosts
+. 이 더 찍혀있는것이 바로 posix acl이 설치되어있는 시스템이다.
+-rw-r--r--. 1 root root    0 Oct 27 15:21 filea       <- POSIX ACL 미적용 파일
+-rw-rw-r--+ 1 root root    0 Oct 27 15:21 fileb     <- POSIX ACL 적용 파일
+
+POSIX ACL 명령어
+  getfacl – ACL 권한을 확인하는 명령어이다.
+  setfacl – ACL 권한을 설정하는 명령어이다.
+종류
+ 일반 POSIX ACL : 개별 파일 및 디렉터리에 적용하는 POSIX ACL
+ Default POSIX ACL : 광역(글로벌) 디렉터리에 적용하는 ACL로서 디렉터리 하위 파일에 ACL이 상속	된다.
+POSIX ACL 확인
+  $ getfacl  FILE
+     * mask 항목의 유무로 POSIX ACL 적용 파일 여부를 확인할 수 있음.
+       (mask 항목이 있으면 POSIX ACL이 적용된 파일임.)
+<ACL 설정옵션>
+   $ setfacl -m  ACL_ENTRY  FILE
+-m : acl 설정
+-x : acl 엔트리 삭제
+-b : acl 엔트리 초기화
+-k : default acl 설정 초기화
+
+=====
+ACL_ENTRY 작성 표기법
+소유자 | 소유 그룹 | 기타 사용자 부류로 설정이 가능하다.
+<일반 ACL> ACL ENTRY 표기법.
+소유자       -   u::PERMS
+소유그룹    -   g::PERMS
+기타사용자  -   o::PERMS
+특정사용자  -   u:USER:PERMS
+특정그룹    - 	 g:GROUP:PERMS
+
+# ACL ENTRY 설정, 부여>
+[root@server-1 testdir5]# setfacl -m ACL_ENTRY FILE 형태로
+[root@server-1 testdir5]# setfacl -m u:test1:rw rootfile1 하면
+[root@server-1 testdir5]# ls -l
+합계 8
+-rw-rw-r--+ 1 root root 158 10월 27 15:45 rootfile1
+-rw-r--r--. 1 root root 158 10월 27 15:46 rootfile2
+[root@server-1 testdir5]# getfacl rootfile1		로 확인해본다.
+# file: rootfile1
+# owner: root
+# group: root
+user::rw-
+user:test1:rw-
+group::r--
+mask::rw-
+other::r--
+
+소유자			|		소유그룹			|	기타사용자
+< 퍼미션 할당순서 >
+소유자 > 특정 사용자 > 소유 그룹 > 특정 그룹 > 기타 사용자
+설명: 우선 파일의 소유자인지 확인 / 아니라면  파일의 소유자가 아니라 특정 사용자인지 확인 /
+다음으로 소유 그룹인지 확인 / 아니라면 특정 그룹의 구성원인 지 확인 / 다음으로 모두 해당되지 않으면 / 기타사용자로 인식.
+
+# ACL ENTRY 제거 :특정 사용자에게 준 권한을 뺏기(지우기)>
+[root@server-1 testdir5]# setfacl -x ACL_ENTRY FILE 
+[root@server-1 testdir5]# setfacl -x u:test1 rootfile1
+[root@server-1 testdir5]# getfacl rootfile1 을 확인하면 test1유저의 엔트리가 지워진 것을 볼수있음
+#ACL MASK 값 설정
+[root@server-1 testdir5]# setfacl -m m::MASK
+MASK 값이 뭐냐?? > 마스크라고 하는것은  POSIX ACL에서 최대로 설정이 가능한 권한을 의미
+mask는 무엇인가를 가리는것인데, 서브넷마스크나 이런것들도 ip주소를 직접적으로 나타내는 것보다 길이를 지정하기 위한 값을 의미/ 여기서는 최대 설정할 수 있는 권한을 정의하는 의미로 쓰임.
+mask값보다 훨씬 높은 권한이 있다면 해당 권한은 지워지게(masking) 된다. / 할당 가능한 권한은 Effective로 나타나게 된다.
+
+[root@server-1 testdir5]# setfacl -m u:test1:rwx rootfile2
+[root@server-1 testdir5]# getfacl rootfile2
+# file: rootfile2
+# owner: root
+# group: root
+user::rw-
+user:test1:rwx
+group::r--
+mask::rwx
+other::r--
+
+[root@server-1 testdir5]# setfacl -m m::rw rootfile2		mask값을 수정하기
+[root@server-1 testdir5]# getfacl rootfile2
+# file: rootfile2
+# owner: root
+# group: root
+user::rw-
+user:test1:rwx			#effective:rw-
+group::r--
+mask::rw-
+other::r--
+>effective 권한이라 함은 최대로 할당가능한 권한이 rw- 라는 것을 의미한다. 따라서 할당가능한(rw-)권한을 넘어서는 부분은 자동으로 무시된다
+>>궁금증 권한 넘어서는 부분은 어떻게되는가 할당가능한부분까지 최대로 할당되는가/ 무시되는가?
+: 실제로 동작을 할때는 넘어서는권한을 사용할 수 없기에, 월권 이되면 가능한부분까지 최대로 할당된다. 정확하게는 사용가능한 권한까지.
+#설정했던 masking값 없애기>
+[root@server-1 testdir5]# setfacl -b FILE ^C
+[root@server-1 testdir5]# setfacl -b rootfile2
+[root@server-1 testdir5]# getfacl rootfile2
+# file: rootfile2
+# owner: root
+# group: root
+user::rw-
+group::r--
+other::r--
+
+
+과제문 
+1. "/work/file.txt" 파일을 생성한 후 파일의 소유자에게는 읽기 및 쓰기 권한을 부여하고, 그룹 및 기타 사용자는 파일을 접근할 수 없도록 퍼미션을 설정하시오.
+
+2. "/work/run.sh" 스크립트 파일을 생성한 후 소유자에게는 읽기, 쓰기, 실행 권한을 소유 그룹은 파일을 접근할 수 없고 기타 사용자에게는 읽기, 실행 권한을 부여하시오.
+
+3. "/work/images" 및 하위 파일에 대해 아래와 같이 퍼미션을 설정하시오.
+  (1) /work/images 디렉터리를 생성하고 다음 파일을 하위에 생성하시오.
+        bg01.jpg
+        bg02.jpg
+        screenshota.png
+ (2) 심볼릭 표기법을 사용하여 /work/images 디렉터리 내의 파일에 대해 모든 사용자의 실행 권한을 제거하시오.
+ (3) /work/images 디렉터리에 기타 사용자가 접근할 수 없도록 퍼미션을 설정하시오.
+
+4. /work/share-point 디렉터리를 생성하고 다음과 같이 권한을 설정하시오.
+  (1)  /work/share-point 디렉터리의 퍼미션은 600, 디렉터리의 소유자는 root, 디렉터리의 소유그룹은 test1 그룹으로 지정하시오.
+  (2) 해당 디렉터리는 test1 그룹의 구성원이 공동으로 관리할 수 있어야 하며 test1 그룹의 구성원이 다른 사용자가 만든 파일을 수정할 수 있어야 함.
+
+
+################풀이######################
+1.
+[root@server-1 work]# touch /work/file.txt
+[root@server-1 work]# ll
+합계 28
+-rw-r--r--. 1 root root     0 10월 27 17:02 file.txt
+[root@server-1 work]# chmod 600 file.txt
+[root@server-1 work]# ls -l
+-rw-------. 1 root root     0 10월 27 17:02 file.txt
+
+2.
+[root@server-1 work]# touch /work/run.sh
+[root@server-1 work]# chmod 703 run.sh 
+[root@server-1 work]# ls -l
+-rwx----wx. 1 root root     0 10월 27 17:04 run.sh
+
+
+3.
+[root@server-1 work]# mkdir /work/images/
+mkdir: created directory '/work/images/'
+[root@server-1 work]# touch bg0{1,2}.jpg  /work/images/ 
+[root@server-1 work]# ll
+-rw-r--r--. 1 root root     0 10월 27 17:07 bg01.jpg
+-rw-r--r--. 1 root root     0 10월 27 17:07 bg02.jpg
+[root@server-1 work]# touch screenshota.png  /work/images/ 
+[root@server-1 work]# ll
+-rw-r--r--. 1 root root     0 10월 27 17:07 bg01.jpg
+-rw-r--r--. 1 root root     0 10월 27 17:07 bg02.jpg
+-rw-r--r--. 1 root root     0 10월 27 17:07 screenshota.png
+[root@server-1 work]# mv bg01.jpg bg02.jpg screenshota.png  /work/images
+[root@server-1 work]# chmod a-x /work/images/
+[root@server-1 work]# chmod o-r /work/images/
+
+4.
+[root@server-1 work]# mkdir /work/share-point
+mkdir: created directory '/work/share-point'
+[root@server-1 work]# chmod 600 /work/share-point
+
+[root@server-1 work]# chown root /work/share-point/
+[root@server-1 work]# chown :test1 /work/share-point/
+[root@server-1 work]# ll
+drw-------. 2 root test1     6 10월 27 17:15 share-point
+[root@server-1 work]# chmod g+rwx /work/share-point/
+[root@server-1 work]# ll
+drw-rwx---. 2 root test1     6 10월 27 17:15 share-point
+
+[root@server-1 work]# setfacl -m g:test1:rwx /work/images/
+
+[root@server-1 work]# getfacl /work/images
+getfacl: Removing leading '/' from absolute path names
+# file: work/images
+# owner: root
+# group: root
+# flags: -s-
+user::-w-
+group::---
+group:test1:rwx
+mask::rwx
+other::---
+이상.
+
+
+
