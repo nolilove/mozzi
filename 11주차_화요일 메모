@@ -1,0 +1,438 @@
+10월 31일 메모
+
+저번주개요>
+root:$6$JZuiWGEEV/2IDE4O$2pzKV1SYTLKm6Kn5qJUJRo22XUBDIVT3CrXY5fcIE5rbzUk7eB4vERLn.YTYXmzWs1rV6efPOLItsItJmhPq1/::0:99999:7:::
+
+root:$6$5H0QpwprRiJQR19Y$bXGOh7dIfOWpUb/Tuqr7yQVCqL3UkrJns9.7msfvMg4ZO/PsFC5Tbt32PXAw9qRFEBs1254aLimFeNM8YsYOv. : 16431 : 0 : 99999 : 7 : : :
+|-1–|———————————–2——————————————————————————————————————————————-|—3—|-4-|—5–|-6-|-7-|-8-|
+1. Login Name : 사용자 계정각 항목별 구분은 :(콜론)으로 구분되어있으며 콜론과 콜론 사이 각 필드에는 다음과 같은 구조로 구성되어 있습니다.
+2. Encrypted : 패스워드를 암호화시킨 값
+3. Last Changed : 1970년부터 1월 1일부터 패스워드가 수정된 날짜의 일수를 계산
+4. Minimum : 패스워드가 변경되기 전 최소 사용기간(일수)
+5. Maximum : 패스워드 변경 전 최대 사용기간(일수)
+6. Warn : 패스워드 사용 만기일 전에 경고 메시지를 제공하는 일수
+7. Inactive : 로그인 접속 차단 일 수
+8. Expire : 로그인 사용을 금지하는 일 수 (월/일/연도)
+9. Reserved : 사용되지 않음
+
+chage 명령어 
+chage -M 60 test1 : 두달있다가 바꿔야함
+chage -E "2023-11-01" test1 : 내일 만료됨
+등등 가능하고 
+tail -n 3 /etc/shadow 등으로 확인이 가능함
+
+오늘 개요> KILL 명령어, NICE 명령어에 대한 이해
+
+#########################################################################프로세스 관리 
+프로그램 : 어떤 기계어 코드와 데이터 등이 실행 바이너리 형태로 들어가있는 실행 파일.
+	프로그램이라고 하게되면 소프트웨어 
+프로세스 : 프로그램이 메모리에 로드되어 실행된 프로그램으로 실행 상태를 포함함.
+
+프로세스 종류
+ - 부모 프로세스 : 자식 프로세스를 생성한 프로세스
+ - 자식 프로세스 : 부모 프로세스로부터 생성된 프로세스
+ - 데몬 프로세스 : 서비스 제공을 목적으로 백그라운드 환경에서 실행되는 프로세스
+ - 고아 프로세스 : Orphan process, 자식 프로세스보다 부모 프로세스가 먼저 종료되어 부모 프로세스가 존재하지 않는 프로세스  (PID가 0으로 표시됨)
+ - 좀비 프로세스 : 프로세스 종료 과정에서 리소스를 반납하지 않고 비정상적으로 실행되는 프로세스 / 프로세스 종료 과정에서 리소스를 반납하고 잠시 머무르는 상태
+
+PID(Process ID) : 프로세스가 생성될 때 프로세스마다 고유하게 부여되는 ID 
+PPID(Parent PID) : 프로세스의 부모 프로세스의 PID
+
+#현재 터미널의 프로세스를 확인
+ps 명령어로 현재 프로세스를 확인이 가능함 (bash 쉘, ps를 실행한 명령어 자체도 나옴)
+[root@server-1 ~]# ps
+    PID TTY          TIME CMD
+   3889 pts/1    00:00:00 bash
+   5048 pts/1    00:00:00 ps
+
+#시스템 전체의 프로세스 목록확인
+ps -ef 를 입력하게되면
+
+#시스템 전체의 구조를 대칭적으로 보기
+pstree -p
+
+
+>옵션 (파이프, 그렙)
+[root@server-1 ~]# ps -ef |grep cups
+root        1091       1  0 09:10 ?        00:00:00 /usr/sbin/cupsd -l
+root        5217    3889  0 11:30 pts/1    00:00:00 grep --color=auto cups	
+이렇게 따로 프로세스를 볼 수 있는데 grep이 중요한게 아니기때문에 빼보자면,
+[root@server-1 ~]# ps -ef |grep cups |grep -v grep
+root        1091       1  0 09:10 ?        00:00:00 /usr/sbin/cupsd -l
+그렙부분만 따로 제거해서 볼수있다.
+
+top을 입력하면 현재 모든 프로세스를 작업관리자창마냥 띄위준다.
+top - 11:41:44 up  2:31,  2 users,  load average: 0.02, 0.22, 0.17
+Tasks: 310 total,   1 running, 309 sleeping,   0 stopped,   0 zombie
+
+*Yes라는 기괴한 명령어가 있는데, 멈출때까지 계속 출력해준다
+>이게 왜필요함? : 시스템 성능테스트 등을 테스트할 수 있다. 실제로 각각 두개의 프로세스가 각각 2x%정도씩 CPU사용량%를 차지하여 부하가 걸림.
+
+*kill 명령어는 자칫보면 프로세스를 삭제하는 것 같이 보이나,
+시그널을 전달하는 명령어이다. 
+[test1@server-1 ~]$ kill -l   입력시 가용한 모든 신호(시그널)을 확인할 수 있다.
+ 
+SIGNAL		SIGNAL_NAME(이름)			설명
+1		SIGHUP		프로세스 종료 없이 프로세스가 읽어들이는 설정 파일을 다시 읽어들여서 초기화하도록 동작
+2		SIGINT		Interrupt Signal로 [Ctrl]+[C]를 사용할 때 발생함. 현재 작동중인 프로그램의 동작을 멈춤
+9		SIGKILL		프로세스가 무시하지 못하는 시그널로 프로세스 강제 종료
+15		SIGTERM		프로세스 정상 종료(default)
+18		SIGCONT		프로세스 재개(재실행)
+19		SIGSTOP		프로세스 중지. 무시할 수 없음.
+20		SIGTSTP		터미널에서 프로세스 중지. [Ctrl]+[Z] 사용시 발생함. 무시할 수 있음.
+
+시그널 제어 명령어
+$ kill -SIGNAL PID
+$ kill -s SIGNAL PID
+ * 시그널을 지정하지 않는 경우 기본값으로 정상종료(SIGTERM) 시그널이 전달됨
+
+[root@server-1 ~]# ps -ef |grep sleep
+test1       5886    3997  0 12:20 pts/0    00:00:00 sleep 1000
+root        5888    3889  0 12:20 pts/1    00:00:00 grep --color=auto sleep
+
+# 다른방식으로의 시그널 전달 ( 프로세스의 이름입력하여 시그널하기 )
+pkill, kilall이면 시그널을 전달해줄수가 있다.
+pkill [-Signal] [프로세스명] [프로세스명2] .... 
+>kill명령어와 거의 유사하며 ps 명령어로 PID를 찾은뒤 입력하는것을 개선했다고는 함
+kilall [-Signal] [프로세스명1orPID1] [프로세스명2orPID2] .... 
+>지정된 명령이 실행중인 ‘모든 프로세스’에 시그널을 보냄
+
+# 우선순위 할당, 설정 ( priority & nice )
+우선순위는 말 그대로 우선 실행할 순위인데, 0에 가까울수록 좋고 39에 가까울수록 나쁘다.
+priority(우선순위) = 20 + nice
+nice의 값 분류
+-20 ~ 0 : negative nice (-) 우선순위 높음_ 루트사용자만이 설정가능
+0 ~ 19 : positive nice (+) 우선순위 낮음_ 루트,일반사용자 설정가능
+
+$ nice -n NICE COMMAND	로 프로세스 실행
+$ renice -n NICE PID 		로 재지정
+
+예시>
+[root@server-1 ~]# nice -n 10 sleep 1000		sleep 프로세스의 나이스값을 10으로설정
+[root@server-1 ~]# nice -n -10 sleep 1000		sleep 프로세스의 나이스값을 -10으로설정
+확인을해보면
+[test1@server-1 ~]$ ps axo pid,comm,nice |grep sleep
+   7118 sleep            10
+[test1@server-1 ~]$ ps axo pid,comm,nice |grep sleep
+   7133 sleep           -10				로 나타난다.
+
+# 포그라운드 프로세스 / 백그라운드 프로세스
+vim /etc/hosts 명령어에 나오는 부모프로세스는 bash / 자식프로세스는 vim 인 것이다.
+명령어를 쳤을 때 제어권을 vim이 가지고, 저장하고나오거나 그냥 나오면 bash가 제어를 가짐.
+>포 그라운드 프로세스: 따라서 앞에 당장 보이는 프로세스를 말함.
+
+>백그라운드 프로세스: 앞에 보이는건 아니나 뒤에서 동작하는 프로세스를 말함.
+[root@server-1 ~]# ps -ef |grep sleep
+root        7527    7224  0 14:36 pts/2    00:00:00 sleep 3000
+root        7549    7224  0 14:36 pts/2    00:00:00 sleep 3000
+root        7562    7224  0 14:37 pts/2    00:00:00 sleep 1000
+root        7567    7224  0 14:37 pts/2    00:00:00 sleep 2000
+root        7574    7224  0 14:37 pts/2    00:00:00 sleep 3000
+root        7621    3889  0 14:38 pts/1    00:00:00 grep --color=auto sleep
+
+[root@server-1 ~]# jobs
+[1]   멈춤                  sleep 3000
+[2]+  멈춤                  sleep 3000
+[3]   멈춤                  sleep 1000
+[4]   멈춤                  sleep 2000
+[5]-  멈춤                  sleep 3000
+
+포그라운드 명령어 : fg [n]
+백그라운드 명령어 : bg [n]
+ 
+kill -sigterm
+[root@server-1 ~]# ps -ef |grep sleep
+[root@server-1 ~]# kill %[n] 으로 n번째 백그라운드에서 진행되는 프로세스를 삭제할 수 있다.
+
+########################################################################
+
+#아카이브 및 압축 (tape archive)
+Tar 타르 
+	tar -cvf 아카이브파일.tar 파일1 파일2 디렉토리
+•	-c: 아카이브 생성
+•	-v: 자세한 출력
+•	-f: 아카이브 파일 이름 지정
+아카이브 생성: tar cf 
+아카이브 파일 확인: tar tf
+아카이브 해제 tar xf
+
+[root@server-1 ~]# tar cvf test1.tar crontab passwd1 test2.txt		아카이빙 하기
+crontab
+passwd1
+test2.txt
+[root@server-1 ~]# tar xvf test1.tar crontab passwd1 		아카이빙 풀기
+crontab
+passwd1
+crontab
+[root@server-1 ~]# tar xvf test1.tar -C testdir1		특정 디렉터리에 아카이브풀기( -C )
+crontab
+passwd1
+test2.txt
+
+
+# 압축도구(순수압축)	C 만들기 T 확인하기 X 해제하기
+compress
+  $ compress FILE	
+  $ uncompress FILE
+gzip 			(Z 가 붙음)
+  $ gzip FILE
+$ gunzip FILE
+
+gzip으로 압축된 아카이브 생성   	
+$ tar zcvf TAR_FILE FILE…			= FILE...로 이루어진 TAR_FILE포맷파일을 생성함
+gzip으로 압축된 아카이브 파일 확인
+$ tar ztvf TAR_FILE
+gzip으로 압축된 아카이브 해제
+$ tar zxvf TAR_FILE
+  * 참고 : 별도의 경로에 아카이브 해제
+       $ tar zxvf TAR_FILE  -C PATH
+	
+bzip2			j 가 붙음
+  $ bzip2 FILE
+$ bunzip2 FILE
+bzip2으로 압축된 아카이브 생성
+$ tar jcvf TAR_FILE FILE…
+bzip2으로 압축된 아카이브 파일 확인
+$ tar jtvf TAR_FILE
+bzip2으로 압축된 아카이브 해제
+$ tar jxvf TAR_FILE
+  * 참고 : 별도의 경로에 아카이브 해제
+       $ tar jxvf TAR_FILE  -C PATH
+xz			J 가 붙음
+  $ xz FILE
+$ unxz FILE
+xz로 압축된 아카이브 생성
+$ tar Jcvf TAR_FILE FILE…
+xz로 압축된 아카이브 파일 확인
+$ tar Jtvf TAR_FILE
+xz로 압축된 아카이브 해제
+$ tar Jxvf TAR_FILE
+  * 참고 : 별도의 경로에 아카이브 해제
+       $ tar Jxvf TAR_FILE  -C PATH
+
+*zip 이라는 압축포맷은 순수압축이 아니라, 동시에 ‘아카이브+압축’하는 방법이라고 할 수 있다.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 작업 예약 ( at , Cron )
+1회성 작업 예약
+ - at
+[root@server-1 work]# at    : 작업 목록확인
+[root@server-1 work]# at -l
+[root@server-1 work]# atq
+[root@server-1 work]# at TIMESPEC
+
+at 작업예약 ( at, at command , atq , atrm , at -c [n] )
+$ at TIMESPEC
+ *참고 : /usr/share/doc/at/timespec
+
+now : 현재시점
+tomorrow : 내일
+today : 오늘
+midnight 자정(00시)
+noon 정오(12시)
+teatime : 오후4시(16시)
+am, pm 이 가능				이정도의 관용적 시간표현을 사용하여 정할 수 있음.
+
+예시)
+2023년 11월 1일 0시 0분에 작업예약
+202311010000
+현재 시점으로부터 5분후 작업예약
+now+5min
+현재 시점으로부터 1시간뒤 작업예약
+now+1hour
+내일 작업예약
+tomorrow    
+티타임(오후4시)에 작업예약
+teatime  >>> 예시
+at teatime // 
+at>mkdir /teatime-dir
+at>touch /teatime-dir/test1.txt
+at><EOT> (((ctrl + D )))) 로 예약작업을 정상적으로 생성한다. ctrl+z나 ctrl+c아님!
+
+at -l 을 하면 확인이 가능하다. 
+[root@server-1 work]# at tomorrow
+warning: commands will be executed using /bin/sh
+at> tar cf /tmp/test.tar /etc/hosts
+at> <EOT>
+job 5 at Wed Nov  1 16:03:00 2023
+예정된 작업을 확인하려면 atq
+[root@server-1 work]# atq
+5	Wed Nov  1 16:03:00 2023 a root		내일예정된 작업.
+[root@server-1 work]# atrm 5			atrm, at -r 로 예약된 작업을 지웠다.
+
+[root@server-1 work]# at 10:00 110123			임의로 테스트_11월1일23년 10시
+warning: commands will be executed using /bin/sh		
+at> mkdir /work/versus    				폴더생성
+at> touch /work/versus/vaccine.bak			.bak파일생성
+at> <EOT>						을하는예약 생성
+job 6 at Wed Nov  1 10:00:00 2023
+${SHELL:-/bin/sh} << 'marcinDELIMITER52a983da'	at -c [작업번호]를 입력해서 확인가능
+mkdir /work/versus
+touch /work/versus/vaccine.bak
+
+# 주기적 작업 예약( Cron )
+ - cron 
+- Unix/Linux 운영체제에서 주기적인 작업을 예약할 수 있는 작업 예약 도구
+#cron 종류
+   - System Cron
+   - User Cron
+
+#crontab (User Cron / System Cron )
+#cron 작업예약(유저 크론)
+ $ crontab -e
+
+#cron 예약 확인
+ $ crontab -l
+[root@server-1 work]# crontab -l
+no crontab for root
+
+#cron 작업 전체 삭제
+ $ crontab -r
+
+<crontab 파일 작성 문법> 분 시 일 월 요 
+   분         시        일         월       요일     명령어
+(0~59)    (0~23)    (1-31)     (1-12)   (0~6,7) 
+ *요일: 0과7이 일요일,1이 월요일,6이 토요일
+	시간 표기를 위한 메타문자
+	 * 매 분, 매 시 등등 (Don’t Care, Always True 의 의미_모든값을 나타냄.)
+	 - 연속된 범위를 나타냄. n-m : 1-5/2 = 1시부터 5시까지 2시간 간격
+	 , 여러 값을 지정할 수 있음 : 1, 3, 5 = 1시,3시,5시 
+	 / 시간 간격을 나타냄 : */5는 5분간격으로, */10은 10분간격으로
+특히나 ( */5 * * * * )의 경우 5분간격 작업 실행
+-매일오전 1시, 오후 1시에 작업예약 = 0 1,13 * * * 으로 표현 
+-매일오전 5시30분, 오후3시30분에 작업예약 = 30 5,15 * * * 로 표현
+-월,금마다 오후3시 5분 주기로 작업예약 = */5 15 * * 1,5 로 표현 
+-매주 일요일 오전0시부터~ 오전3시까지 작업 수행 = 0 1-3 * 1 7or1 
+-매일 오후 5시에 2분간격으로  작업을 수행하려고 한다.(실습)
+[root@server-1 work]# crontab -e 로 vi에디터를 열어본다
+#MIN HOUR DAY MONTH WEEKDAY COMMAND
+*/2 17 * * * echo "user cron test" >> /tmp/usertest.txt
+[root@server-1 work]# crontab -l		예약확인을해보자
+#MIN HOUR DAY MONTH WEEKDAY COMMAND
+*/2 17 * * * echo "user cron test" >> /tmp/usertest.txt
+[root@server-1 work]# ls -l /tmp		을 가서 확인해보면, 
+-rw-r--r--. 1 root   root  15 10월 31 17:02 usertest.txt	가 생겨있는 것을 알 수 있다.
+2분뒤 확인해보면
+-rw-r--r--. 1 root   root  30 10월 31 17:04 usertest.txt 	로 업데이트되어있다.
+크론탭 예약 (모두) 지우기
+[root@server-1 work]# crontab -r		크론탭을 싹다지워버림
+[root@server-1 work]# crontab -l		확인해보면
+no crontab for root			없어져있음을 알 수 있다
+
+#시스템 크론
+[root@server-1 work]# ls -ld /etc/cron.d/		이곳으로가면 확인이 가능하다
+drwxr-xr-x. 2 root root 21  8월 30 12:26 /etc/cron.d/
+
+#######################################################################
+과제풀이>
+1.
+[root@server-1 ~]# sleep 1000
+^Z
+[3]+  멈춤                  sleep 1000
+[root@server-1 ~]# sleep 2000
+^Z
+[4]+  멈춤                  sleep 2000
+[root@server-1 ~]# sleep 3000
+^Z
+[5]+  멈춤                  sleep 3000
+[root@server-1 ~]# ps -ef |grep sleep
+root       10246    3889  0 17:15 pts/1    00:00:00 sleep 1000
+root       10253    3889  0 17:15 pts/1    00:00:00 sleep 2000
+root       10260    3889  0 17:16 pts/1    00:00:00 sleep 3000
+root       10275    3889  0 17:16 pts/1    00:00:00 grep --color=auto sleep
+[root@server-1 ~]# bg %3
+[3] sleep 1000 &
+[root@server-1 ~]# bg %4
+[4]- sleep 2000 &
+[root@server-1 ~]# bg %5
+[5]+ sleep 3000 &
+[root@server-1 ~]# ps
+    PID TTY          TIME CMD
+   3889 pts/1    00:00:02 bash
+   9108 pts/1    00:00:00 at
+   9121 pts/1    00:00:00 at
+  10246 pts/1    00:00:00 sleep
+  10253 pts/1    00:00:00 sleep
+  10260 pts/1    00:00:00 sleep
+  10302 pts/1    00:00:00 ps
+
+2.
+[root@server-1 ~]# ps -ef |grep sleep
+root       10246    3889  0 17:15 pts/1    00:00:00 sleep 1000
+root       10253    3889  0 17:15 pts/1    00:00:00 sleep 2000
+root       10260    3889  0 17:16 pts/1    00:00:00 sleep 3000
+root       10312    3889  0 17:18 pts/1    00:00:00 grep --color=auto sleep
+[root@server-1 ~]# ps -ef |grep sleep |grep -v grep
+root       10246    3889  0 17:15 pts/1    00:00:00 sleep 1000
+root       10253    3889  0 17:15 pts/1    00:00:00 sleep 2000
+root       10260    3889  0 17:16 pts/1    00:00:00 sleep 3000
+
+3.
+[root@server-1 ~]# kill -SIGINT 10246
+[3]   인터럽트            sleep 1000
+[root@server-1 ~]# kill -SIGSTOP 10253
+[4]+  멈춤                  sleep 2000
+[root@server-1 ~]# kill -SIGTERM 10253
+[root@server-1 ~]# kill -SIGKILL 10260
+[5]   죽었음               sleep 3000
+
+4.
+$ pkill -SIGINT 프로세스명 or
+$ kilall -SIGINT 프로세스명 
+
+5.
+[root@server-1 ~]# mkdir /tmp/20231031/
+mkdir: created directory '/tmp/20231031/'
+[root@server-1 ~]# touch file{1..3}.txt
+[root@server-1 ~]# cp file{1..3}.txt /tmp/20231031/
+[root@server-1 ~]# ls -l /tmp/20231031/
+합계 0
+-rw-r--r--. 1 root root 0 10월 31 17:24 file1.txt
+-rw-r--r--. 1 root root 0 10월 31 17:24 file2.txt
+-rw-r--r--. 1 root root 0 10월 31 17:24 file3.txt
+[root@server-1 ~]# tar -jcvf result.tar.bz2 /tmp/20231031/file{1..3}.txt
+tar: 구성 요소 이름 앞에 붙은 `/' 제거 중
+/tmp/20231031/file1.txt
+tar: 하드 링크 대상 앞에 붙은 `/' 제거 중
+/tmp/20231031/file2.txt
+/tmp/20231031/file3.txt
+[root@server-1 ~]# tar -jtvf result.tar.bz2
+-rw-r--r-- root/root         0 2023-10-31 17:24 tmp/20231031/file1.txt
+-rw-r--r-- root/root         0 2023-10-31 17:24 tmp/20231031/file2.txt
+-rw-r--r-- root/root         0 2023-10-31 17:24 tmp/20231031/file3.txt
+[root@server-1 ~]# tar -jxvf result.tar.bz2
+
+7.
+[root@server-1 ~]# at 10:00am tomorrow
+warning: commands will be executed using /bin/sh
+at> mkdir /pieceofcake
+at> <EOT>
+job 9 at Wed Nov  1 10:00:00 2023
+[root@server-1 ~]# atq
+9	Wed Nov  1 10:00:00 2023 a root
+[root@server-1 ~]# atrm 9
+[root@server-1 ~]# atq
+
+8, 9 , 10.
+[root@server-1 ~]# crontab -e
+no crontab for root - using an empty one
+ 
+* 0 * * * touch /tmp/onepiece.bak
+* */2 * * * touch /tmp/naruto.txt
+55 23 * * 1,3,5 touch /tmp/bleach.sh
+esc :wq!
+
+crontab: installing new crontab
+[root@server-1 ~]# crontab -l
+* 0 * * * touch /tmp/onepiece.bak
+* */2 * * * touch /tmp/naruto.txt
+55 23 * * 1,3,5 touch /tmp/bleach.sh
+[root@server-1 ~]# crontab -r
+[root@server-1 ~]# crontab -l
+no crontab for root
+
+-메모했던거
+매일자정 * 0 * * * 
+2시간간격 * */2 * * *
+오후11시 55분 월수금 55 23 * * 1,3,5
+
+
