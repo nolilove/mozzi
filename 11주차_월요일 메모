@@ -1,0 +1,160 @@
+10월 30일 메모
+POSIX ACL
+  - 파일의 소유자, 소유그룹이 아닌 특정 사용자, 특정 그룹에 권한을 부여할 수 있는 권한 체계
+
+-rw-r--r--. 1 root root    0 Oct 27 15:21 filea       <- POSIX ACL 미적용 파일
+-rw-rw-r--+ 1 root root    0 Oct 27 15:21 fileb     <- POSIX ACL 적용 파일
+
+POSIX ACL 명령어
+  getfacl :  POSIX ACL 권한을 확인하는 명령어
+  setfacl :  POSIX ACL 권한을 설정하는 명령어
+
+POSIX ACL 종류
+  일반 POSIX ACL     : 개별 파일/디렉터리에 적용하는 ACL
+   Default POSIX ACL : 디렉터리에 적용하는 ACL로 디렉터리 하위 파일에 ACL이 상속됨.
+
+mask :  POSIX ACL에서 최대 사용 가능한 권한
+
+POSIX ACL 권한 비교 순서
+소유자  ->  특정 사용자  ->  소유그룹  -> 특정그룹 -> 기타사용자
+
+POSIX ACL 확인
+  $ getfacl  FILE
+     * mask 항목의 유무로 POSIX ACL 적용 파일 여부를 확인할 수 있음.
+       (mask 항목이 있으면 POSIX ACL이 적용된 파일임.)
+
+(일반 ACL) ACL ENTRY 설정
+   $ setfacl -m  ACL_ENTRY  FILE
+
+(일반 ACL) ACL ENTRY 제거
+   $ setfacl -x  ACL_ENTRY   FILE
+
+(일반 ACL) ACL mask 값 설정
+    $ setfacl  -m  m::MASK   FILE
+
+(일반 ACL) ACL 전체 삭제
+     $ setfacl  -b  FILE
+
+(Default ACL) ACL ENTRY 설정
+     $ setfacl -m d:ACL_ENTRY DIRECTORY
+     $ setfacl -d -m ACL_ENTRY DIRECTORY
+
+(Default ACL) ACL ENTRY 개별 삭제
+      $ setfacl -x d:ACL_ENTRY DIRECTORY
+
+(Default ACL) ACL ENTRY 개별 삭제
+      $ setfacl -k DIRECTORY
+
+=====
+(일반 ACL) ACL_ENTRY 표기법
+
+소유자         -   u::PERMS
+소유그룹     -    g::PERMS
+기타사용자  -   o::PERMS
+특정사용자  -   u:USER:PERMS
+특정그룹     -    g:GROUP:PERMS
+
+(Default ACL)
+소유자         -   d:u::PERMS
+소유그룹     -    d:g::PERMS
+기타사용자  -   d:o::PERMS
+특정사용자  -   d:u:USER:PERMS
+특정그룹     -    d:g:GROUP:PERMS
+
+사용자 계정 및 그룹
+
+사용자 :  시스템을 사용하는 사람을 구분하기 위한 엔티티
+그룹 : 사용자 계정을 묶어서 관리하기 위한 단위
+
+-rw-r--r--. 1 root root 2186 Oct 27 14:30 /etc/passwd
+----------. 1 root root 1281 Oct 27 14:30 /etc/shadow
+-rw-r--r--. 1 root root 843 Oct 27 14:30 /etc/group
+
+root:x:0:0:root:/root:/bin/bash
+USER:PW:UID:GID:COMMENT:HOMEDIR:SHELL
+
+사용자 생성
+$ useradd [OPTION]... USER
+   -u UID   :  UID 지정
+   -g GID   :  사용자 계정의 주 그룹(Primary Group) 지정
+   -G GID  :  사용자 계정의 보조 그룹 지정
+   -c COMMENT  :   GECOS/COMMENT 필드 값 지정
+   -d DIRECTORY   :   사용자의 Home Directory 지정
+   -m                        :    사용자의 Home Directory가 존재하지 않는 경우 해당 디렉터리 생성
+   -s SHELL             :   사용자의 기본 쉘 지정 
+                                    Bourne Shell (/bin/sh)
+                                    Bash Shell (/bin/bash)
+                                    C Shell (/bin/csh)
+                                    TC Shell (/bin/tcsh)
+
+                                    /sbin/nologin
+                                    /bin/false
+
+   -r                          :    시스템 계정의 UID 범위에서 UID 자동 할당
+   -e YYYY-mm-dd   :    계정 만료일 지정
+
+사용자 계정 변경
+$ usermod [OPTION]... USER
+   -u UID   :  UID 변경
+   -g GID   :  사용자 계정의 주 그룹(Primary Group) 변경
+   -G GID  :  사용자 계정의 보조 그룹 변경
+   -a          :  사용자 계정의 기존 보조그룹에 새로운 보조그룹 추가 (-G와 같이 사용)
+   -c COMMENT  :   GECOS/COMMENT 필드 값 변경
+   -d DIRECTORY   :   사용자의 Home Directory 변경
+   -m                        :   사용자의 Home Directory가 존재하지 않는 경우 해당 디렉터리 생성
+   -s SHELL             :   사용자의 기본 쉘 변경 
+                                    Bourne Shell (/bin/sh)
+                                    Bash Shell (/bin/bash)
+                                    C Shell (/bin/csh)
+                                    TC Shell (/bin/tcsh)
+
+                                    /sbin/nologin
+                                    /bin/false
+
+   -r                          :    시스템 계정의 UID 범위에서 UID 자동 할당
+   -e YYYY-mm-dd   :    계정 만료일 변경
+
+사용자 계정 삭제
+$ userdel [OPTION]... USER
+       -r    :   사용자 홈디렉터리 및 메일함 등의 데이터를 함께 삭제
+
+—
+
+그룹 생성
+$ groupadd [OPTION]... GROUP
+   -g GID  :  그룹 GID 지정
+
+그룹 변경
+$ groupmod [OPTION]... GROUP
+   -g GID                     :  그룹 GID 변경
+   -n NEW_GROUP    :  그룹 이름 변경
+
+그룹 삭제
+$ groupdel GROUP
+
+
+패스워드 정책 설정
+
+/etc/shadow
+
+root:$6$BlXDd7Uz$5DNxjrqiK5OAE8hwk4Xwicbdb.D3q/dsSJESiHEs.G2NWE2fpdZ.HahM/ofWgqtZ3QRIDww5Npz6LWP..mmAZ1:17953:0:99999:7:::
+
+해시된 패스워드
+$6$BlXDd7Uz$5DNxjrqiK5OAE8hwk4Xwicbdb.D3q/dsSJESiHEs.G2NWE2fpdZ.HahM/ofWgqtZ3QRIDww5Npz6LWP..mmAZ1
+
+USER:HASHED_PW:LAST_CHANGE:MIN:MAX:WARN:INACTIVE:EXPIRE:
+            $HASH_ALG$HASHED_PW_WITH_SALT$SALT
+
+패스워드 정책 관리 명령어
+$ chage [OPTION]... USER
+
+-l  : 사용자 계정 및 패스워드 정책 출력
+-d YYYY-MM-DD  : 패스워드를 마지막으로 변경한 날짜를 설정
+-E YYYY-MM-DD  : 계정 만료일을 설정
+-m DAYS  : 패스워드 최소 사용일을 설정
+-M DAYS  : 패스워드 최대 사용 가능일을 설정
+-W DAYS  : 패스워드 만료 전 경고 기간 설정
+-I DAYS  : INACTIVE DAYS 설정
+
+ 
+
