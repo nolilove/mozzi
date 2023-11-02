@@ -1,0 +1,253 @@
+11월 1일 메모
+
+개요 - LVM, syscron에 대해서 학습
+ 
+지난시간에 usercron까지 나갔으며, 
+crontab을 작성하기위해서 crontab -e로 편집창을 열고,
+분시일월요 command 형태로 편집하면 된다.
+ex) 매주 일,월요일 오후 8시 ~11시  25분마다 작업이 실행됨
+*/25 8-11 * * 0,1 touch jusulhouijeon.txt 
+
+# /etc로가서 직접수정하는것도 있다. (시스템 crontab)
+[root@server-1 ~]# vim /etc/crontab    >> tmp로이동
+*/10 10-12 * * 1 root touch /tmp/scheduletest.txt
+*/2 9-12 * * * root ls -l / > /tmp/root-list.txt		를 추가하고 저장해둬본다
+~쉬는시간지나고 확인해보도록함
+
+[root@server-1 ~]# ls -l /tmp/root-list.txt 
+-rw-r--r--. 1 root root 1168 11월  1 09:50 /tmp/root-list.txt
+[root@server-1 ~]# cp /etc/crontab /etc/cron.d/test1
+[root@server-1 ~]# vim /etc/cron.d/test1
+15 10 * * * root cp -R /work /tmp/work
+*/15 * * * * user ps -ef > /tmp/pslist.txt
+
+[root@server-1 ~]# ls -l /etc/cron.d
+합계 8
+-rw-r--r--. 1 root root 128 11월  1  2022 0hourly
+-rw-r--r--. 1 root root 532 11월  1 10:14 test1
+
+[root@server-1 ~]# ls -ld /tmp/work/
+drwxr-xr-x. 5 root root 96 11월  1 10:15 /tmp/work/
+
+#############################################################
+# 날짜를 확인, 수정하는 명령어 DATE
+[root@server-1 ~]# date
+2023. 11. 01. (수) 10:24:05 KST
+Usage: date [OPTION]... [+FORMAT]  // ex) $ date “+%Y-%m-%d %H:%M:%S”
+						연 월 일 시 분 초   
+  or:  date [-u|--utc|--universal] [MMDDhhmm[[CC]YY][.ss]]
+즉
+연도를 보기(2글자) : date +%y 
+연도를 보기(4글자) : date +%Y
+%D  = date; same as %m/%d/%y		월/일/년을 나타낸다.
+[root@server-1 ~]# date +%D
+11/01/23
+
+%H : 시간( 시 )
+%M : 분
+%S : 초 (s아님)
+
+[root@server-1 ~]# date "+%Y-%m-%d %H:%M:%S"
+2023-11-01 10:33:16
+[root@server-1 ~]# date "+%Y-%m-%d_%H:%M:%S"
+2023-11-01_10:33:40
+
+#위에서 만든걸 받아서 파일이름YYYYmmdd처럼 교체하려면?
+touch "${current_datetime}.txt"
+$(date +\%Y\%m\%d) 같은 형태가 됨.
+$ COMMAND^[OPTION]...^[ARG]...
+공백으로 구분되는 각각의 부분
+$ echo Hello World 라고 쳤을때, Hello World가 들어온것이 아니라
+Hello 따로, World 따로 들어온것으로 인식하는 구분이 있다는것을 인식하자.
+
+그래서>$ touch test file 시
+test file이 만들어지는것이 아니라, test 따로, file 따로 만들어지게 된다.
+>$ touch ‘test file’ 작은따옴표라는 인용부호로 묶어줘야 비로소 test file이 만들어짐.
+
+ 큰 따옴표(Double Quotation)  " "   :  문자열을 묶어주며  인용 부호 내의  $와 \를 제외한  모든 메타 문자를 일반 문자로 취급
+ 작은 따옴표(Single Quotation)  ' '  :  문자열을 묶어주며 인용 부호 내의 모든 메타문자를  일반 문자로 취급
+ 역 홑따옴표(Back Quotation / Backtick)   ` `  :  인용부호 내의 문자열을 명령어로 인식하여 실행 후 그 결과로 대체
+ex) 시간표현 : 그래서 답은 backup_$(date +\%Y\%m\%d).tar 같은 형태가 된다.
+
+*[root@server-1 ~]# date +'%F'		F = Full date
+2023-11-01				이런것도 된다.
+
+<crontab 문제>
+1. 매년 1월 1일 오전 9시에 tar 명령어로 /etc 의 파일을 아카이브 하여 /backup/backup_YYYYmmdd.tar로 저장하세요.
+====
+0  9  1  1  *   root       tar cf /backup/backup_`date +\%Y\%m\%d\%H\%M`.tar
+====
+2. 7월 매주 금요일 오전 9시부터 오후 5시까지 'ps -ef'의 실행결과를 /work/pslist.txt로 누적하여 저장하세요.
+0  9-17  *  7  5  root     ps -ef >> /work/pslist.txt
+3. 7월 둘째주 수요일 오전 0시와 12시에 'ls -l /etc' 의 실행결과를 /work/etc_list_YYYYmmdd.txt로 저장하세요.
+1-7첫주   8-14둘쨋주
+====
+0  0,12  8-14  7  3  root  ls -l /etc > /work/etc_list_`date +\%Y\%m\%d\%H\%M`.txt
+====
+4. 매주 월,수,금요일 오후 1시~7시 정각에 helloworld 를 /work/greeting.txt 에 누적하여 저장하세요.
+====
+0  13-19 *  *  1,3,5  root echo helloworld >> /work/greeting.txt
+====
+
+시스템에 새로운 디스크 추가 후 연결 과정
+ (1) 새로운 디스크 추가(기본적으로는 Power OFF 상태에서 추가 후 부팅)
+ (2) 파티셔닝 - fdisk
+ (3) 파일시스템 초기화(포멧) - mkfs
+ (4) 마운트(시스템에서 파티션을 사용하여 데이터를 저장할 수 있도록 연결하는 과정) - mount(시스템이 부팅된 동안에만 연결), /etc/fstab(영구 마운트)
+       * 마운트 포인트 : 시스템에서 파일시스템에 접근 할 때 사용하는 경로.
+                                디렉토리 생성 후 마운트 포인트로 설정
+
+파티션 구성정보 강제 갱신(시스템의 전체 디스크)
+# partprobe 
+
+파티션 구성정보 강제 갱신(특정 디스크)
+# partprobe 디스크_장치_파일
+
+파일시스템 초기화 명령어
+# mkfs -t 파일시스템종류  파티션장치파일
+	or
+# mkfs.파일시스템종류      파티션장치파일
+시스템의 현재 마운트 정보 확인
+# mount
+
+<시스템에 파일시스템을 영구마운트하는 과정>
+# fdisk 디스크
+# mkfs -t 파일시스템종류 파티션장치
+# vim /etc/fstab
+/dev/sdb1	/mnt/disk1	ext4	defaults	0 0	에 추가해주면 영구마운트.
+
+PV 피지컬볼륨 VG 볼륨그룹, LV 논리적볼륨, (pv>vg>lv / lv>vg>pv) 
+PV생성 : ** pvcreate /dir		*삭제: pvremove/변경: pvchange -x y활 -x n 비활/ 정보 pvs
+VG확장 : vgextend		생성 vgcreate/ vg삭제: vgremove vg이름
+	vgs
+LV확장 : lvextend 	생성 lvcreate/ lv삭제: lvremove lv이름/ lv축소 lvreduce -L 100G
+	lvs		확장 lvextend -L [K,M,G,T] _ +는확장, ‘ ‘는 변경, +100%FREE 모두할당 
+	df -Th(df -h)	-n : lv이름 지정
+리사이징 : xfs_growfs /dir
+	df -Th(df -h)
+
+PE(Physical Extent) : PV에서 사용하는 기본 데이터 저장단위, 기본값 4MB
+LE(Logical Extent) : LV에서 사용하는 기본 데이터 저장단위
+                            (일반적으로 PE와 LE는 1:1 매핑됨.)
+
+#파티셔닝
+(1) MBR 파티셔닝
+   - BIOS를 사용하는 컴퓨터에서 사용
+   - 최대 4개의 Primary Partition으로 나눌 수 있다.
+   - 최대 용량 2TB까지 지원
+
+ *Primary Partition : OS를 설치할 수 있는 파티션
+ Extended Partition : Logical Partition의 정보를 담는 파티션, 데이터 저장하지 않음.
+ *Logical Partition : OS를 설치할 수 없고 데이터만 저장이 가능한 파티션
+
+(2) GPT 파티셔닝
+  - EFI/UEFI를 사용하는 컴퓨터에서 사용이 가능한 방식
+  - 최대 128개 파티션으로 나눌 수 있음.
+  - 최대 용량 8ZB(제타바이트) 까지 지원
+  - Primary, Extend, Logical 파티션의 구분이 없음.
+>>parted /dev/sdb mklabel gpt  // GPT파티션테이블로 초기화
+디스크 인터페이스
+   E-IDE
+    - 장치명 : hd[a-d]
+- SATA
+| SCSI
+- SA-SCSI
+    - 장치명 :  sd[a-z]
+#시스템에 새로운 디스크 추가 후 연결 과정
+ (1) 새로운 디스크 추가(기본적으로는 Power OFF 상태에서 추가 후 부팅)
+ (2) 파티셔닝 - fdisk
+ (3) 파일시스템 초기화(포멧) - mkfs
+ (4) 마운트(시스템에서 파티션을 사용하여 데이터를 저장할 수 있도록 연결하는 과정) - mount(시스템이 부팅된 동안에만 연결), /etc/fstab(영구 마운트)
+       * 마운트 포인트 : 시스템에서 파일시스템에 접근 할 때 사용하는 경로.
+                                디렉토리 생성 후 마운트 포인트로 설정
+
+파티션 구성정보 강제 갱신(시스템의 전체 디스크)
+# partprobe 
+
+파티션 구성정보 강제 갱신(특정 디스크)
+# partprobe 디스크_장치_파일
+
+파일시스템 초기화 명령어
+# mkfs -t 파일시스템종류  파티션장치파일
+	or
+# mkfs.파일시스템종류      파티션장치파일
+
+시스템의 현재 마운트 정보 확인
+# mount
+
+<시스템에 파일시스템을 영구마운트하는 과정>
+# fdisk 디스크
+# mkfs -t 파일시스템종류 파티션장치
+# vim /etc/fstab
+/dev/sdb1	/mnt/disk1	ext4	defaults	0 0
+
+#논리 볼륨(Logical Volume) 관리
+Volume?
+PV(Physical Volume) : 논리볼륨에 디스크를 사용하기 위한 기본적인 단계
+VG(Volume Group) : 1개이상의 PV로 이뤄진 PV의 집합
+LV(Logical Volume) : LVM에서 데이터를 저장할 때 사용하는 볼륨 
+
+PE(Physical Extent) : PV에서 사용하는 기본 데이터 저장단위, 기본값 4MB
+LE(Logical Extent) : LV에서 사용하는 기본 데이터 저장단위
+                            (일반적으로 PE와 LE는 1:1 매핑됨.)
+
+LVM으로 디스크 작업 순서(LV 구성)
+ (1) 새로운 디스크 추가(기본적으로는 Power OFF 상태에서 추가 후 부팅)
+ (2) 파티셔닝 - fdisk
+      (system id를 8e "Linux LVM"로 변경)
+ (2-1) 파티션 정보 강제 갱신
+     # partprobe
+
+ (3) ***LV 생성과정***
+     (3-1) # pvcreate 파티션장치파일...   <- PV 생성
+     (3-2) # vgcreate 볼륨그룹_이름 PV...
+     (3-3) # lvcreate -n 논리볼륨_이름 -L 용량 볼륨그룹_이름
+              or
+             # lvcreate -n 논리볼륨_이름 -l x 볼륨그룹_이름
+                (-l은 소문자 L 임)
+ (4) 파일시스템 초기화(포멧) – mkfs
+예시 [root@server-1 ~]# mkfs.ext4 /dev/vgmain/lv_main1
+[root@server-1 ~]# mkfs.xfs /dev/vgbackup/lv_extra
+ (5) 마운트(시스템에서 파티션을 사용하여 데이터를 저장할 수 있도록 연결하는 과정) - mount(시스템이 부팅된 동안에만 연결), /etc/fstab(영구 마운트)
+       * 마운트 포인트 : 시스템에서 파일시스템에 접근 할 때 사용하는 경로.
+                                디렉토리 생성 후 마운트 포인트로 설정
+6- partprobe
+7- mount -a
+
+
+LVM으로 디스크 작업 순서(LV 제거)
+ (3) ***LV 구성 제거 과정***
+     (3-1) # lvremove 논리볼륨장치파일 
+     (3-2) # vgremove 볼륨그룹_이름
+     (3-3) # pvremove PV장치파일이름
+ (4) 파티션 제거
+    # fdisk 디스크장치파일 
+ (5) 파티션 구성정보 강제 갱신
+    # partprobe
+
+논리볼륨 확장 (비슷하게, pv생성-vg확장-lv확장-용량확장순서로 가야함)
+  - 주의 : 볼륨그룹의 여유공간이 있어야 함.
+ (1)   # lvextend -L 용량 LV장치파일
+         * 숫자만 입력한 경우 : 해당 숫자만큼의 절대 값으로 용량 지정
+         * + 숫자 입력한 경우 : 현재 용량에서 상대적인 용량을 확장
+
+ (2) 파일시스템의 용량 확장
+        EXT 계열의 파일시스템의 경우
+          # resize2fs LV장치파일
+        XFS 파일시스템의 경우
+          # xfs_growfs LV장치파일
+        확장된 용량 확인
+          # df -h     <- 파티션의 용량을 확인하는 명령어
+    * 한번에 LV 확장하는 방법
+       # lvextend -L 용량 LV장치파일 -r
+볼륨그룹 확장
+     # vgextend VG이름  추가할_PV장치파일
+볼륨그룹 축소
+  (1) 볼륨그룹에서 PV 제거전 데이터 옮기기
+     # pvmove 데이터를_옮길_PV장치파일
+
+
+
+
+
+
