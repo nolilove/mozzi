@@ -1,0 +1,337 @@
+11주차_목요일 메모(리눅스)
+
+개요> Systemd 에 대해서 알아본다
+
+# Systemd		(위치: /usr/lib/systemd/system )
+  - 기존의 init 프로세스를 대체하는 프로세스로 최신 리눅스에 도입된 PID 1번 프로세스
+    init 프로세스에 대한 호환성 제공
+ Systemd UNIT 사용
+   - 시스템 부팅시 병렬 처리로 시작
+   
+# System UNIT 
+시스템 관리를 위한 Systemd시스템의 오브젝트로 서비스, 장치관리자, 시스템 리소스 관리등을 수행하는데 사용한다.
+# Systemd UNIT File
+   - Systemd UNIT의 동작을 정의하는 구성 파일
+-txt 형태의 파일에 해당한다.
+  - Systemd UNIT 파일은 기본적으로 Unit 섹션, Unit_Type 섹션, Install 섹션 등으로 구성됨.
+        - [Unit] 섹션 :  Systemd Unit의 일반적인 정보를 포함. 
+        - [Unit_Type] 섹션  :  Unit Type에 대한 정보를 포함.
+        - [Install] 섹션  :  systemctl의 enable, disable 명령과 관련된 섹션
+  Systemd Unit 종류
+    - service unit : 시스템에서 백그라운드에서 동작하는 응용 프로그램이나 데몬을 나타냅니다. 서비스 유닛은 시스템 부팅 시 자동으로 시작될 수 있습니다.
+    - device unit
+    - mount unit
+    - automount unit
+    - swap unit
+    - target unit :  systemd에서 타깃은 특정 시스템 상태를 나타내는 유닛의 그룹입니다. 예를 들어, multi-user.target은 멀티유저 모드로 시스템을 부팅할 때 필요한 유닛을 포함하는 타깃입니다.
+    - timer unit
+    - snapshot unit
+    - socket unit : systemd에서 사용되는 하나의 유형으로, 소켓 기반의 통신을 관리하는 데 사용됩니다. 사용하면 실제 서비스가 시작되기 전에 연결을 수신하고 처리할 수 있습니다.
+    - scope unit
+    - slice unit
+
+위치>
+[root@server-1 system]# pwd
+/usr/lib/systemd/system			여기에 있는 파일유닛들 설정에 따라서 동작함
+
+예시로 sshd.service 파일을 vi 에디터로 열어본다
+[Unit]					* 
+Description=OpenSSH server daemon
+Documentation=man:sshd(8) man:sshd_config(5)
+After=network.target sshd-keygen.target
+Wants=sshd-keygen.target
+[Service]
+Type=notify
+EnvironmentFile=-/etc/sysconfig/sshd
+ExecStart=/usr/sbin/sshd -D $OPTIONS
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+RestartSec=42s
+[Install]
+WantedBy=multi-user.target
+ 
+# 사용법
+1.	서비스 상태확인		Status
+$ systemctl status [서비스 이름]
+
+2.	서비스 시작/중지/다시시작	Start 	Stop 	Restart
+$ systemctl start [서비스 이름]
+$ systemctl stop [서비스 이름]		
+$ systemctl restart [서비스 이름]
+
+3.	서비스 (자동)활성화/ 비활성화		Enable Disable
+$ systemctl enable [서비스 이름]
+$ systemctl disable [서비스 이름]
+
+4.	서비스 재시작			Reload	
+$ systemctl reload [서비스 이름]
+>>reload는 서비스 중단되지않고 다시부르는것이고, 설정파일과 같은 일부변경의 경우 사용한다
+   restart는 서비스를 중지하고 다시 시작하는것이라서 차이가 있음.
+
+5.	부팅시 자동시작여부 확인 (permanent 연관)		is-enabled
+$ systemctl is-enabled [서비스 이름]
+
+6.	현유저의 부팅 시 활성화되지 않은 서비스 활성화/비활 --user enable / --user disable
+$ systemctl --user enable [서비스 이름]
+$ systemctl --user disable [서비스 이름]
+>>--user는 지금유저에 해당, 그냥 enable은 시스템(전체유저)에 해당됨.
+7.	특정 유닛 서비스 로그확인			journalctl -u
+$ journalctl -u [서비스 이름]    //모든로그확인시 journalctl 만 입력
+
+8.	시스템 부팅시 발생로그확인			journalctl -b
+$ journalctl -b
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Systemd UNIT 목록 확인
+$ systemctl list-units
+  UNIT    LOAD   ACTIVE SUB       DESCRIPTION
+ UNIT : Systemd UNIT
+ LOAD : Systemd UNIT의 설치 상태 (loaded : 정상적으로 설치됨.  not-found : 해당 UNIT을 사용할 수 없음)
+ ACTIVE : Systemd UNIT의 실행 상태
+     active : Unit이 실행됨
+     inactive : Unit이 실행되지 않은 상태
+ SUB : Systemed UNIT의 세부 실행 상태
+     running : 정상 실행
+     exited : Unit이 실행중이나 Systemd가 관리하지 않고 Kernel이 관리함.
+     waiting : 특정한 이벤트를 기다리는 상태
+     dead : 실행중이지 않은 상태
+$ systemctl list-units --type=service
+$ systemctl list-units –all
+
+# Systemd UNIT 의존성 확인			list-dependencies	
+$ systemctl list-dependencies  SYSTEMD_UNIT	
+
+# 모든 활성화된 유닛의 상태 확인		list-units
+$ sudo systemctl list-units --type=service
+
+# 모든 유닛의 상태 확인
+$ sudo systemctl list-units --all
+
+#Systemd UNIT mask 설정			mask
+$ systemctl  mask  SYSTEMD_UNIT
+>> 특정 유닛(서비스, 소켓, 타이머 등)을 비활성화하는 기능을 나타냅니다. Mask된 유닛은 부팅 시 또는 수동으로 시작할 수 없습니다. 이는 해당 유닛이 시스템 동작에 아무런 영향을 미치지 않도록 하는데 사용됩니다. But 현재 실행중이라면 현재 돌아가는상태로, 계속 실행됨.
+
+#Systemd UNIT mask 설정 해제			unmask
+$ systemctl  unmask  SYSTEMD_UNIT
+
+
+실습) 프린트와 관련된 서비스인 cups를 찾아보도록 하자
+[root@server-1 system]# systemctl list-units |grep cup
+  cups.path                                                                                                loaded active running   CUPS Scheduler
+  cups.service                                                                                             loaded active running   CUPS Scheduler
+  cups.socket                                                                                              loaded active running   CUPS Scheduler
+
+cup를 masking 해보자.
+[root@server-1 system]# systemctl mask cups.service 
+Created symlink /etc/systemd/system/cups.service → /dev/null.
+[root@server-1 system]# systemctl restart cups.service 
+Failed to restart cups.service: Unit cups.service is masked.	마스킹되어 실행되지 않는다.
+[root@server-1 system]# systemctl unmask cups.service 	언마스킹하고 조회해보자
+Removed "/etc/systemd/system/cups.service".
+[root@server-1 system]# systemctl status cups
+Active: active (running) since Thu 2023-11-02 11:16:56 KST; 26min ago
+TriggeredBy: ● cups.socket
+             ○ cups.path
+       Docs: man:cupsd(8)
+   Main PID: 7821 (cupsd)			
+[root@server-1 system]# systemctl restart cups.service 
+[root@server-1 system]# systemctl status cups 		다시 restart로 재시작을 해보면
+Active: active (running) since Thu 2023-11-02 11:43:42 KST; 2s ago
+TriggeredBy: ● cups.socket
+             ○ cups.path
+       Docs: man:cupsd(8)
+   Main PID: 8248 (cupsd)
+>Main PID가 변경된 것이 확인 가능하다.(재시작됐으니)
+
+# System Logs 란 (2가지)
+Event(시스템에 이벤트발생) >> Systemd-journald >> Syslog (rsyslogd)로 이동
+1.	Syslog (rsyslogd)
+Unix/Linux 의 기본 시스템 로드(init)에 해당하며, 
+로그 경로 :  /var/log/ 
+로그의 저장포맷 : 텍스트 text
+- Facility, Priority에 따라 선별적으로 관리됨.
+- 구성 파일 : /etc/rsyslog.conf
+
+2.	Systemd Journal Log (systemd-journald)
+전통적인 syslog 시스템에 비해 향상된 기능을 제공하며, 이벤트와 로그 데이터를 구조화하여 저장하고 검색하는 데 용이하다. Journal은 ‘systemd-journald’ 데몬을 통해서 관리됨.
+
+
+
+실습) rsyslog를 확인해본다
+[root@server-1 ~]# ls -l /etc/rsyslog.conf 
+-rw-r--r--. 1 root root 3194  5월 10 03:00 /etc/rsyslog.conf
+이 conf 파일을 vi 에디터로 확인해보면, 
+#### RULES #### 아래에 어디 폴더에 어떤 포맷형태가 저장되는지 나옴
+*.emerg                                                 :omusrmsg:*
+cron.*                                                  /var/log/cron
+mail.*                                                  -/var/log/maillog
+*.info;mail.none;authpriv.none;cron.none                /var/log/messages
+uucp,news.crit                                          /var/log/spooler	등으로
+local7.*                                                /var/log/boot.log
+왼쪽파일을 오른쪽에 적치시켜주는 로깅을 실행해준다.
+
+ 
+ 
+~~
+# Systemd Journal Log(systemd-journald)
+  - Systemd 시스템에서 추가된 로그 관리 방식
+  - 로그 저장 경로 :  /run/log/journal/
+  - 로그 저장 포맷 :  데이터 바이너리
+  - 부팅시 부터 발생하는 모든 이벤트를 기록
+  - 재부팅 시 로그가 사라짐
+
+#부팅시부터 발생한 모든 로그를 시간 순서대로 확인
+$ journalctl
+#최근 로그부터 확인			-r
+$ journalctl -r
+#최근 로그 10행 확인			-n
+$ journalctl -n
+#최근 로그 N행 까지 로그 확인		-n N
+$ journalctl -n N
+#실시간으로 로그 확인			-f
+$ journalctl -f
+
+$ journalctl --since 일시/날짜/시간
+ 예시: [root@server-1 ~]# journalctl --since "2023-11-02 13:00"
+$ journalctl --until 일시/날짜/시간
+$ journalctl --since 일시/날짜/시간 --until 일시/날짜/시간
+ 예시: journalctl --since “2023-11-02 12:00” --until “2023-11-02 13:00" 의 형태로
+ 12시부터 13시까지의 로그를 볼 수 있음
+#특정필드를 출력하기 (출력 옵션지정)
+[root@server-1 ~]# journalctl -o short		로그항목을 간략하게 표시
+[root@server-1 ~]# journalctl -o verbose 	=특정 필드’verbose’를 출력하기 
+[root@server-1 ~]# journalctl -o json		json텍스트 형태로 줄글로 출력하기
+[root@server-1 ~]# journalctl -o json-pretty		json 형태로 출력하기(이쁘게)
+
+journalctl -o json의 경우 
+MESSAGE":"BIOS-e820: [mem 0x00000000f0000000-0>
+{"_SOURCE_MONOTONIC_TIMESTAMP":"0","_HOSTNAME":"server-1.example.com","__MONOTONIC_TIMESTAMP>
+{"__CURSOR":"s=f1b634af40b846708ddf62dec0ba5244;i=15;b=a142ea13bddf4c22b26e29429a66cf15;m=2c>
+{"__MONOTONIC_TIMESTAMP":"2902530",	
+>>이처럼 그닥 예쁘지않게 나오지만,
+json-pretty의경우
+"_BOOT_ID" : "a142ea13bddf4c22b26e29429a66cf15",
+        "SYSLOG_IDENTIFIER" : "kernel",
+        "_MACHINE_ID" : "74958449c4bc422c9d7b8e0c070313fd",
+        "SYSLOG_FACILITY" : "0",
+        "_RUNTIME_SCOPE" : "initrd",
+        "_TRANSPORT" : "kernel",
+        "_SOURCE_MONOTONIC_TIMESTAMP" : "0",
+상당히 정리되어 나오는것을 볼 수 있음.
+
+# Systemd Journal Log의 필드 조건을 지정하여 로그 확인
+journalctl _PID=1
+# journalctl _UID=1000
+# journalctl _GID=1000
+
+# journalctl _COMM   특정 이름으로 실행된 프로세스의 로그를 보기
+[root@server-1 ~]# journalctl _COMM=crond
+11월 02 08:59:00 server-1.example.com crond[1474]: (CRON) STARTUP (1.5.7)
+11월 02 08:59:00 server-1.example.com crond[1474]: (CRON) INFO (Syslog will be used instead >
+11월 02 08:59:00 server-1.example.com crond[1474]: (CRON) INFO (RANDOM_DELAY will be scaled >
+11월 02 08:59:00 server-1.example.com crond[1474]: (CRON) INFO (running with inotify support)
+등등이 출력된다.
+
+# journalctl _COMM=crond
+# journalctl _SYSTEMD_UNIT=systemd-journald.service
+
+# linux 리눅스 시스템 부팅관리 (systemd와 관련됨)
+init 시스템 내 runlevel에 관해서		[root@server-1 ~]# cd /usr/lib/systemd/system/
+ Runlevel : 부팅모드
+[리눅스 기준 Runlevel]		*시스템 부팅타겟 확인= $ runlevel / $ who -r 로 확인가능
+Runlevel 0 : Halt*		시스템을 종료합니다.
+Runlevel 1 : Single Mode*	단일 사용자 모드 또는 복구 모드입니다. 이 레벨은 시스템을 최소한의 서비스로 시작하여 시스템 관리자가 유지 보수 작업을 수행할 수 있게 합니다.
+Runlevel 2 : Multi-User (without NFS)	다중 사용자 모드이지만, 네트워크 서비스를 제공하지 않습니다.
+Runlevel 3 : Multi-User*			다중 사용자 모드이며, 네트워크 서비스를 제공합니다. 일반적으로 서버 시스템에서 사용됩니다.	
+Runlevel 4 : Reserved		사용되지 않습니다.
+Runlevel 5 : X11(Graphic)*	그래픽 다중 사용자 모드입니다. 일반적으로 데스크톱 환경을 사용하는 시스템에서 사용됩니다.
+Runlevel 6 : Reboot* 		시스템을 재부팅합니다.
+
+ #   target	[위치: [root@server-1 ~]# ls -l /etc/inittab “
+-rw-r--r--. 1 root root 490  8월 24 14:44 /etc/inittab
+multi-user.target : CLI 기반의 다중 사용자 모드
+graphical-target : GUI 기반의 다중 사용자 모드
+default.target : 시스템 부팅시 사용하는 기본 부팅 모드를 정의
+local-fs.target :  파일시스템 마운트(/etc/fstab)
+rescue.target : 복구 쉘(rescue shell) 제공하는 부팅 타겟/    Root FS에 읽기 및 쓰기가 가능함.
+emergency.target : 긴급 쉘(emergency shell) 제공하는 부팅 타겟>                               	  Root FS을 읽기 전용으로 접근 가능함.
+"target"은 일반적으로 특정 실행 가능한 파일(바이너리)을 지정하는 심볼릭 링크를 나타내는 디렉터리입니다
+[root@server-1 ~]# cd /usr/lib/systemd/system/
+[root@server-1 system]# ls -l runlevel?.target
+lrwxrwxrwx. 1 root root 15  8월 24 14:44 runlevel0.target -> poweroff.target
+lrwxrwxrwx. 1 root root 13  8월 24 14:44 runlevel1.target -> rescue.target
+lrwxrwxrwx. 1 root root 17  8월 24 14:44 runlevel2.target -> multi-user.target
+lrwxrwxrwx. 1 root root 17  8월 24 14:44 runlevel3.target -> multi-user.target
+lrwxrwxrwx. 1 root root 17  8월 24 14:44 runlevel4.target -> multi-user.target
+lrwxrwxrwx. 1 root root 16  8월 24 14:44 runlevel5.target -> graphical.target
+lrwxrwxrwx. 1 root root 13  8월 24 14:44 runlevel6.target -> reboot.target
+ 
+
+# 컴퓨터의 부팅과정에서 일어나는 순서 및 요소
+1.	bios/uefi  (Basic Input/Output System / Unified Extensible Firmware Interface)
+기본적인 하드웨어 테스트가 수행됨.
+2.	boot loader 부트로더
+BIOS/UEFI가 부팅 장치를 찾은 후, 부트 로더가 해당 장치에 설치된 운영체제의 부트 섹터를 찾아 실행 (커널 이미지를 메모리에 로드)
+3.	kernel 커널 부팅
+부트 로더가 커널 이미지를 메모리로 로드하고 실행합니다. 커널은 운영체제의 핵심 부분으로, 하드웨어와 소프트웨어 간의 상호 작용을 관리
+4.	init
+커널이 실행되면, init 또는 더 최근에는 systemd와 같은 시스템 매니저가 시작됩니다. 이 단계에서 시스템 초기화 및 다양한 서비스가 시작됩니다. (4-5는 거의 비슷함)
+5.	/etc/inittab  or systemd 시스템매니저
+init 프로세스는 과거의 시스템에서 /etc/inittab 파일을 참조하여 실행 레벨(runlevel) 및 부팅 동작을 관리. 그러나 최신 Linux 배포판들은 systemd와 같은 다른 시스템 매니저를 사용 
+5에 바로 이어서 Target (systemd 에서 사용되는 다양한 유형)
+여기서는 systemd가 타겟에 지정된 서비스와 데몬을 시작한다. 이 단계에서는 네트워크 서비스, 로그 시스템, 파일시스템 마운트, 그래픽환경 등 시스템 서비스가 시작됨.
+1.	default.target:
+•	시스템이 부팅된 후에 사용할 기본 타겟을 지정합니다. 일반적으로 이는 다른 타겟으로 심볼릭 링크되어 있습니다. 시스템 부팅 중에 명시적으로 지정하지 않으면 이 타겟이 사용됩니다.
+2.	local-fs.target:
+•	로컬 파일 시스템을 마운트하기 위한 타겟입니다. 시스템 부팅 중에 로컬 파일 시스템을 마운트하려면 이 타겟을 사용합니다.
+3.	sysinit.target:
+•	시스템 초기화를 위한 타겟입니다. 기본적인 시스템 초기화 작업을 실행하기 위해 사용됩니다.
+4.	basic.target:
+•	기본적인 시스템 서비스와 유닛을 실행하기 위한 타겟입니다. 이 타겟은 시스템의 기본 동작을 설정합니다.
+5.	multi-user.target:
+•	다중 사용자 모드에서 필요한 서비스와 유닛을 실행하기 위한 타겟입니다. 이 타겟은 다수의 사용자가 사용하는 환경을 설정합니다.
+6.	graphical.target:
+•	그래픽 사용자 환경을 실행하기 위한 타겟입니다. 그래픽 데스크톱 환경을 사용하는 경우 이 타겟이 설정됩니다.
+
+시스템 부팅 타겟 확인하기)  $ runlevel / $ who -r 에서 ‘레벨확인’이가능.
+기본 부팅 타겟 확인
+$ systemctl get-default
+기본 부팅 타겟 설정
+$ systemctl set-default  BOOT_TARGET
+Runtime에서 부팅 타겟 전환
+$ systemctl isolate  BOOT_TARGET
+
+ 
+실제로 가상머신 리눅스 실행전에 e를 누르면 타겟실행을 할 수있는 cli 창으로 이동하는데,
+ 
+quiet으로 끝나는 행에 systemd.unit=graphical.target을 입력하고 부팅을 하게되면 그것으로 부팅됨.(ctrl+x로 부팅)
+[root@server-2 ~]# systemctl isolate 	를 입력하게되면
+ctrl-alt-del.target         poweroff.target
+default.target              reboot.target
+emergency.target            rescue.target
+exit.target                 runlevel0.target
+graphical.target            runlevel1.target
+halt.target                 runlevel2.target
+initrd-switch-root.service  runlevel3.target
+initrd-switch-root.target   runlevel4.target
+initrd.target               runlevel5.target
+kexec.target                runlevel6.target
+multi-user.target           system-update.target
+시스템 실행에서 제외시킬 타겟을 발견할 수 있다.
+
+# 루트 비밀번호를 잊어서, 초기화 시켜야 할 때
+재부팅시에 응급모드로 e를 입력하고 systemd.unit=emergency.target을 입력하고 나오면 gui가없는 모드로 부팅하게된다.
+1.부팅과정을 멈추는 과정을 하려면 linux 행에 rd.break를 입력하고 나온다.(ctrl+x)
+ 
+여기서 mount | grep /sysroot 를 입력해서 확인
+ 
+2. 명령줄 입력하기 
+$ mount -o remount,rw /sysroot
+$ chroot /sysroot
+$ passwd
+$ touch /.autorelabel
+$ exit
+를 입력하고 저장후나오면(ctrl+d) 바뀐 redhat > root 비밀번호로 root계정에 들어갈 수 있게됨.
+
+
+
