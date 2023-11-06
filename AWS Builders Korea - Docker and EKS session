@@ -1,0 +1,443 @@
+AWS Builders Korea - Docker and EKS   세션
+
+Docker로 Container의 Image를 어떻게 만들고, Container를 어떻게 배포하여 실행하는지 그리고 Container의 개수가 많아지게 되면, 이것들을 어떻게 효율적으로 다룰 수 있는지, EKS를 통해 배워보는 시간을 가져보도록 한다.
+
+ 
+컨테이너란,
+가상환경(운영체제, 가상머신, 애플리케이션의 설치)에서 운영체제가 빠진 부분을 말한다.
+Config, code, 종속성, 환경, 라이브러리 그리고 런타임엔진들이 하나의 패키지로 만들어져있으며 이 패키지로 격리된 이미지화하여 Container를 배포하게 된다.
+ 
+기존의 모놀리식 애플리케이션에서 마이크로서비스 애플리케이션으로 많이 바뀌고있다.
+기존 모놀리식에선 전체 주제와 메세지 기능이 배포된 상태에 일정 복잡도를 넘어가게되면 개발 및 운영자가 온갖 장애에 시달리고, 시스템 마비가 일어날 수 있는 환경에 처하게 된다.
+마이크로서비스로 이전시 서비스의 종속성을 쪼개서 사용하게된다. 다만 이때 리소스낭비가 일어날 수 있는데 컨테이너 서비스를 이용하게된다면 위의 문제들을 해결할 수 있다.
+컨테이너는 도커를 사용해본다.
+-DOCKER 
+경량 컨테이너 가상화 플랫폼이며,
+컨테이너를 생성 저장 관리 및 실행할 수 있는 도구를 제공한다.
+자동화된 구축, 테스트 및 배포 파이프라인과 쉽게 통합된다.
+ 
+도커파일을 이미지화하고 이를 업로드한다. 레지스트리에 업로드를 하며 aws에서 제공하는 레지스트리를 프라이빗하게 만들어보도록 한다.
+ 
+환경도 공유하지 않도록 사용자/ 주제 / 메세지 컨테이너를 따로 만들어 종속성을 없애며
+이미지를 받아서 컨테이너에서 운영하도록하는 구조로 되어있다.
+
+수백개에서 수천개의 컨테이너가 만들어지면 
+오케스트레이션 도구가 필요하게된다. 굉장히 복잡해지며 이때 사용하는것은
+ 
+AWS ECS와 AWS EKS를 사용하며 이 세션에서는 EKS를 사용해보는 실습을 진행한다.
+ 
+관리부분- 컨트롤 플레인에서 받아서 처리하게된다.
+배포부분- 실제 배포하는 부분은 데이터 플레인에 해당하며, 애플리케이션이 운영되는 부분이다. 
+인스턴스나 온프레미스차원에서 실행한다면 
+컨트롤 플레인부분에서는 장애가 일어난다면 전체 시스템에서 마비가 일어나게 되며, 명령자체를 받지 못하는 상황이 일어날 수 있다. 3대정도의 서버운영은 고가용성을 위해 이루는데 생각보다 백업 및 장애처리와 관련하여 할 업무가 많으므로 컨트롤 플레인에서 바빠진다.
+BUT
+ 
+AWS EKS에서는 이러한 컨트롤플레인의 관리부분을 모두 자동으로 관리해주며, 데이터 플레인의 경우 오토스케일링으로 어느정도 관리의 편리함이 생긴다( 완전 자동화는 아님 )
+-데이터 플레인에 노드가 다량 있는것이 보인다.
+각각의 노드에는 자동 관리라고는 하나 인스턴스에 신경을 써주어야 하는 부분임을 유의하자.
+이때 데이터 플레인에 사용할 서비스가 있다.
+ 
+바로 AWS Fargate이며 이는 서버리스로 완전한 자동관리를 이루어준다.
+쿠버네티스 오브젝트의 모든 부분을 배포할수는 없다( 제한되는 부분이 있음 )
+관리형 노드그룹과 Fargate를 동시에 사용하여 이를 해결하는 부분이라고 생각하자.
+ 
+
+ 
+둘다 같이 쓰는 형태의 서비스 이용이 가장 많다.
+
+# Kubernetes Object 란? 
+ 
+사실 컨테이너가 배포되는것이 아니라, Pod이 배포된다 (container를 Pod이 감싸는 형태)
+여러 컨테이너를 pod에 감싸서 사용할 피치못할 경우와/ 1개의 컨테이너를 1개의 pod에 사용하는 형태가 대부분이다.
+명령형과 선언형 두가지로 사용된다 (kubectl .. run .. first  --image =ubuntu)
+ 
+spec에서 컨테이너를 정의하며 이미지를 컨테이너에 생성한다. 컨테이너에서 이미지name을 정의해야 하나 뿐아니라 여러개의 컨테이너에서 각 이미지에 접근할 수 있다.
+kubectl apply -f first.yaml 정도로 선언문으로 선언하여 배포하는 형태가 다수. (권하는 방식임)
+
+# Replicaset
+ 
+3은 replicas를 pod 3개를 만든다는 뜻( 최소한 pod개수를 3개를 유지한다)이다. 
+ selector라는 개념은 매우 중요하다. 본 그림에서는 app : ubuntu라는 매치레이블을 의미하고있는데 이영역을 선택한다는 의미이고 오른쪽의 spec에서 정의하는 컨테이너 기준으로 생성되는 pod에 레이블을 붙여준다. 이때 셀렉터로 선택해서 논리적으로 그룹핑하여, 하나의 pod인것처럼 운용할 수 있게된다.
+>각 애플리케이션이 장애가있어도 무사히 운용될 수 있다.
+>버전 1에서 버전 2로 바꿀때, 하나씩 바꾸는게 만만치 않은데 새로운 버전을 배포할 때, 레플리카 셋에 버전2를 배포한다. 이후 track을 바꿔주면된다. 이때 사용되는것이 또 있는데
+# Deployment(디플로이먼트) 
+위에서 바로 이어지는 내용이다.
+ 
+이부분은 배포를 쉽게 하기 위해서 있는 부분이다.
+쿠버네티스는 대부분의 경우 이 Deployment를 짜는 일이라고 생각하면된다.
+
+# Service(서비스)
+배포를 했지만, 결국 네트워크 서비스로서 노출시켜야 서비스 이용이 많이 되는것이 당연하다.
+ 
+
+>>서비스를 배포하는 일, 그리고 Deployment 를 배포하는 일이 AWS kubernetes에서 이루어짐.
+
+{# 실습 }
+ AWS Builders Korea - Docker and EKS 시작하기
+ 이부분을 먼저 시작하도록한다.
+
+ 
+ 
+이름(Name) 에 mycloud9를 입력하고, 인스턴스 유형에 t3.small을 선택하여 생성한다.
+ 
+생성되면 다음으로 IAM에서 권한(자격증명)을 주도록 한다.
+ 
+ 
+ 
+검색창에서 Administrator로 검색한 후, AdministratorAccess 권한(관리자 권한)을 체크한 후 다음(Next) 버튼을 클릭
+역할 이름(Role name) 에 myeksrole를 입력하고 생성한다.
+
+다음으로 EC2에 인스턴스에 들어간다(Cloud9가 설치되어있는)
+ 
+ 
+업(Actions) 버튼 클릭, 보안(Security) 메뉴 클릭, IAM 역할 수정(Modify IAM role) 까지 연달아 클릭
+IAM 역할(IAM role) 의 드롭다운 메뉴를 클릭한 후, 위에서 만든 myeksrole을 검색한 후 선택합니다. IAM 역할 업데이트(Update IAM role) 버튼을 누른다.이제 Cloud9 인스턴스에 AdministratorAccess권한이 적용되었다.
+ 
+오른쪽위에 톱니바퀴 아이콘을 클릭한후 AWS Settings 메뉴를 찾아 클릭합니다. AWS managed temporary credentials: 을 비활성화한다.
+다음 명령어를 실행하여 기존에 존재하는 자격증명 파일을 제거한다.
+rm -vf ${HOME}/.aws/credentials 
+
+# Cloud9 인스턴스에 보안그룹 수정
+ 
+ 
+화면 아래쪽에 인바운드 규칙(Inbound Rule) 탭에서, 인바운드 규칙 편집(Edit Inbound rules) 을 선택한다.
+규칙 추가 버튼을 클릭하여 아래와 같은 규칙을 2개 추가한 후, 규칙 저장 버튼을 클릭.
+(http와 2000번 포트를 여는 이유는 Docker 부분에서 사용하기 위해서)
+ 
+실습에서 사용할 Cloud9 의 보안 그룹 까지 모두 열어 주었다.
+
+# EKS 설치
+Administrator:~/environment $ sudo curl -o /usr/local/bin/kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.23.13/2022-10-31/bin/linux/amd64/kubectl
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 44.4M  100 44.4M    0     0  13.5M      0  0:00:03  0:00:03 --:--:-- 13.5M
+Administrator:~/environment $ sudo chmod +x /usr/local/bin/kubectl
+Administrator:~/environment $ 
+Administrator:~/environment $ kubectl version --client=true --short=true
+Client Version: v1.23.13-eks-fb459a0
+Administrator:~/environment $ curl --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+100 33.6M  100 33.6M    0     0  25.5M      0  0:00:01  0:00:01 --:--:-- 33.7M
+Administrator:~/environment $ sudo mv -v /tmp/eksctl /usr/local/bin
+‘/tmp/eksctl’ -> ‘/usr/local/bin/eksctl’
+Administrator:~/environment $ eksctl version
+0.164.0
+
+다음 명령어로 현재 리전의 정보를 환경변수에 저장한다.
+export AWS_REGION=$(curl --silent http://169.254.169.254/latest/meta-data/placement/region) && echo $AWS_REGION
+다음 명령어로 eks를 배포합니다. 15분 정도 걸립니다.
+eksctl create cluster --name myeks --version 1.24 --region ${AWS_REGION}
+>>15분 생성과정중에 도커세션으로 넘어간다.( 새 터미널을 생성, 상단은 새 파일을 생성 )
+다음 명령어로 노드의 리스트를 확인합니다.
+kubectl get nodes
+ 현재 이단계를 수행했다.
+
+# Docker 도커 세션
+Docker 기본 명령어
+Docker 이미지 빌드
+Docker Repository에 이미지 올리기
+Docker Volume 도커 저장 공간
+Docker Network
+멀티 컨테이너 애플리케이션
+Docker compose		를 진행한다.
+
+#Docker 기본 명령어
+1 다음 명령어로 nginx(웹서버) Docker 이미지를 검색
+docker search nginx
+2 다음 명령어로 가장 다운로드 수가 많은 공식 nginx 이미지를 다운로드
+docker pull nginx
+3 다음 명령어로 Docker 이미지가 잘 다운로드 됐는지 확인
+ 
+Administrator:~/environment $ docker images
+REPOSITORY   TAG       IMAGE ID       CREATED      SIZE
+nginx        latest    c20060033e06   5 days ago   187MB
+4 다음 명령어로 nginx 이미지를 기반으로 컨테이너를 실행합니다. 그리고 브라우저에 Cloud9 인스턴스의 Public IP 주소를 입력하여 "Welcome to nginx!" 화면이 제대로 나오는지 확인
+ 
+docker run --name apple -d -p 80:80 nginx
+설명)
+--name: 컨테이너의 이름을 지정(생략하면 랜덤하게 만듭니다)
+-d: 백그라운드에서 실행하기
+-p 80:80: 앞에 80번 포트로 접근하면 컨테이너의 80번 포트로 연결하라는 포트 매핑하는 옵션
+nginx는 풀(다운)받을 이미지 이름
+ >퍼블릭ipv4주소로 웹에서 접근해본다.
+5 다음 명령어로 실행되고 있는 컨테이너를 확인
+docker ps
+ 
+다음 명령어로 실행되고 있는 컨테이너를 정지
+docker stop apple
+6 다음 명령어로 모든(실행되고 있는, 정지된) 컨테이너를 확인 (정지된 apple 컨테이너를 볼 수 있습니다.)
+docker ps -a
+ 
+7 다음 명령어로 정지된 컨테이너 다시 실행
+docker start apple
+실행 중인 컨테이너를 확인합니다. 2개의 컨테이너가 실행되고 있는 걸 확인
+docker ps
+ 
+
+8 다음 명령어로 2000번 포트로 orange 컨테이너를 하나 더 실행합니다. 그리고 브라우저에 Cloud9 인스턴스의 Public IP:2000 주소를 입력하여 "Welcome to nginx!" 화면이 제대로 나오는지 확인합니다
+ 
+
+9.다음 명령어로 컨테이너를 지우는 시도를 해봅니다. 에러가 날 것입니다. 왜 에러가 날까요? 컨테이너가 실행 중이기 때문에 지울 수가 없습니다. 그럼 정지하고 지우면 될까요?
+docker rm oragne
+ 
+>오류가 난다. 먼저 stop으로 정지해야 한다.
+
+10. 도커nginx 삭제 / docker rmi nginx
+ 
+깔끔하게 지워졌다.
+
+
+
+ 
+그동안 EKS 클러스터가 생성되었다.
+Administrator:~/environment $ kubectl get nodes 로 확인
+ 
+ 
+인스턴스도 형성되어있다.
+ 
+aws cloudformation에서도 확인이 가능하다.
+
+#Docker 이미지 build 하기
+1 다음 명령어로 깃허브에 오픈되어 있는 2048게임 코드를 다운
+git clone https://github.com/gabrielecirulli/2048
+ 
+2 다음 명령어로 디렉토리를 이동합니다.
+cd ~/environment/2048
+3 다음 명령어로 Dockerfile 을 만듭니다.
+cat <<EOF > Dockerfile 
+FROM nginx:latest
+
+COPY . /usr/share/nginx/html
+
+EXPOSE 80
+EOF
+ 
+
+4 다음 명령어로 Docker 이미지가 잘 다운로드 됐는지 확인합니다.
+$ docker build -t web2048 . 
+ 
+ 
+>docker images로 확인 가능.
+
+5 다음 명령어로 nginx 이미지를 기반으로 컨테이너를 실행합니다. 그리고 브라우저에 Cloud9 인스턴스의 Public IP 주소를 입력하여 2048 게임 화면이 제대로 나오는지 확인합니다.
+docker run --name web2048 -dp 80:80 web2048
+ 
+
+6 다음 명령어로 모든 컨테이너를 지웁니다.
+docker rm -f $(docker ps -aq)
+7 다음 명령어로 모든 이미지를 지웁니다.
+docker rmi -f $(docker images -q)
+
+# ECR에 이미지를 업로드 // ECR 레포지토리 만들기
+Repositories 로 이동해서 , 프라이빗을 선택후 생성한다.
+ 
+
+ 
+ 
+ 푸시 명령보기 버튼을 누른다.
+ 
+주소가 다 다르기 때문에, 실습에 집중하도록 한다.
+aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 979191294468.dkr.ecr.ap-northeast-2.amazonaws.com
+ 
+docker build -t myrepo .
+ 
+docker tag myrepo:latest 979191294468.dkr.ecr.ap-northeast-2.amazonaws.com/myrepo:latest
+설명)
+tag myrepo:latest 라는 이름(이미지)을
+979191294468.dkr.ecr.ap-northeast-2.amazonaws.com/myrepo:latest 로 바꾸는 과정이다.
+ 
+>Registry/repository : TAG(version) 형태로 생성된다.
+docker push 979191294468.dkr.ecr.ap-northeast-2.amazonaws.com/myrepo:latest
+ 
+>확인으로 ECR로 가서 확인한다.
+ 
+ 
+Administrator:~/environment/2048 (master) $ docker run --name web2048 -dp 80:80 web2048 으로 실행해본다(상단창)
+>>docker run --name 2048 -dp 80:80 979191294468.dkr.ecr.ap-northeast-2.amazonaws.com/myrepo:latest
+
+# EKS Pod 기본 명령어
+1 다음 명령어로 Pod을 배포해 봅니다.
+kubectl: 쿠버네티스에 명령어를 보내는 유틸리티
+run: 실행 명령어
+nginx-apple: Pod의 이름
+--image=nginx: nginx 컨테이너 이미지를 사용한다는 뜻.
+kubectl run nginx-apple --image=nginx
+
+2 다음 명령어로 만들어진 Pod의 리스트를 확인합니다.
+kubectl get pods
+ 
+현재 1/1 하나의 컨테이너가 하나의 팟에 있다는것을 의미한다.
+
+3 위에서 Pod을 만드는 건 명령어로 만들어 봤습니다. 이제 선언형(yaml)으로 Pod을 만들어 볼 겁니다. 아래 명령어로 선언형(yaml)파일을 만듭니다.
+ 
+>확인하려면 왼쪽 폴더에서 nginx-orange.yaml을 상단 창에 올려본다.
+ 
+kind: 팟을 만들겠다
+metadate: 가진 정보
+ 이름과 레이블은 다른용도로 사용한다.
+spec : 어떤 컨테이너를 가지고 만들지 정의하는곳
+ nignx엔진을가지고 이미지의 이름을 orange로 만든다.
+
+4 다음 명령어로 위에서 만들 야물 파일을 배포하여 Pod을 만듭니다.
+ 
+5 다음 명령어로 만들어진 Pod가 어느 노드에 배포되었는지 확인합니다.
+ 
+-o : 옵션 wide :확장형으로 보기
+인스턴스를 ‘노드’로 나타내고있다. 
+ 
+ 
+이것과 동일하다.
+
+6 다음 명령어로 Pod의 레이블을 볼 수 있습니다.
+kubectl get pods --show-labels
+ 
+-Label이란것을 가지고 계속(selector) 사용하게 된다.
+
+7다음 명령어로 이름을 가지고 Pod을 지울 수 있습니다.
+kubectl delete pods nginx-apple
+ 
+
+8 다음 명령어로 레이블을 가지고 Pod을 지울 수도 있습니다.
+kubectl delete pods -l run=nginx-orange
+
+# ReplicaSet 배포
+1 다음 명령어로 ReplicaSet을 만들기 위한 yaml을 정의한다.
+ 
+
+2다음 명령어로 replicaset.yaml을 배포합니다.
+kubectl apply -f replicaset.yaml
+3다음 명령어로 만들어진 ReplicaSet과 Pod의 리스트를 확인합니다.
+kubectl get replicaset,pods
+ 
+ 
+>셀렉터로 선택해서 ‘같은’ 이름의 app 라벨링을 관리한다.
+위는 레플리카셋이 pod 3개를 감싼 형태이다.
+
+ 지워도 다시 3개로 유지되는 레플리카셋을 볼 수 있다.
+
+ 
+kubectl scale replicaset nginx-replicaset --replicas=5 
+레플리카셋의 팟을 5개로 늘릴수도 있다.
+
+다음 명령어를 ReplicaSet을 지웁니다.
+kubectl delete replicaset nginx-replicaset
+ 
+>레플리카셋은 이중화,삼중화 작업으로 고가용성화를 꾀하는것이다. 
+
+# Deployment 배포하기 (실제로 버전을 바꿔서 배포시 이용가능한지)
+1 다음 명령어로 Deployment를 만들기 위한 yaml을 정의한다.
+ 
+다음 명령어로 deployment.yaml을 배포합니다.
+$ kubectl apply -f deployment.yaml
+ 
+이런 형태가 되며,
+kind- 형태
+selector도 키 밸류 형태로 들어간다.
+app과 app부분은 똑같아야 한다.(아닐 시 에러)
+container가 각각 팟으로 3개가 그룹핑, 패키징된다.
+
+다음 명령어로 만들어진 Deployment, ReplicaSet, Pod의 리스트를 확인합니다.
+$ kubectl get deployment,replicaset,pods //각각 따로 오브젝트를 부를수도 있다.
+ 
+ 
+다음 명령어는 위와 똑같은 명령어입니다. 단지 짧게 사용한 것뿐입니다. 명령어가 길어지면 오타가 많이 나서 생산성이 떨어집니다. 앞으로 짧게 사용하도록 할 겁니다.
+Administrator:~/environment/2048 (master) $ alias k=kubectl
+$ kubectl get deploy,rs,po   // alias로 k=kubectl 로 확인해도 좋다.(매우권장)
+ 
+ 
+
+# 다음 명령어로 Kubernetes Object의 리스트와 짧은 이름, ApiVersion 등을 확인할 수 있습니다.
+kubectl api-resources  >>매우 중요하므로 익혀두어야 한다.
+
+다음 명령어를 ReplicaSet의 Pod의 개수를 모니터링할 수 있습니다. 별도의 터미널을 하나 더 띄워서 아래 명령어를 실행합니다.
+kubectl get replicaset -w
+
+왼쪽 탐색창에서 deployment.yaml 파일을 열어서, image: nginx를 image: redis 로 변경한 후 저장합니다. 그리고 다음 명령어로 다시 배포합니다.
+kubectl apply -f deployment.yaml
+
+ 
+>확인을 해보면 
+ 
+못보던 레플리카셋에서 배포가 되고있는것이 확인 가능하다. 위에 3개 배포되는상태가 바뀐 yaml에 반응하는 레플리카셋이다.
+ 
+Desired와 Current가 다르면 ‘컨트롤러’가 커런트를 디자이어드에 맞추려고 작동한다. 
+  이상태에서 현재 상태를 desired값에 맞춰주려고 하는것이다.(3>1 >>2>1 >> 2>2 >> 
+ 
+하나 줄고, 하나 늘리면서 새로 만들어지는 레플리카셋은 3으로 값을 늘리게 되며,
+기존의 레플리카셋은 결국 Desired가 0이 되면서 전부 지워지게 된다.
+
+다음 명령어로 배포된 것을 다시 롤백할 수 있습니다.
+kubectl rollout undo deploy nginx-deploy
+ 
+ 
+다시 기존의 레플리카셋으로 돌아간것을 확인할 수 있다.
+
+# Service 배포
+다음 명령어로 ReplicaSet을 만들기 위한 yaml을 정의
+ 
+다음 명령어로 2048.yaml을 배포합니다. 로드밸런서가 배포되는데 3~5분 정도 걸립니다.
+kubectl apply -f 2048.yaml
+
+다음 명령어로 만들어진 Deplyment와 Service의 리스트를 확인합니다. Service의 리스트에서 game-2048 의 EXTERNAL-IP 주소를 복사하여 브라우져에 붙여 넣으면 2048 게임이 실행되는 걸 확인할 수 있었습니다.
+kubectl get deploy,svc
+ 
+레디 3개의 팟중 3개가 레디되었음
+서비스/game-2048이 새로 배포된것이고 (로드밸런서) 외부IP주소로 로드밸런서가 만들어진다.
+a9926f8bdc6584b3faf3696b82a3565d-16950669.ap-northeast-2.elb.amazonaws.com
+ 
+ 
+ 
+https://gallery.ecr.aws/ 에서 퍼블릭한 ECR 이미지를 두고 있다. 2048을 검색해서 바로 쓴 형태임.
+2048뿐아니라 mario, tetris또한 가능하다.
+ 
+포트가 같아야 한다
+>실제 노드가 여러개일때 팟이 하나의 노드로만 들어가는 것은 아니다.
+하지만 팟끼리 각각 하나처럼 묶어줘야하는데, 이때 트래픽 전달시에 팟이 없으면 안되므로 이를 네트워크처럼 하나로 만드는 과정을 만들어주며 >>clusterIP로 묶어주게 된다.(고정아이피할당)
+얘가 팟들을 관리해주면서 트래픽을 하나씩 보내준다. 팟이 하나없어지면 새로 팟을 만들어준다.
+ 
+여러개의 노드포트도 clusterIP에 이를 뿌려주는데, 상위단계에서는 ELB 로드밸런서가 담당한다.
+ 
+즉 ELB> Nodeport>clusterIP>pod 의 순서로 트래픽분산이 이루어진다. 
+
+# Namespace 배포
+Namespace 란?
+클러스터를 하나씩 논리적으로 써야하는게 상식이다. 그래서 네임스페이스로 공간을 따로 구분지어서 쪼개서 각각이 관리할 수 있게 만드는것이 이 개념이다.
+ 
+ 
+이 팟들을 나누어보자.
+ 
+kubectl create namespace mynamespace
+
+다음 명령어로 Namespace의 리스트를 확인합니다.
+kubectl get namespace
+
+다음 명령어로 mynamespace에 nginx pod을 배포합니다.
+kubectl run nginx --image=nginx -n mynamespace
+ 
+다음 명령어로 mynamespace에 nginx pod이 잘 배포되었는지 확인합니다.
+kubectl get pod -n mynamespace
+다음 명령어로 mynamespace를 지웁니다.
+kubectl delete namespace mynamespace (*주의: 팟까지 다 지워지므로 유의하여야 함.)
+
+다음 명령어로 Namepsace와 Pod를 배포합니다.
+kubectl apply -f mynamespace.yaml
+다음 명령어로 mynamespace에 nginx pod가 잘 배포되었는지 확인
+kubectl get pod -n mynamespace
+다음 명령어로 mynamespace를 지웁니다.
+kubectl delete namespace mynamespace
+
+#지우기는 CloudFormation에서 하는것이 안전하게 지우는방법이다.
+Cloud9에서 인스턴스환경을 지웁니다.
+IAM 에서 myeksrole 도 지웁니다.
+Elastic Container Registry(ECR) 에서 리포지토리 도 지웁니다.
+Ec2에서 로드밸런서, IAM에서 생성한 Role도 삭제해본다.
+
+EKS는 확실히 난이도가 있다는것을 다시금 느꼈다.
+소~중규모의 서버리스 시스템에서는 ECS와 ECR을 통해서 프로젝트나 서비스를 운영함이 꽤나 괜찮다고 느꼈으며 이후 EKS의 전반적인 구조에 대한 이해를 가져보는 시간이였다. 이번 세션의 만족도가 참 높은 것 같다.
+
+
+
