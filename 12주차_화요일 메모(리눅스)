@@ -1,0 +1,311 @@
+20231107 화요일 메모 - 리눅스
+
+개요 - SSH(Secure SHell)
+  - 원격 접속 프로토콜 중 하나로 통신 구간을 암호화 한 원격 접속 프로토콜
+
+ 
+
+대칭키 암호화(Symmetric Cryptography)
+  - 암호화와 복호화 .
+비대칭키 암호화(Asymmetric Cryptography)
+  - 암호화와 복호화할 때 다른 키를 사용
+키페어(Key Pair) : 동시에 만들어진 공개키와 개인키의 쌍
+
+    공개키(Public Key) : 다른 사람에게 공개하는 키
+    개인키(Private Key) : 다른 사람에게 공개하지 않는 키
+       공개키로 암호화 -> 개인키로 복호화
+       개인키로 암호화 -> 공개키로 복호화
+
+#호스트 네임 변경하기
+[root@server-1 ~]# hostnamectl set-hostname host1
+[root@server-1 ~]# hostnamectl status		로 호스트네임변경
+#호스트1- 192.168.100.101
+호스트2- 192.168.100.102
+
+useradd user로 유저를 추가후
+user계정으로 넘어온다
+[user@host1 ~]$ ssh 192.168.100.102
+The authenticity of host '192.168.100.102 (192.168.100.102)' can't be established.
+ED25519 key fingerprint is SHA256:g63GJLBUCBqSGtPbrqxuYeTozd3rkVEZ5dVEzoc+ods.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])?
+
+SSH 접속 방법
+$ ssh  [OPTION]    HOST
+$ ssh  [OPTION]    USER@HOST
+
+#원격 호스트에서 SSH 접속 후 명령어 1회 실행
+$ ssh USER@HOST   COMMAND
+#OpenSSH
+SSH 서버 데몬 구성 파일 주요 내용
+# SSH 수신대기 포트 지정
+Port 22
+
+#Protocol 2
+  Protocol 2,1 : SSH v2를 기본으로 사용하지만 SSH v1 클라이언트의 접속 허용
+  Protocol 2 : SSH v2만 사용
+
+SyslogFacility AUTH
+-	Syslog Facility 지정
+LogLevel INFO
+-	로그 우선순위 지정
+LoginGraceTime 2m
+  - 로그인 실패시 연결을 끊는 시간 지정
+PasswordAuthentication yes
+  - 패스워드 인증 사용 여부 (yes : Password 인증 사용, no : Key 기반 인증만 사용)
+
+SSH 인증 방식
+  - Key 기반 인증 : 사용자의 SSH Key를 사용한 SSH 로그인 인증 방식
+- Password 인증 : ID, PW 입력 후 SSH 로그인 인증 방식
+
+PermitRootLogin prohibit-password
+   # root 사용자의 SSH 접속 허용 여부 지정
+      yes : root 사용자 SSH 로그인 허용,
+no : root 사용자 SSH 로그인 차단, 
+without-password : root 사용자의 로그인을 허용하되 Password 인증 방식은 불허)
+
+# SSH HostKey 지정
+HostKey /etc/ssh/ssh_host_rsa_key
+
+SSH Key 기반 인증 로그인 사용
+(1) SSH Key Pair 생성
+$ [root@server-1 ~]# ssh-keygen
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa):
+$ [user@host1 ~]$ ssh-keygen
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/user/.ssh/id_rsa):
+  그림처럼, 이렇게 만들어짐.
+[user@host1 ~]$ ls -l ~/.ssh/	로 조회해보기.
+합계 16
+-rw-------. 1 user user 2590 11월  7 11:29 id_rsa
+-rw-r--r--. 1 user user  564 11월  7 11:29 id_rsa.pub 
+-rw-------. 1 user user  843 11월  7 10:53 known_hosts
+-rw-r--r--. 1 user user   97 11월  7 10:53 known_hosts.old
+> 퍼블릭키(.pub)가 644로 되어있고, 프라이빗키는 600으로 설정된 모습
+id_rsa.pub 이키를 배포해본다
+
+(2) SSH 공개키를 접속하고자 하는 원격 Host의 해당 사용자로 배포
+$ ssh-copy-id USER@HOST 
+[user@host1 ~]$ ssh-copy-id user@192.168.100.102 (호스트2)
+ 
+[user@host1 ~]$ cat ~/.ssh/id_rsa.pub  로 확인해본다.
+ 
+[user@host2 ~]$ ls -ld ~/.ssh/		호스트2에서 확인해보면 
+drwx------. 2 user user 103 Nov  7 11:33 /home/user/.ssh/
+[user@host2 ~]$ cat ~/.ssh/authorized_keys	에서 조회를해보면
+ 
+똑같은걸 알 수 있음. (똑같이 배포되었음.)
+
+[user@host1 ~]$ ssh user@192.168.100.102	로  host1에서 host2로 ssh 접속을해보면
+Last login: Tue Nov  7 10:53:04 2023 from 192.168.100.101	  PW없이도 접속이됨을 알수있음
+
+[user@host1 ~]$ ssh-copy-id root@192.168.100.102 로 루트에도 키를 박아주자
+
+# 키 제거 
+$ rm ~/.ssh/authorized_keys 를 하면 된다.
+
+[root@host2 ~]# vim /etc/ssh/sshd_config
+## SSHD Test
+PasswordAuthentication no
+PermitRootLogin yes 	를 vim으로 붙여넣자 
+[root@host2 ~]# systemctl restart sshd.service
+ 
+그라면 user 는 접속되나 user01은 접속되지않으며 키기반 인증 실패가 뜨는것임
+
+[root@host2 ~]# vim ~/.ssh/authorized_keys
+호스트2에서
+  두개를 yes 로 바꾼뒤 서비스데몬 재시작
+[root@host2 ~]# vim /etc/ssh/sshd_config
+[root@host2 ~]# systemctl restart sshd.service
+~~~
+[user01@host1 ~]$ ssh user@192.168.100.102
+user@192.168.100.102's password: 
+Last login: Tue Nov  7 11:53:01 2023 from 192.168.100.101
+[root@host2 ~]# vim /etc/ssh/sshd_config
+PasswordAuthentication yes
+PermitRootLogin prohibit-password 를 입력하고 저장한다.
+[root@host2 ~]# ssh root@192.168.100.102 
+root@192.168.100.102's password: 
+Permission denied, please try again. 	그러면 루트로의 진입이 거절된다.
+
+   이렇게 설정하면, 루트로그인이 거절되는데
+[user01@host1 ~]$ ssh root@192.168.100.102	
+root@192.168.100.102's password: 
+Permission denied, please try again.	루트로그인 불가하다.(패스워드방식)
+
+[user@host1 ~]$ ssh root@192.168.100.102 -i ~/.ssh/id_rsa 
+root@192.168.100.102's password: 
+Permission denied, please try again.   루트로그인 불가하다.(키방식)
+
+<실습>
+호스트2>호스트1 접속시 일반사용자는 패스워드로 로그인, 키기반 로그인 가능하게
+	루트사용자로 접속하는건 패스워드는 아니고, 키기반으로 로그인 가능하게해보자.
+[root@host1 ~]# vim /etc/ssh/sshd_config에 가서, (호스트1)
+PermitRootLogin prohibit-password 
+PasswordAuthentication yes 로 설정하란얘기다.
+[root@host1 ~]# systemctl restart sshd.service 하고 호스트2에서 시도한다
+ 
+ 
+>>잘 됐다 user>ok , user01>ok , root> deny 로 잘 떴음.
+############################################
+SSH 기반 파일 복사
+로컬의 파일을 원격 Host에 복사
+$ scp  FILE_PATH  USER@HOST:/REMOTE/PATH/
+ 
+ 
+
+원격 Host의 파일을 로컬에 복사
+$ scp  USER@HOST:/REMOTE/FILE  LOCAL_PATH
+ 
+
+로컬의 디렉터리를 원격 Host에 복사 ( -r 옵션을 추가해야함)
+$ scp  -r  FILE_PATH  USER@HOST:/REMOTE/PATH/
+ 
+
+원격 Host의 디렉터리를 로컬에 복사 ( -r 옵션을 추가해야함)
+$ scp  -r  USER@HOST:/REMOTE/DIR  LOCAL_PATH
+ 
+ 
+[user@host1 ~]$ ls -l home
+합계 4
+drwx------. 14 user user 4096 11월  7 14:30 student
+drwx------.  5 user user  152 11월  7 14:30 user
+drwx------.  4 user user  106 11월  7 14:30 user01
+================================================================
+# NTP 란
+NTP(Network Time Protocol)
+  - 네트워크를 통해 컴퓨터의 시간을 동기화하기 위한 프로토콜
+chrony
+(sudo yum install ntp / sudo apt-get update , sudo apt-get install ntp/ >>ntp가 chrony로변경됨.
+  - RHEL7 부터 Redhat 계열 리눅스 배포판에 탑재된 시간동기화 소프트웨어
+  - chrony는 클라이언트와 서비스 데몬으로 구성됨
+Chrony 설정 파일  :  /etc/chrony.conf
+-rw-r--r--. 1 root root 1370  8월 29  2022 /etc/chrony.conf
+#Stratum
+NTP (Network Time Protocol)에서 Stratum은 시간 서버의 계층 구조를 나타냅니다. Stratum은 0부터 15까지의 값으로 표현되며, 낮은 값일수록 정확한 시간 소스에 더 가깝다는 것을 나타냅니다.
+ 
+1.	Stratum 0: Stratum 0은 정확한 시간을 제공하는 원자 시계나 GPS 수신기와 같은 하드웨어 시계를 나타냅니다. 이러한 시계는 원자 시계와 같은 매우 정확한 시간 소스를 사용하므로 Stratum 0으로 분류됩니다./ 가장 최상위 계층.
+2.	Stratum 1: Stratum 1 서버는 Stratum 0 시계에 직접 연결되어 정확한 시간을 제공합니다. Stratum 1 서버는 일반적으로 원자 시계나 GPS 수신기와 같은 정밀한 시간 소스에 연결된 컴퓨터입니다.
+3.	Stratum 2: Stratum 2 서버는 Stratum 1 서버와 동기화되어 있습니다. Stratum 2 서버는 Stratum 1 서버로부터 시간 정보를 받아오며, 일반적으로 로컬 네트워크에서 다른 디바이스들과 시간을 공유합니다. Stratum 2 서버는 Stratum 1 서버에 비해 상대적으로 덜 정확하지만 일반적인 네트워크 환경에서는 충분한 정확도를 제공합니다.
+4.	그 이상의 Stratum: 계속해서 Stratum이 증가하면 각 계층은 그 바로 하위의 계층과 동기화됩니다. 더 높은 Stratum 값은 시간 정보가 더 많은 중간 서버를 통해 전달되었음을 나타냅니다. 높은 Stratum 값은 시간의 정확성에 영향을 미칠 수 있으며, 가능한 한 낮은 Stratum 서버를 사용하는 것이 좋습니다.
+
+#Chronyd 주요 설정 내용
+# NTP Server Pool 지정
+ 
+pool 2.rocky.pool.ntp.org iburst
+# NTP Server 지정
+server NTP_SERVER  iburst
+   iburst  : 짧은 주기로 시간 동기화
+# 시스템 클락 오차를 저장하는 drift file 경로 지정
+ 
+driftfile /var/lib/chrony/drift
+# 시간 교정 간격 지정
+ 
+makestep 1.0 3
+# Kernel이 RTC에 시스템 시간 동기화
+ 
+rtcsync
+# NTP 프로토콜 인증에 필요한 키 파일 
+ 
+keyfile /etc/chrony.keys
+
+# chrony 로그 저장 경로
+ 
+logdir /var/log/chrony
+
+# Chronyc 주요 명령어
+-서브커맨드 형식으로 되어있다.
+1.	chronyc sources: Chrony 서버로부터 시간 정보를 수신하는 서버 목록을 표시합니다. 각 서버의 상태, Stratum, 시간 페더, 동기화 소스 등을 보여줍니다. ( sources -v : 자세히)
+2.	chronyc sourcestats: 서버의 동작 통계를 보여줍니다. 각 서버의 평균 동기화 오차, 평균 절대 동기화 오차, 최소 및 최대 동기화 오차 등을 보여줍니다.
+3.	chronyc tracking: 서버의 현재 동기화 상태를 자세히 보여줍니다. 이 명령어는 현재 시스템 시간, 마지막으로 받은 시간 패킷, 시스템 시간과 서버 시간 간의 오차 등을 보여줍니다.
+4.	chronyc makestep: 시간을 급격하게 조정하는데 사용됩니다. 시스템 시간을 서버의 시간으로 즉시 조정합니다.( -a makestep : chrony클라이언트 )
+5.	chronyc waitsync: 서버와의 동기화를 기다리는 동안 대기 상태에 있는 시간을 보여줍니다. 이 명령어는 Chrony가 서버로부터 시간 정보를 받아오기를 기다리는 시간을 표시합니다.
+*사실 시간과 관련된 CentOS 8 기준 표준시간 설정법은 
+구버전으로 NTP, rdate
+신버전(CentOS9이상)으로 chronyd, timedatectl등이 있다.
+
+ 
+chronyc sources -v 로 자세히 살펴보면 시간 동기화하는대상을 * 로, 나타낸다.
+
+시간을 수동으로 설정하는 명령어가 바로 chronyc makestep
+시간확인 - $ date
+시간설정 - $ date --set “YYYY-mm-dd HH:MM”
+시간정보확인 - $ timedatectl (status)
+ 
+시간설정 - $ timedatectl set-time “YYYY-mm-dd HH:MM:SS”
+Timezone 설정 (대륙간) - $ timedatectl set-timezone [Asia/Seoul]
+ 
+UTC 타임존 설정은 $ timedatectl set-timezone UTC 이다
+전체 timezone 조회 # timedatectl list-timezones
+일부 timezone 조회 # timedatectl list-timezones | grep Asia
+자동 시간 동기화 설정(NTP)
+설정 # timedatectl set-ntp yes 
+설정 안함 # timedatectl set-ntp no
+
+# SE LINUX 개요 진행
+SELinux(Security Enhanced Linux)
+- Linux의 보안을 강화하기 위한 리눅스 커널 보안모듈을 말한다.
+Access Control Model(접근제어모델)의 종류
+ - DAC(Discretionary Access Control)
+    - 객체의 소유자가 자신이 소유한 객체에 대한 접근 권한 관리
+       SELinux가 동작하지 않는 일반적인 Linux 시스템, Unix 시스템의 접근 제어 매커니즘
+ - MAC(Mandatory Access Control)
+    - 시스템의 관리자가 미리 정의된 보안 정책에 따라 접근 권한을 부여하는 방식
+      SELinux가 작동하는 경우 MAC 방식으로 접근제어를 구현함
+ - RBAC(Role-Based Access Control)
+    - 사용자의 역할에 따라 접근 권한을 관리하는 방식
+
+$ sestatus : 현재 시스템의 SE linux 상태를 표시한다. 활성화 여부, 현재 정책모드 및 정책유형.
+ 
+[root@host1 ~]# sestatus 
+SELinux status:                 enabled
+SELinuxfs mount:                /sys/fs/selinux
+SELinux root directory:         /etc/selinux
+Loaded policy name:             targeted
+Current mode:                   enforcing
+Mode from config file:          enforcing
+Policy MLS status:              enabled
+Policy deny_unknown status:     allowed
+Memory protection checking:     actual (secure)
+Max kernel policy version:      33
+
+# getenforce: 현재 시스템의 SELinux 정책 모드를 확인합니다. Enforcing이면 강제 모드이고, Permissive이면 허용 모드입니다.
+-SELinux의 작동 모드
+   Enforcing (1)     : 커널에 SELinux 보안모듈이 로드된 상태로 보안 정책을 강제하고 보안 로그를 기록하는 모드 
+   Permissive (0)   : 커널에 SELinux 보안모듈이 로드된 상태로 보안 정책을 적용하지 않는 모드 보안 로그를 기록하는 모드
+   Disabled            : 커널에 SELinux 보안모듈이 로드되지 않은 상태
+
+# setenforce: 시스템의 SELinux 정책 모드를 변경합니다. Enforcing, Permissive, 또는 Disabled로 설정할 수 있습니다.
+
+# semanage: SELinux 정책을 관리하는데 사용되는 도구입니다. 포트 레이블, Booleans, 레벨 및 기타 SELinux 설정을 관리할 수 있습니다.
+•	semanage port -l: 포트 레이블을 확인합니다.
+•	semanage boolean -l: 사용 가능한 Booleans를 확인합니다.
+# audit2allow: SELinux 오류 메시지를 분석하여 보안 정책 규칙을 자동으로 생성합니다.
+# restorecon: 파일 및 디렉토리의 SELinux 보안 콘텍스트를 초기 상태로 복원합니다.
+# chcon: 파일이나 디렉토리의 SELinux 콘텍스트를 변경합니다.
+# sealert: SELinux 오류와 관련된 자세한 정보를 제공하는 SELinux 알림 도구입니다.
+
+# SELinux 비활성화 및 활성화(영구 설정)
+  - RHEL9(Rocky Linux 9) 이전의 리눅스 : SELinux 설정 파일(/etc/selinux/config) 설정
+     SELinux 보안 모듈 비활성화(구성파일 편집 후 재부팅)
+     # vim /etc/selinux/config 
+       SELINUX=Disabled
+     SELinux 보안 모듈 활성화(구성파일 편집 후 재부팅)
+     # vim /etc/selinux/config 
+       SELINUX=Enforcing
+- RHEL9(Rocky Linux 9) 이후의 리눅스 
+   SELinux 보안 모듈 비활성화(아래 명령어 실행 후 재부팅)
+     # grubby --update-kernel ALL --args selinux=0
+      SELinux 활성화(아래 명령어 실행 후 재부팅)
+     # grubby --update-kernel ALL --remove-args selinux
+
+# SELinux 컨텍스트 란?
+ 
+SELINUX_유저: 역할 : 타입 : 레벨 ...이런구조로 되어있다. (SELINUX_USER:ROLE:TYPE:LEVEL)
+SELINUX_USER : SELinux 보안 정책에서 사용하는 사용자(시스템의 사용자와는 다름)
+SELINUX_ROLE : SELinux 보안 정책에서 사용하는 역할
+SELINUX_TYPE : SELinux가 동작하는 시스템에서 접근 가능한 객체를 분류하기 위해 사용하는 Type
+SELINUX_LEVEL : SELinux 정책 유형이 mls인 경우 사용되는 필드로 객체에 대한 보안 민감도를 정의하는 필드
+
+
