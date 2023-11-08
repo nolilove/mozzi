@@ -1,0 +1,310 @@
+12주차_수요일 메모(리눅스)
+
+개요 : SELinux(Security Enhanced Linux)
+  - Linux의 보안을 강화하기 위한 Linux Kernel Module
+
+Access Control
+  DAC
+   - 객체를 소유한 자가 소유한 객체에 대한 접근 권한 관리
+      SELinux를 사용하지 않는 Unix 및 Linux 시스템의 접근 제어 방식
+   MAC
+    - 시스템의 관리자가 미리 정의된 보안 정책에 따라 접근 권한을 부여하는 접근 제어 방식
+      SELinux가 작동하는 경우 MAC 방식으로 접근 제어를 구현함
+       (Permission + 보안정책)
+   RBAC(Role-Based Access Control)
+-	사용자의 역할에 따라 접근 권한을 부여하는 방식
+
+주체(Subject) :  객체(Object)에 접근하는 사용자(user), 프로세스(process)
+객체(Object)  :  주체가 접근하는 시스템의 자원(파일, 디렉터리, 포트)
+>각각 주체의 입장에서, 객체의 입장에서 SElinux를 바라보기.
+
+# SELinux 작동 모드
+   Enforcing : 커널에 SELinux가 로드된 상태로 SELinux 보안 정책을 강제하고 SELinux 보안 로그를 기록하는 모드
+   Permissive : 커널에 SELinux가 로드된 상태로 SELinux 보안 정책을 강제하지 않으나 SELinux의 보안 로그를 기록하는 모드
+   Disabled : 커널에 SELinux가 로드되지 않은 상태(완전한 비활성화)
+
+$ id 뒤에 argument를 적지 않으면
+ 현재사용자의 uid, gid, groups 등을 보여주는 명령어임
+[user@host1 ~]$ id
+uid=1001(user) gid=1001(user) groups=1001(user) 
+context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023  <이부분은 SElinux context부분
+
+현재 작동 모드
+$ genenforce
+SELinux 작동 모드 전환 (Runtime)
+# setenforce 0 | 1
+SELinux 기본 작동 모드 변경
+# vim /etc/selinux/config
+
+SELINUX=
+SELINUX_TYPE=
+    SELINUX : SELinux 기본 작동모드
+    SELINUX_TYPE : SELinux 작동 방식
+       targeted : 특정 대상의 프로세스만 보호
+       minimum : 최소한의 프로세스만 보호 (targeted의 변형)
+       mls : 다중 단계 보호(Multi Level Security) =보안에 민감한 조직들이 사용하게됨.
+ 
+SELinux 비활성화 및 활성화(영구 설정)
+  - RHEL9(Rocky Linux 9) 이전의 리눅스 : SELinux 설정 파일(/etc/selinux/config) 설정
+     SELinux 보안 모듈 비활성화(구성파일 편집 후 재부팅)
+     # vim /etc/selinux/config 
+       SELINUX=Disabled
+
+     SELinux 보안 모듈 활성화(구성파일 편집 후 재부팅)
+     # vim /etc/selinux/config 
+       SELINUX=Enforcing
+
+  - RHEL9(Rocky Linux 9) 이후의 리눅스 
+      SELinux 보안 모듈 비활성화(아래 명령어 실행 후 재부팅)
+       # grubby --update-kernel ALL --args selinux=0
+
+      SELinux 활성화(아래 명령어 실행 후 재부팅)
+       # grubby --update-kernel ALL --remove-args selinux
+
+#SELinux 보안 컨텍스트 구성
+USER:ROLE:TYPE:LEVEL 
+
+SELINUX_USER : SELinux 보안 정책에서 사용하는 사용자
+SELINUX_ROLE : SELinux 보안 정책에서 사용하는 역할(SELinux 사용자 권한 부여)
+SELINUX_TYPE : 접근할 수 있는 객체를 결정하기 위해 사용하는 유형
+SELINUX_LEVEL : SELinux 정책 유형이 mls인 경우 각 객체마다 가지는 보안 등급(민감도)를 정의
+
+apache > /var/www/html 으로도 접근이 되며 , /tmp로도 접근이 된다( 웹 서버 )
+SElinux가 동작하는 시스템에서는 
+HTTPD (apache 웹 서버) 를 설치하고 동작시키면
+[root@host1 ~]# firewall-cmd  --permanent --add-port=80/tcp
+[root@host1 ~]# firewall-cmd  --reload
+ 
+[root@host1 ~]# ls -ldZ /var/www/html/
+drwxr-xr-x. 2 root root system_u:object_r:httpd_sys_content_t:s0 6  5월 17 05:21 /var/www/html/
+>>퍼미션을 보면 모든사용자가 파일을 읽고, 실행할 수 있다는 것이 출력된다.
+ 
+또한 
+[root@host1 ~]# ls -ldZ /tmp
+drwxrwxrwt. 21 root root system_u:object_r:tmp_t:s0 4096 11월  8 10:44 /tmp 
+tmp 디렉토리도 누구나 읽고 쓰고 실행할 수 있다는 것이 출력된다.
+
+#사용자의 SELinux 보안컨텍스트 확인(-Z 옵션)
+$ id
+uid=1000(user) gid=1000(user) groups=1000(user),10(wheel) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+
+#파일 목록에서 SELinux 보안컨텍스트 확인(-Z 옵션)
+$ ls -lZ 
+-rw-r--r--.   1 user user unconfined_u:object_r:user_home_t:s0    24 Nov  7 14:13 testfile1
+
+#프로세스 목록에서 SELinux 보안컨텍스트 확인(-Z 옵션)
+$ ps -efZ
+system_u:system_r:httpd_t:s0    root       32936       1  0 10:44 ?        00:00:00 /usr/sbin/httpd -DFOREGROUND
+
+일반사용자의 홈 디렉터리 컨텍스트를 한번 살펴보자.
+[user@host1 ~]$ ls -ldZ
+drwx------. 8 user user unconfined_u:object_r:user_home_dir_t:s0 4096 11월  8 10:26 .
+>디렉터리안에서 파일을 만들어보면 어떤 컨텍스트를 가질까?
+[user@host1 ~]$ ls -lZ aaa
+-rw-r--r--. 1 user user unconfined_u:object_r:user_home_t:s0 0 11월  8 11:20 aaa
+[user@host1 ~]$ ls -ldZ /tmp
+drwxrwxrwt. 21 root root system_u:object_r:tmp_t:s0 4096 11월  8 10:44 /tmp
+
+ 
+>잘보면 컨텍스트가 살짝 다른데, cp 복사명령어와 mv복사명령어의 차이이다.
+cp 명령어는 복사하더라도 기존의 퍼미션(소유권한)이나, 컨텍스트 내용이 그대로 저장되어 넘어온다는 점을 기억하자.
+[user@host1 tmp]$ touch /home/user/newfile
+[user@host1 tmp]$ ls -lZ /home/user/newfile 
+-rw-r--r--. 1 user user unconfined_u:object_r:user_home_t:s0 0 11월  8 11:30 /home/user/newfile
+홈디렉토리에서 만들어진 녀석이다.
+cp명령어를 써보자
+[user@host1 tmp]$ cp -a /home/user/newfile /tmp/ddd
+[user@host1 tmp]$ ls -lZ aaa bbb ccc ddd
+-rw-r--r--. 1 user user unconfined_u:object_r:user_tmp_t:s0  0 11월  8 11:26 aaa
+-rw-r--r--. 1 user user unconfined_u:object_r:user_tmp_t:s0  0 11월  8 11:27 bbb
+-rw-r--r--. 1 user user unconfined_u:object_r:user_home_t:s0 0 11월  8 11:20 ccc
+-rw-r--r--. 1 user user unconfined_u:object_r:user_home_t:s0 0 11월  8 11:30 ddd
+
+# 파일의 SElinux Context 변경하기(임시) : Chcon 명령어다.
+$ chcon  [OPTION] [CONEXT]  FILE | DIRECTORY
+> $ chcon  -t  TYPE_CONEXT  FILE
+[user@host1 tmp]$ chcon -t user_tmp_t ccc  = ccc파일의 파일컨텍스트를 변경했다.
+-rw-r--r--. 1 user user unconfined_u:object_r:user_tmp_t:s0  0 11월  8 11:26 aaa
+-rw-r--r--. 1 user user unconfined_u:object_r:user_tmp_t:s0  0 11월  8 11:27 bbb
+-rw-r--r--. 1 user user unconfined_u:object_r:user_tmp_t:s0  0 11월  8 11:20 ccc
+-rw-r--r--. 1 user user unconfined_u:object_r:user_home_t:s0 0 11월  8 11:30 ddd
+바로 위를 다시 조회하면 달라져있다.
+[user@host1 tmp]$ chcon -t user_home_t aaa 도 마찬가지.
+ 
+
+# 시스템의 모든 SELinux Context 정책 확인 : semanage fcontext -i (root계정에서)
+$ semanage fcontext -l
+SELinux fcontext                          type               Context
+/bin                                      all files          system_u:object_r:bin_t:s0
+
+#SELinux 보안 컨텍스트 정책 추가
+# semanage fcontext  -a  -t  TYPE_CONTEXT  PATH
+
+[root@host1 ~]# ls -lZ /work
+합계 12
+drwxr-xr-x. 4 root root system_u:object_r:unlabeled_t:s0   4096 10월 25 14:34 diska
+drwxr-xr-x. 4 root root system_u:object_r:unlabeled_t:s0   4096 10월 25 14:37 diskb
+drwxr-xr-x. 4 root root system_u:object_r:unlabeled_t:s0   4096 10월 25 14:38 diskc
+-rw-r--r--. 1 root root unconfined_u:object_r:default_t:s0    0 11월  8 11:52 test1
+-rw-r--r--. 1 root root unconfined_u:object_r:default_t:s0    0 11월  8 11:52 test2
+-rw-r--r--. 1 root root unconfined_u:object_r:default_t:s0    0 11월  8 11:52 test3
+[root@host1 ~]# semanage fcontext -a -t user_tmp_t /work/test1
+ 
+ 
+>선언이 되었으나 바뀐 점은 없다.
+그러면 어떻게 영구적으로 바꿔야 할 것인가? 바로 restorecon 이다.
+# restorecon 명령어 / 정책의_영구적_추가
+[root@host1 ~]# restorecon /work/test1 
+[root@host1 ~]# restorecon -v /work/test1
+ 
+ls -lZ /work 시에 
+-rw-r--r--. 1 root root unconfined_u:object_r:user_tmp_t:s0    0 11월  8 11:52 test1
+-rw-r--r--. 1 root root unconfined_u:object_r:default_t:s0     0 11월  8 11:52 test2
+-rw-r--r--. 1 root root unconfined_u:object_r:default_t:s0     0 11월  8 11:52 test3
+test1 이 relabeling 이 된 것을 알 수 있다.
+
+[root@host1 ~]# semanage fcontext -a -t tmp_t /work/test2
+[root@host1 ~]# ls -lZ /work > 변하지 않았음
+[root@host1 ~]# restorecon /work/test2
+[root@host1 ~]# ls -lZ /work
+-rw-r--r--. 1 root root unconfined_u:object_r:user_tmp_t:s0    0 11월  8 11:52 test1
+-rw-r--r--. 1 root root unconfined_u:object_r:tmp_t:s0         0 11월  8 11:52 test2
+-rw-r--r--. 1 root root unconfined_u:object_r:default_t:s0     0 11월  8 11:52 test3
+>> [root@host1 ~]# restorecon -R /work 입력시 재귀적으로 work폴더 내 모든것을 동기화함.
+
+=========================================================
+# 시스템의 모든 SELinux Context 정책 확인
+$ semanage fcontext -l
+SELinux fcontext                          type               Context
+/bin                                               all files          system_u:object_r:bin_t:s0 
+# SELinux 보안 컨텍스트(Type Context) 정책 선언
+$ semanage fcontext  -a  -t  TYPE_CONTEXT  PATH
+
+SELinux 보안 컨텍스트(Type Context) 정책 변경
+$ semanage fcontext  -m  -t  TYPE_CONTEXT  PATH
+
+SELinux 보안 컨텍스트(Type Context) 정책 삭제
+$ semanage fcontext  -d  -t  TYPE_CONTEXT  PATH
+파일 경로 지정시 디렉터리 및 디렉터리 하위 파일에 대해 정책 선언
+   예:  /test
+'/test(/.*)?'
+# SELinux 보안 컨텍스트를 파일에 적용
+$ restorecon  [OPTION]...   FILE
+
+# SELinux 부울
+   - SELinux에서 사용자 또는 프로세스가 어떤 행위를 할 수 있도록 허용/차단하는 On/Off 스위치와 같은 기능 (시스템의 특정 동작을 활성화 또는 비활성화할 수 있는 SELinux 정책 설정)
+-	semanage 또는 setsebool    //확인은 getsebool -a 또는 semanage boolean -l 
+# semanage boolean -l
+SELinux boolean                State  Default Description
+abrt_anon_write                (off  ,  off)  Allow abrt to anon write
+
+SELinux 부울 설정(현재 적용되는 SELinux Bool)
+# setsebool  SELINUX_BOOL  VALUE
+SELinux 부울 설정(현재 적용되는 SELinux Bool) >> 영구적으로 변경
+# setsebool  -P  SELINUX_BOOL  VALUE
+ 
+ 
+ 
+ 
+
+[root@host1 ~]# semanage boolean -m --off ftpd_anon_write
+[root@host1 ~]# semanage boolean -m --on ftpd_anon_write
+
+### SELinux 트러블 슈팅( 실습 )
+[root@host1 ~]# echo "welcome to my webserver" > index.html 
+[root@host1 ~]# cat index.html 
+welcome to my webserver
+[root@host1 ~]# 
+[root@host1 ~]# mv index.html /var/www/html/
+[root@host1 ~]# ls -l /var/www/html/
+합계 4
+-rw-r--r--. 1 root root 24 11월  8 14:48 index.html  // http://localhost 로 접속해봄.
+>>분명 접근이 가능한데도 접근이 안된다. 어떻게 트러블슈팅해야 하는가?
+[root@host1 ~]# getenforce 
+Enforcing
+[root@host1 ~]# setenforce Permissive
+[root@host1 ~]# getenforce 
+Permissive		로 변경해봄
+  그러니또 뜬다.
+그러면 SE리눅스에 문제가 있다는 것인데.
+-rw-r--r--. 1 root root unconfined_u:object_r:admin_home_t:s0 24 11월  8 14:48 index.html
+[root@host1 ~]# restorecon -Rv /var/www/html/
+Relabeled /var/www/html/index.html from unconfined_u:object_r:admin_home_t:s0 to unconfined_u:object_r:httpd_sys_content_t:s0
+-rw-r--r--. 1 root root unconfined_u:object_r:httpd_sys_content_t:s0 24 11월  8 14:48 index.html
+
+[root@host1 ~]# getenforce
+Permissive
+[root@host1 ~]# setenforce 1
+[root@host1 ~]# getenforce
+Enforcing
+
+후에 다시 접속해보자. http:/localhost로 들어가면 잘된다.
+>정리
+SELinux 문제 해결 방법(트러블슈팅)
+1. SELinux 관련 문제인지 여부 확인
+     - 다른 문제인 경우 해당 문제를 확인
+     - SELinux 관련 문제인 경우 SELinux 관련 문제를 확인
+2. SELinux 문제인 경우 SELinux 모드를 Permissive 모드로 전환하여 문제가 해결되었는지 확인
+      문제가 해결되었다면 관련 로그 등을 통해 SELinux 문제의 근본적인 원인을 확인
+3. 파일의 SELinux Context 확인
+    # semanage fcontext -a -t CONTEXT  FILE
+    # restorecon   FILE
+4. SELinux Port Label 확인
+   SELinux Port Label 목록 확인
+    # semanage port -l
+
+   SELinux Port Label 선언하기
+    # semanage port -a -t   PORT_LABEL   -p  tcp   PORT_NUMBER
+    # semanage port -a -t   PORT_LABEL   -p  udp   PORT_NUMBER
+5. SELinux Bool 확인
+ # getsebool  -a
+      # setsebool  SELINUX_BOOL  VALUE
+      테스트
+      # setsebool  -P  SELINUX_BOOL  VALUE
+
+==========================================================
+ # DNS 서비스 
+네트워크 간 양끝의 ‘종단 노드’(End node) 데이터를 주고받으려면 약속된 방식으로서 데이터를 보내고 받아야 한다. 이래야 전송해준 대상의 컴퓨터가 제대로 받아볼 수 있다. 네트워크로 제대로 된 데이터를 주고받기위해서는 약속,규약이 필요한데 이를 바로 프로토콜이라고 한다. 
+
+이 약속에는 어떤 포맷, 어떤 구조로 받을것인지 어떤 타이밍에 받을것인지 등을 정의한다.
+핵심은 두 컴퓨터가 데이터를 주고받기 위한 약속이 바로 프로토콜이라는 것임.
+
+DNS라는 프로토콜은 APPLication 7층 응용계층에서 쓰이는 프로토콜이다. 
+>>DNS는 도메인주소를 가지고 ip주소를 알아내거나, 이 반대를 실행 할 수 있는 기능을 한다.
+계층적으로 구성이 되어있는데, 이는 무슨의미냐면 www.example.com 각각 .으로 구분하는 계층이 있는 것이다. 
+
+ 
+-$ vim /etc/hosts 로 편집기에 들어가서 host1, host2 (root) 로 들어가서 모두
+192.168.100.101 host1
+192.168.100.102 host2 를 추가해주고 닫는다.
+ 
+>>ping -c 1 192.168.100.102 로 날려도 동일하게, (IP주소사용)
+ 
+>>ping -c 1 host2 로 날려도 동일하게 전송된다. (Hostname사용)
+
+Domain 주소 체계
+  TLDs(Top Level Domain) : Root 도메인 하위에 있는 최상위 도메인
+     - g-TLDs(General TLDs) : 일반 최상위 도메인 (.com  .net  .org  .info)
+     - cc-TLDs(Country-Code TLDs) :  국가별 최상위 도메인 (.kr  .cn  .uk)
+
+DNS 서버 종류
+Master Server : Domain Zone에 대한 권한을 가진 DNS 서버
+Slave Server : Domain Zone에 대한 보조 DNS 서버
+                        Master Server로부터 Domain 정보를 받아오며, Domain Zone을 변경할 수 없음.
+Caching Server : Domain Zone을 관리하지 않는 서버로 다른 DNS 서버로부터 Domain 정보를 받아서 Cache를 저장하는 DNS 서버
+                            빠른 DNS 응답을 위해 ISP나 네트워크 관리자가 구축하여 사용
+
+DNS Query 종류
+  재귀 쿼리(Recursive Query) : 일반적으로 Client가 DNS서버에 Domain 정보를 요청하는 쿼리
+  순환 쿼리(Iterative Query) : DNS 서버가 요청한 Domain 정보를 알아내기 위해 Domain 주소를 계층적으로 Domain 정보를 요청하는 쿼리
+
+Domain Zone
+  정방향 Zone
+     Domain 주소에 대한 IP 주소 정보를 포함하는 Zone
+  역방향 Zone
+     IP 주소에 대한 Domain 주소 정보를 포함하는 Zone
+ 
+txt레코드 같은경우에는 스팸방지용 설정용 정보(filter)같은것들을 추가할 수 있다. 특정dns의 레코드를 참조하는경우 따로 쿼리한다던가 텍스트를 추가하고싶을때 사용한다.
+
+
+
