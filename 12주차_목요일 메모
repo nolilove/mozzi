@@ -1,0 +1,335 @@
+12주차_목요일 메모(리눅스)
+
+개요) DNS에 대해서 알아본다.   레코드 출력방법(정방향,역방향)에 대해서 실습.
+				특히나 따로 보는것중에 >set type=[..] 등이 있다 ex)MX,TXT
+DNS 레코드 종류
+DNS 레코드	설명
+A	도메인 주소에 대한 IPv4주소
+AAAA	도메인 주소에 대한 IPv6주소
+CNAME	호스트의 별칭 정보 / 서브도메인 매핑에 사용
+MX	메일 서버(Mail Exchanger)에 대한 정보
+NS	Domain의 Nameserver(DNS Server)의 정보
+PTR	IP 주소에 대한 도메인 주소
+SOA	도메인 Zone의 권한 선언
+TXT	다양한 정보를 포함하기 위한 텍스트 레코드
+
+# 정방향 zone 과 역방향 zone 
+사실 많이 쓰이는 건 정방향zone에 해당한다. 
+# CNAME 레코드와 Alias 
+ CNAME레코드는 서브도메인에만 적용이 가능하다. 반면 Alias 는 루트도메인이나, CDN과 같은 서비스를 지원하기 위해 사용된다. CNAME 레코드는 루트도메인에 직접적용할 수 없고> DNS서버가 IP주소로 직접 해석되지않고 서버의 실제IP주소로 해석된다. 네트워크 라우팅을 따로 안거쳐서 빠른응답시간&높은 가용성을 제공가능함.
+
+
+# DNS 서버 패키지 설치 (BIND)_’버클리 인터넷 네임 도메인’을 말한다.
+가상머신을 키고, host2를 서버 > host1을 클라이언트로 사용해보자.
+1.	호스트2(DNS서버설정)
+-BIND설치
+yum install bind -y  설치하고 확인 ls -l /etc/named.conf
+ls -l /var/named/ 
+vim /etc/named.conf로 편집기 실행. 
+options {
+        listen-on port 53 { 127.0.0.1; };    >안받으려면 any;
+        listen-on-v6 port 53 { ::1; }; 	>안받으려면 none; 을 넣음
+        directory       "/var/named";
+        dump-file       "/var/named/data/cache_dump.db";
+        statistics-file "/var/named/data/named_stats.txt";
+        memstatistics-file "/var/named/data/named_mem_stats.txt";
+        secroots-file   "/var/named/data/named.secroots";
+        recursing-file  "/var/named/data/named.recursing";
+        allow-query     { localhost; };   >DNS질의(쿼리)를 허용하는 대상 지정. any;
+	recursion yes ;			> 재귀쿼리 허용 여부를 지정.
+  zone 구역에 선언을 직접 할 수도 있다.
+그러나 별도의 ‘파일에’ 선언을 대신할 수도 있는데 바로 include로 되어있는 부분 파일이다.
+ 
+
+-DNS 서비스 시작
+[root@host2 ~]# systemctl start named.service 
+[root@host2 ~]# systemctl status named.service
+nslookup host를 쓸수도 있고, 
+nslookup만 치면 프롬포트>가 나온다. 여기서 server를 입력
+ 
+ 
+www.example.com을 입력해보면 ‘캐싱 서버’로부터 응답을 받아온다.
+이제 호스트1 로가서 접근해본다.
+nslookup
+>server 192.168.100.102
+ 
+이번에는 안되는데 이유는 무엇일까?
+>>방화벽이 설정되지 않아서이다 (허용안한건 기본적으로 막고있으므로)
+
+-방화벽을 설정.
+[root@host1 ~]# firewall-cmd --list-all
+[root@host1 ~]# firewall-cmd --add-service=dns
+success
+-부팅시 활성화를 영구적으로하려면
+[root@host1 ~]# firewall-cmd --permanent --add-service=dns
+[root@host1 ~]# firewall-cmd --reload
+
+-Domain zone 파일 설정, 작성하기
+vim /etc/named.rfc1912.zones로 들어간다. 새로 한줄을 추가하고 선언한다
+zone "example.com" IN {    
+        type master;  // master : Domain Zone을 직접 관리,  slave :  master로부터 정보를 받음
+        file "example.com.zone";  // Domain Zone 파일  
+        allow-update { none; };     //  DDNS (동적업데이트 허용) 여부
+};
+[root@host2 ~]# cd /var/named 로 넘어가보자.
+[root@host2 named]# cp named.localhost example.com.zone 로 기존 zone 파일을 복사함.
+domain zone 파일을 작성한다
+[root@host2 named]# vim example.com.zone
+ 
+그럼 형식이 뜰텐데, 
+@       IN      NS      ns1.example.com.      ; DNS 서버 설정
+@       IN      A       <DNS 서버 호스트2의 IP 주소> ; example.com의 IP 주소
+; 추가적인 레코드들을 여기에 추가할 수 있습니다
+host1   IN      A       <host1의 IP 주소> ; host1.example.com의 IP 주소
+예제에서 <DNS 서버 호스트2의 IP 주소>에는 DNS 서버 호스트2의 IP 주소를 넣어주어야 한다. <host1의 IP 주소>에는 호스트1의 IP 주소를 넣어주어야 한다. 이렇게 설정하면 example.com 도메인에 대한 기본적인 SOA 레코드와 A 레코드가 정의됩니다. 추가적인 레코드를 필요에 따라 더 추가할 수 있다.
+Domain Zone 파일 구조
+Domain Zone 파일 구조
+$TTL 1D  // Domain 정보의 수명
+@       IN SOA  @  hostmaster  (  // SOA(Start Of Authority)  관리할 도메인 ,  Master Server, 도메인관리자_메일주소
+                              0       ; serial    // Domain 정보 버전 관리를 위한 값
+                             1D      ; refresh // Slave 서버가 Master 서버의 도메인 정보 확인 주기
+                             1H      ; retry     // Refresh 주기 실패시 Master 서버에 다시 시도하는 주기
+                             1W      ; expire  // Retry 실패시 Slave 서버에서 Domain 정보를 삭제하는 기간
+                             3H )    ; minimum  // Caching Server에서 Domain Record를 유지하는 시간
+                               NS           @  // Nameserver 지정 Record (Nameserver :  example.com )
+                               NS            NAMESERVER
+                    IN        A              1.2.3.4     // example.com의 IP주소가  1.2.3.4임을 나타냄
+host1            IN       A              1.2.3.1     // example.com의 IP주소가  1.2.3.4임을 나타냄
+mail              IN        A              1.2.3.2     // example.com의 IP주소가  1.2.3.4임을 나타냄
+HOST             IN       A               IPv4_ADDRESS
+  \- HOST 부분을 공백으로 두는 경우 도메인 자체를 의미 (example.com)
+CNAME_HOST   IN  CNAME           ORIGINAL_A_RECORD
+server1            IN CNAME            host1     // server1.example.com  ->  host1.example.com
+                     IN     MX    PRIORITY    MX_HOST
+server1            IN     MX    10             mail     // MX Record  mail.example.com
+HOST               IN     TXT                    TXT_DATA
+
+
+
+
+선언을 직접 해보자. 추가후에는 반드시 설정파일선언 후 systemctl restart named.service
+ 
+ 설정하고 나왔는데 
+** server can't find www.example.com: SERVFAIL 불가하다.
+-rw-r-----. 1 root  root   262 Nov  9 12:48 example.com.zone 가 640 권한을 가지고있음을 확인.그래서 접근이 불가한것이다. 이러면 소유권을 변환
+[root@host2 named]# chown named:named example.com.zone
+-rw-r-----. 1 named named  262 Nov  9 12:48 example.com.zone 로 변환되었고 
+안나온다면 꼭 
+[root@host2 named]# systemctl restart named.service 
+[root@host2 named]# systemctl status named.service
+리스타트를 해주고 확인을 해주도록 하자.
+ 
+
+-CNAME 붙이기, MX , TXT 붙이기
+ 
+이런 형태로 붙여둔다.>>에러났다!
+  다시 불러온다.
+
+  @를 붙이니 다시 잘된다.
+-유의할것 메모-
+vim /etc/named.conf
+systemctl restart named.service
+$ firewall-cmd --add-service=dns --permanent
+
+zone "exercise.pe.kr" IN {
+        type master;
+        file "exercise.pe.kr";
+        allow-update { none; };
+};
+$ cd /var/named/
+[root@host2 named]# chown named:named exercise.pe.kr 로 바꿨는지 조회할것.
+
+# DNS 서버 문제 해결 (트러블 슈팅)
+DNS 서버(BIND) 구성 파일 오류 확인
+# named-checkconf  /etc/named.conf
+
+Domain Zone 파일의 오류 확인
+# named-checkzone  DOMAIN_ZONE  ZONE_FILE
+
+역방향 Zone
+ 192.168.100.0/24
+
+1. BIND 구성파일에서 역방향 Zone 선언 
+# ls -l /etc/named.rfc1912.zones 
+-rw-r-----. 1 root named 1029 Oct 13 04:23 /etc/named.rfc1912.zone
+zone "100.168.192.in-addr.arpa" IN {
+        type master;
+        file "192.168.100.rev";
+        allow-update { none; };
+};		을 만듬
+[root@host2 named]# cd /var/named
+[root@host2 named]# pwd
+/var/named
+[root@host2 named]# cp named.loopback 192.168.100.rev
+[root@host2 named]# ll
+total 24
+-rw-r-----. 1 root  root   168 Nov  9 16:48 192.168.100.rev
+drwxrwx---. 2 named named   23 Nov  9 10:38 data
+drwxrwx---. 2 named named   60 Nov  9 16:00 dynamic
+-rwxr-xr-x. 1 named named  309 Nov  9 15:53 exercise.pe.kr
+-rw-r-----. 1 root  named 2253 Apr 27  2023 named.ca
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.empty
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.localhost
+-rw-r-----. 1 root  named  168 Apr 27  2023 named.loopback
+drwxrwx---. 2 named named    6 Apr 27  2023 slaves
+[root@host2 named]# chown named:named 192.168.100.rev
+[root@host2 named]# vim 192.168.100.rev
+역방향PTR은 역방향 옥텟 아이피만적어주면된다.
+102     IN PTR  example.com.
+101     IN PTR  www.example.com.
+101     IN PTR  ftp.example.com.
+ 
+[root@host2 named]# systemctl restart named
+[root@host2 named]# nslookup
+> example.com.
+Server:		8.8.8.8
+Address:	8.8.8.8#53
+
+Non-authoritative answer:
+Name:	example.com
+Address: 93.184.216.34
+Name:	example.com
+Address: 2606:2800:220:1:248:1893:25c8:1946
+> www.example.com.
+Server:		8.8.8.8
+Address:	8.8.8.8#53
+
+Non-authoritative answer:
+Name:	www.example.com
+Address: 93.184.216.34
+Name:	www.example.com
+Address: 2606:2800:220:1:248:1893:25c8:1946
+
+# Q&A
+호스트마스터의 도메인 이메일 관리자 주소인데, 어떤값을 적어도 상관은 없음. 도메인 문의를할때 관리자정보를 기록하는 부분이라 상관없음.
+*예를들어 admin@example.com
+Admin.example.com.
+admin 			
+============================================================
+#실습
+20231109_과제1_홍길동
+
+다음 조건에 따라 정방향 Zone을 작성하시오.
+
+Domain Name : exercise.pe.kr
+* DNS 서버 구축 : host2 (192.168.100.102)
+* Host1의 DNS 서버 주소를 192.168.100.102로 변경하시오.
+* Host1에서 아래의 레코드로 조회가 되는지 확인
+
+Domain Name (FQDN)	Type	Value	비고
+exercise.pe.kr	A	192.168.100.10	
+www.exercise.pe.kr	A	192.168.100.11	
+mail.exercise.pe.kr	MX	192.168.100.10	Priority 10
+file.exercise.pe.kr		www.exercise.pe.kr과 동일	
+ns.exercise.pe.kr	NS	192.168.100.101	
+ns1.exercise.pe.kr	NS	192.168.100.31	
+ns2.exercise.pe.kr	NS	192.168.100.32	
+
+>실습로그
+[root@host2 ~]# vim /etc/named.conf
+options {
+        listen-on port 53 { any; };
+        listen-on-v6 port 53 { ::1; };
+        directory       "/var/named";
+        dump-file       "/var/named/data/cache_dump.db";
+        statistics-file "/var/named/data/named_stats.txt";
+        memstatistics-file "/var/named/data/named_mem_stats.txt";
+        secroots-file   "/var/named/data/named.secroots";
+        recursing-file  "/var/named/data/named.recursing";
+        allow-query     { any; };
+
+[root@host2 named]# firewall-cmd --permanent --add-service=dns
+success
+[root@host2 named]# firewall-cmd --reload 
+success
+[root@host2 named]# nslookup 
+> server 192.168.100.102
+Default server: 192.168.100.102
+Address: 192.168.100.102#53
+> www.google.com  
+;; connection timed out; no servers could be reached
+
+
+[root@host2 ~]# vim /etc/named.rfc1912.zones 
+zone "exercise.pe.kr" IN {
+        type master;
+        file "exercise.pe.kr";
+        allow-update { none; };
+};
+
+[root@host2 ~]# cd /var/named/
+[root@host2 named]# ll
+-rw-r-----. 1 root  named 2253 Apr 27  2023 named.ca
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.empty
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.localhost
+-rw-r-----. 1 root  named  168 Apr 27  2023 named.loopback
+
+[root@host2 named]# cp named.localhost exercise.pe.kr
+-rw-r-----. 1 root  root   152 Nov  9 15:41 exercise.pe.kr
+-rw-r-----. 1 root  named 2253 Apr 27  2023 named.ca
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.empty
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.localhost
+-rw-r-----. 1 root  named  168 Apr 27  2023 named.loopback
+
+[root@host2 named]# vim exercise.pe.kr 
+$TTL 1D
+@       IN SOA  @ exercise.pe.kr (
+                                        0       ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+        IN NS   @
+        IN MX   10 mail.exercise.pe.kr
+        IN A    192.168.100.10
+www     IN A    192.168.100.11
+mail    IN A    192.168.100.10
+file    IN CNAME www
+ns      IN NS   192.168.100.101
+ns1     IN NS   192.168.100.31
+ns2     IN NS   192.168.100.32
+
+[root@host2 named]# systemctl restart named
+
+[root@host2 named]# chown named:named exercise.pe.kr 
+[root@host2 named]# ll
+total 20
+drwxrwx---. 2 named named   23 Nov  9 10:38 data
+drwxrwx---. 2 named named   60 Nov  9 15:57 dynamic
+-rwxr-xr-x. 1 named named  309 Nov  9 15:53 exercise.pe.kr
+-rw-r-----. 1 root  named 2253 Apr 27  2023 named.ca
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.empty
+-rw-r-----. 1 root  named  152 Apr 27  2023 named.localhost
+-rw-r-----. 1 root  named  168 Apr 27  2023 named.loopback
+drwxrwx---. 2 named named    6 Apr 27  2023 slaves
+[root@host2 named]# systemctl restart named.service 
+
+
+[root@host1 ~]# nslookup 
+> server 192.168.100.102
+Default server: 192.168.100.102
+Address: 192.168.100.102#53
+
+> exercise.pe.kr
+Server:		192.168.100.102
+Address:	192.168.100.102#53
+
+Name:	exercise.pe.kr
+Address: 192.168.100.10
+
+> www.exercise.pe.kr
+Server:		192.168.100.102
+Address:	192.168.100.102#53
+
+Name:	www.exercise.pe.kr
+Address: 192.168.100.11
+
+> file.exercise.pe.kr
+Server:		192.168.100.102
+Address:	192.168.100.102#53
+
+file.exercise.pe.kr	canonical name = www.exercise.pe.kr.
+Name:	www.exercise.pe.kr
+Address: 192.168.100.11
+
+
