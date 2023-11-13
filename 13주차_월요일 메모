@@ -1,0 +1,333 @@
+20231113 13주차 월요일 리눅스 메모
+
+지난시간 DNS _ 도메인zone / master, slave 서버 구성을 했다.  이번시간에는 vsftpd, nfs-server 를 공부한다.
+
+Port
+- 네트워크를 통해 애플리케이션이 데이터를 주고 받기 위해서
+ 호스트에서 사용되는 논리적인 주소  //  0~65535 까지 존재함. ( 16bit =2^16 )
+출발지 포트(Source Port)
+목적지 포트(Destination Port)
+; Well-Known Port (0 ~ 1023)
+; Registered Port(1024 ~ 49151)
+; Dynamic Port(49152 ~ 65535)
+
+포트 번호의 할당은 인터넷 할당 번호 관리 기관인 IANA (Internet Assigned Numbers Authority)에 의해 이루어집니다. IANA는 전 세계적으로 사용되는 포트 번호를 관리하고, 특정 포트가 어떤 목적으로 사용되는지 문서화합니다
+ICANN (Internet Corporation for Assigned Names and Numbers): 도메인 네임 시스템 (DNS) 및 IP 주소 할당과 관련된 중요한 역할을 수행. 산하로 IANA를 두고 있음.
+IEEE (Institute of Electrical and Electronics Engineers): IEEE는 전기 및 전자 공학 분야에서 표준을 개발하는 비영리 기술 협회
+ISOC (Internet Society): ISOC는 인터넷의 개발, 진보, 안전성을 촉진하는 비영리 기관
+W3C (World Wide Web Consortium): W3C는 웹의 표준을 개발하고 유지하는 국제 컨소시엄
+
+#vsFTPD very secure FTP daemon --
+-FTP 서비스 구축
+1. FTP 서비스 패키지 설치
+2. FTP 서비스 시작
+3. FTP 서비스를 부팅시 활성화(영구 설정)
+4. 방화벽에서 FTP 서비스 허용 및 리로드		(서비스명은 ftp임)
+-FTP 서비스 설정파일 위치
+ /etc/vsftpd/vsftpd.conf : vsftpd 구성 파일
+ /etc/vsftpd/user_list : user list 파일(FTP에서 허용/거부 사용자 등록)
+ /etc/vsftpd/ftpusers : FTP에서 로그인을 허용하지 않는 사용자의 목록
+
+FTP Command
+연결 관련 명령
+open : ftp 서버 주소를 지정하여 FTP(사용법 : open FTP_SERVER)
+close : ftp 접속을 종료
+bye : ftp 접속을 종료
+quit : ftp 접속을 종료
+exit : ftp 접속을 종료
+disconnect : ftp 접속 종료
+파일 전송 모드 명령 (type -- )
+ascii : ASCII 모드로 설정
+binary : BINARY 모드로 설정
+image : BINARY 모드로 설정
+파일 전송 명령 (정규표현식 사용가능)ㅊㅇ /
+get : 지정된 파일 1개 다운로드
+put : 지정된 파일 1개 업로드
+mget : 여러개의 파일을 다운로드
+mput : 여러개의 파일을 업로드
+
+파일 관리 명령
+dir : 디렉토리 목록을 확인
+ls : 디렉토리 목록을 확인
+pwd : 원격 시스템의 현재 디렉토리 확인
+cd : 원격 시스템에서 디렉토리 변경
+lcd : 로컬 시스템에서 디렉토리 변경
+mkdir : 원격 시스템에 디렉토리 생성
+rmdir : 원격 시스템의 디렉토리 삭제
+rename : 원격 시스템의 파일 이름 변경
+delete : 원격 시스템의 파일 삭제
+chmod : 원격 시스템의 파일 퍼미션 설정
+
+FTP 기본 디렉터리 : /var/ftp/
+
+[root@host2 vsftpd]# vim /etc/vsftpd/vsftpd.conf
+[root@host2 vsftpd]# systemctl restart vsftpd.service
+[root@host2 vsftpd]# cp vsftpd.conf vsftpd.conf.bak
+*참고하기(디폴트값)
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+dirmessage_enable=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+xferlog_std_format=YES
+listen=NO
+pam_service_name=vsftpd
+userlist_enable=YE
+
+FTP를 공개 FTP 서버로만 운영하는 세팅
+anonymous_enable=YES
+local_enable=NO
+[root@host2 vsftpd]# systemctl restart vsftpd.service
+호스트1로 넘어옴
+[user@host1 ~]$ ftp 192.168.100.102 
+Name (192.168.100.102:user): user 시 
+530 This FTP server is anonymous only.
+Login failed.
+Name (192.168.100.102:user): anonymous 로 들어감
+>>여기까지하면 익명사용자가 파일을 받는것까진 되고(get), 저장하는건 불가(put)
+호스트2로 넘어가서
+[root@host2 vsftpd]# chmod o+w /var/ftp/pub/
+[root@host2 vsftpd]# ls -ld /var/ftp/pub/
+drwxr-xrwx. 2 root root 6 Apr 27  2023 /var/ftp/pub/ 권한부여 
+
+호스트1로 넘어와서 
+ftp> cd pub
+250 Directory successfully changed.
+ftp> put color.jpg
+local: color.jpg remote: color.jpg
+227 Entering Passive Mode (192,168,100,102,121,0).
+550 Permission denied.
+
+다시 호스트2로 넘어가서 vim /etc/vsftpd/vsftpd.comf
+anon_upload_enable=YES
+[root@host2 vsftpd]# systemctl restart vsftpd.service
+
+[root@host2 vsftpd]# semanage boolean -l |grep ftp
+[root@host2 vsftpd]# setsebool ftpd_anon_write on
+
+
+public_content_t  : 네트워크 서비스에서 익명사용자의 접근 허용(ro)
+public_content_rw_t  : 네트워크 서비스에서 익명사용자의 접근 허용(rw)
+# semanage fcontext -a -t public_content_rw_t  '/var/ftp/pub(/.*)?'
+# restorecon -FRv /var/ftp/
+Relabeled /var/ftp/pub from system_u:object_r:public_content_t:s0 to system_u:object_r:public_content_rw_t:s0
+
+# Userlist 설정(userlist_deny=YES)
+userlist_enable=YES
+userlist_deny=YES
+-test01 ~ test03 사용자 추가 및 패스워드 설정
+echo test01 >> /var/vsftpd/user_list
+systemctl restart vsftpd.service
+-user 사용자 (로그인)
+test01 사용자 (접속 차단)
+[user@host1 ~]$ ftp 192.168.100.102
+Connected to 192.168.100.102 (192.168.100.102).
+220 (vsFTPd 3.0.5)
+Name (192.168.100.102:user): test01
+530 Permission denied.
+
+userlist 설정을 사용한 사용자 허용 (userlist_deny=NO)
+===
+userlist_enable=YES
+userlist_deny=NO
+===
+test01 사용자 (접속)
+test02 사용자 (접속 차단)
+$ ftp 192.168.100.102
+Connected to 192.168.100.102 (192.168.100.102).
+220 (vsFTPd 3.0.5)
+Name (192.168.100.102:user): test02
+530 Permission denied.
+Login failed.
+
+참고 : PAM(Pluggable Authentication Modules)
+          - 리눅스 시스템의 인증을 관리하는 모듈로 필요한 설정을 추가/제거하여 사용할 수 있음.
+            /etc/pam.d/
+PAM 인증 모듈을 통한 vsftpd 접속 차단 사용자 지정(ftpusers)
+# vim /etc/pam.d/vsftpd
+===
+auth       required	pam_listfile.so item=user sense=deny file=/etc/vsftpd/ftpusers onerr=succeed
+===
+# vim /etc/vsftpd/ftpusers
+===
+차단할_사용자
+===
+# systemctl restart vsftpd.service
+--
+chroot 
+  - 애플리케이션이 사용하는 디렉터리의 상위 디렉터리에 접근할 수 없도록 차단하는 도구
+====
+chroot_local_user=YES
+====
+
+#실습 > [root@host2 vsftpd]# vim vsftpd.conf
+전체 사용자에게 chroot 적용
+ 
+특정 사용자에게 chroot 예외 적용
+ 
+[root@host2 vsftpd]# vim /etc/vsftpd/chroot_list 로 새로 입력하기. (user 추가)
+
+
+
+# NFS(Network File System)
+  - Unix/Linux 시스템에서 파일 폴더를 공유하기 위한 프로토콜/파일시스템
+- NFS는 v1 ~ v4까지 존재함.
+
+-설치방법
+[root@host2 ~]# yum install nfs-utils -y
+[root@host2 ~]# firewall-cmd --permanent --add-service=nfs
+success
+[root@host2 ~]# firewall-cmd --reload 
+success
+[root@host2 ~]# systemctl start nfs-server.service 
+[root@host2 ~]# systemctl enable nfs-server.service 
+Created symlink /etc/systemd/system/multi-user.target.wants/nfs-server.service → /usr/lib/systemd/system/nfs-server.service.
+[root@host2 ~]# systemctl status nfs-server.service
+
+NFS 구성 파일
+ - /etc/exports  : NFS로 내보내기할 디렉터리 및 내보내기 옵션 등을 설정하는 구성파일
+ - /etc/sysconfig/nfs (/etc/nfs.conf) : NFS 서비스 데몬 구성파일
+-내보내기 구성
+DIRECTORY        ACCESS_HOST(EXPORT_OPTION)
+
+보안 인증 방법   // 유닉스와 리눅스는 UID, GID 로 인증한다.
+none -  인증없음.                                         sync - 동기식 쓰기
+                                        		     sec   - 보안 인증 방식
+sys    -  Unix/Linux Local 사용자 인증
+krb5   -  Kerberos를 통한 인증. Keytab 파일 사용
+krb5i  -  Kerberos를 통한 인증. Keytab 파일 사용 + 무결성 검증
+krb5p -  Kerberos를 통한 인증. Keytab 파일 사용 + 무결성 검증 + 암호화
+
+
+
+
+실습)
+[root@host2 ~]# mkdir /work
+[root@host2 work]# chmod 777 /work
+[root@host2 work]# ls -ld /work/
+drwxrwxrwx. 2 root root 6 Nov 13 15:19 /work/
+[root@host2 work]# ls -l /etc/exports		내보내기파일에 작성해본다.
+-rw-r--r--. 1 root root 0 Jun 23  2020 /etc/exports
+ 
+[root@host2 work]# exportfs -rv		로 보냄.
+exporting *:/work
+
+마운트 포인트를 먼저 만들어야 한다. 호스트1로 이동.
+[root@host1 ~]# mkdir /mnt/nfs
+[root@host1 ~]# mount -t nfs -o rw,sync 192.168.100.102:/work /mnt/nfs
+[root@host1 ~]# cd /mnt/nfs/
+[root@host1 nfs]# ls -l
+합계 0
+[root@host1 nfs]# touch userfile11
+[root@host1 nfs]# echo "user@host1 write a file" > userfile11
+[root@host1 nfs]# cat userfile11 
+user@host1 write a file
+호스트2로 가서 확인함.
+[root@host2 work]# exportfs -arv
+exporting *:/work
+[root@host2 work]# ls -l /work/
+total 4
+-rw-r--r--. 1 nobody nobody 24 Nov 13 15:54 userfile11
+[root@host2 work]# cat /work/userfile11 
+user@host1 write a file
+
+[root@host2 work]# echo "user@host2 write a file" > userfile21
+[root@host2 work]# ll
+total 8
+-rw-r--r--. 1 nobody nobody 24 Nov 13 15:54 userfile11
+-rw-r--r--. 1 root   root   24 Nov 13 15:57 userfile21
+호스트1로온다
+test01:x:1003:1003::/home/test01:/bin/bash
+test02:x:1004:20001::/home/test02:/bin/bash
+test03:x:1005:1005::/home/test03:/bin/bash	유저추가
+[root@host2 work]# mkdir /cowork 
+[root@host2 work]# mkdir /cowork/public
+[root@host2 work]# mkdir /cowork/staff
+[root@host2 work]# mkdir /cowork/data
+
+[root@host2 work]# chmod 777 /cowork/public/
+[root@host2 work]# chown test01:test01 /cowork/staff/
+[root@host2 work]# chown user:user /cowork/data/
+[root@host2 work]# ls -l /cowork/
+total 0
+drwxr-xr-x. 2 user   user   6 Nov 13 16:22 data
+drwxrwxrwx. 2 root   root   6 Nov 13 16:21 public
+drwxr-xr-x. 2 test01 test01 6 Nov 13 16:21 staff
+여기서 퍼미션을 설정해봄
+[root@host2 work]# chmod 700 /cowork/staff/
+drwxr-xr-x. 2 user   user   6 Nov 13 16:22 data
+drwxrwxrwx. 2 root   root   6 Nov 13 16:21 public
+drwx------. 2 test01 test01 6 Nov 13 16:21 staff
+이제 내보내기를 한다.
+ [root@host2 work]# vim /etc/exports
+ 
+[root@host2 work]# exportfs -arv
+exporting *:/cowork/data
+exporting *:/cowork/staff
+exporting *:/cowork/public
+exporting *:/work
+이제 마운트한다. 호스트1로넘어감.
+vim /etc/fstab 으로 마운트쪽으로간다.    >>영구 마운트하는법
+ 
+이제 마운트가 되는지 확인.
+
+[root@host1 ~]# vim /etc/fstab 
+[root@host1 ~]# vim /etc/fstab 
+[root@host1 ~]# mkdir /mnt/public
+mkdir: created directory '/mnt/public'
+[root@host1 ~]# mkdir /mnt/staff
+mkdir: created directory '/mnt/staff'
+[root@host1 ~]# mkdir /mnt/data
+mkdir: created directory '/mnt/data'
+>마운트할때 오류가 있어서(스냅샷) 시간이좀걸렸음. 
+[root@host1 ~]# mount -t nfs -o rw,sync 192.168.100.102:/cowork/public /mnt/nfs 처럼
+[root@host1 nfs]# mount -t nfs -o rw,sync 192.168.100.102:/cowork/public /mnt/public/
+[root@host1 nfs]# mount -t nfs -o rw,sync 192.168.100.102:/cowork/staff /mnt/staff/
+[root@host1 nfs]# mount -t nfs -o rw,sync 192.168.100.102:/cowork/data /mnt/data/
+[root@host1 nfs]# mount -t nfs -o rw,sync 192.168.100.102:/work /mnt/nfs/   하기.
+	
+ 그러면 요로코롬 이쁘게 마운트된것을 알 수 있음. 
+
+실습과제
+다음 조건에 따라 FTP 서비스를 구성하시오.
+
+ - FTP 서비스는 사용자 FTP 서버의 사용자만 사용할 수 있음.
+ - 각 사용자는 사용자의 홈 디렉터리를 벗어날 수 없음
+ - FTP 서버 로그인 시 접속시 메시지는 "Welcome to My FTP Server"로 지정하시오.
+
+*[root@host2 vsftpd]# vim /etc/vsftpd/vsftpd.conf 이게맞다.
+*chroot_list_file=/etc/vsftpd/chroot_list
+
+[root@host2 ~]# vim /etc/vsftpd/vsftpd.conf
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+allow_writeable_chroot=YES
+chroot_local_user=YES
+chroot_list_enable=YES
+chroot_list_file=/etc/vsftpd/chroot_list
+userlist_enable=YES
+ftpd_banner="Welcome to My FTP Server"	를 추가해줌.
+
+[root@host2 ~]# vim /etc/vsftpd/chroot_list
+test04
+
+[root@host2 ~]# systemctl restart vsftpd.service 
+
+-결과
+[root@host2 ~]# ftp 192.168.100.102
+Connected to 192.168.100.102 (192.168.100.102).
+220 "Welcome to My Server"
+Name (192.168.100.102:root): test04
+331 Please specify the password.
+Password:
+230 Login successful.
+Remote system type is UNIX.
+Using binary mode to transfer files.
+ftp> by
+221 Goodbye.
+
+
+
