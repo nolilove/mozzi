@@ -1,0 +1,264 @@
+20231114 13주차 화요일 리눅스 메모
+
+지난시간 NFS(Network File System)에 대해서 알아봤다. 
+yum  nfs-utils
+enable  nfs-server.service
+firewall-cmd  = nfs
+# vim /etc/exports	// { DIRECTORY  ACCESS_HOST(EXPORT_OPTION) 형식}
+  /net-share *(rw,sync,sec=sys)
+# exportfs -ar
+(client)
+# mount -t nfs -o rw,sync,sec=sys NFS_SERVER:/NFS/DIR   MOUNT_POINT
+[root@host1 ~]# mkdir /mnt/nfs-test1
+[root@host1 ~]# mount -t nfs -o rw,sync 192.168.100.102:/net-share /mnt/nfs-test1
+[root@host1 ~]# mount |grep nfs
+192.168.100.102:/net-share on /mnt/nfs-test1 type nfs4 (rw,relatime,sync,vers=4.2,rsize=524288,wsize=524288,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=192.168.100.101,local_lock=none,addr=192.168.100.102)
+# vim /etc/fstab
+192.168.100.102:/net-share      /mnt/nfs-test1  nfs     rw,sync,sec=sys 0 0
+ 
+# exportfs -ar
+[root@host1 ~]# cd /mnt/nfs-test1/
+[root@host1 nfs-test1]# echo "nfs-test user@host1" > rootfile1
+다 됐으면 reboot
+[root@host1 nfs-test1]# echo "user@host1 userfile1" > userfile1
+[root@host1 nfs-test1]# mkdir userdir1
+[root@host1 nfs-test1]# touch userdir1/userfilea
+[root@host1 nfs-test1]# echo "user@host1 write a file" > userdir1/userfilea
+[root@host2 net-share]# echo "root@host2 write a file" > rootfile21
+읽기
+[root@host2 net-share]# cat userdir1/userfilea 
+user@host1 write a file
+쓰기
+[root@host2 net-share]# echo "user@host2 write" >> userdir1/userfilea
+[root@host2 net-share]# cat userdir1/userfilea
+user@host1 write a file
+user@host2 write
+유저 세개 임의로 만들어서 확인 (useradd + passwd) 
+[root@host2 net-share]# tail -n 3 /etc/passwd
+test01:x:1002:1002::/home/test01:/bin/bash
+test02:x:1003:1003::/home/test02:/bin/bash
+test03:x:1004:1004::/home/test03:/bin/bash
+테스트01계정으로 접속
+[test01@host2 ~]$ cd /net-share/
+[test01@host2 net-share]$ mkdir test01dir1
+[test01@host2 net-share]$ echo "test01@host2 write a file" > test01dir/test01filea
+
+* 아까부터 보이는 소유자와 소유그룹 nobody : nobody는
+                                        root_squash - 원격 호스트의 root의 권한을 제한
+                                        no_root_squash - 원격 호스트의 root의 권한을 제한하지 않음
+와 관련이 있다. (특히 no _root _squash)
+========
+# automounter 		간접매핑
+*autofs(automounter) = 마운트 연결이 필요한 경우 마운트 연결을 해주고, 사용하지 않을 때는 마운트 연결을 해제해줌
+*마스터 맵(Master Map) = autofs를 통해 관리할 마운트 대상에 대한 마운트 방식, 매핑파일 경로 등에 대해 선언하는 구성파일
+*매핑 파일(Mapping File) = 마운트에 대한 세부 사항을 정의하는 마운트 구성 파일
+
+autofs 마운트 구성 방식
+  - 직접 매핑 : 마운트 대상을 직접 지정
+  - 간접 매핑 : 마운트 대상을 간접 지정
+
+autofs 구성(NFS)
+1. 패키지 설치
+[root@host1 ~]# yum install autofs -y
+[root@host1 ~]# yum install nfs-utils -y
+2. 마스터 맵 파일 생성 및 작성
+# vim /etc/auto.master.d/MASTER_MAP.autofs
+[ MountPoint             MAP_FILE_PATH		 ]
+[   /-                     /etc/auto.direct		 ] 1:1직접매핑
+3. 매핑 파일 생성 및 작성
+# vim /etc/auto.MAP_FILE_NAME
+[  MP                         MOUNT_OPTION     SOURCE_LOCATION     ]
+[  /mnt/nfs-test1             -rw,sync              192.168.100.102:/net-share ] 1:1직접매핑
+4. 서비스 시작 및 부팅시 활성화
+# systemctl start autofs.service
+
+[root@host1 ~]# vim /etc/auto.master.d/direct.autofs
+/-          /etc/auto.direct 
+[root@host1 ~]# vim /etc/auto.direct
+/mnt/nfs-test1  -rw,sync 	192.168.100.102:/net-share
+[root@host1 ~]# mkdir /mnt/nfs-test1
+[root@host1 ~]# systemctl start autofs.service 
+[root@host1 ~]# systemctl enable autofs.service 
+Created symlink /etc/systemd/system/multi-user.target.wants/autofs.service → /usr/lib/systemd/system/autofs.service.
+[root@host1 ~]# cd /mnt/nfs-test1/  >>여기까지 잘 되면 틀린부분이 없는 것.
+
+실습)
+[root@host2 ~]# mkdir /net-share2
+[root@host2 ~]# mkdir /net-share3
+[root@host2 ~]# mkdir /net-share3/public
+[root@host2 ~]# mkdir /net-share3/docs
+[root@host2 ~]# mkdir /net-share3/data
+[root@host2 ~]# 
+[root@host2 ~]# vim /etc/exports
+/net-share              *(rw,sync,sec=sys)
+/net-share2             *(rw,sync,sec=sys)
+/net-share3/public      *(rw,sync,sec=sys)
+/net-share3/docs        *(ro,sec=sys)
+/net-share3/data        *(rw,sync,sec=sys)	:wq!
+[root@host2 ~]# exportfs -r		로 내보내준다.
+
+[root@host2 ~]# cat /etc/exports
+/net-share      	*(rw,sync,sec=sys)
+/net-share2 		*(rw,sync,sec=sys)
+/net-share3/public	*(rw,sync,sec=sys)
+/net-share3/docs	*(ro,sec=sys)
+/net-share3/data	*(rw,sync,sec=sys)		여기에서 권한설정하자
+[root@host2 ~]# chmod 777 /net-share2
+[root@host2 ~]# chmod 777 /net-share3/public/
+[root@host2 ~]# chmod 777 /net-share3/docs/
+[root@host2 ~]# chown user:user /net-share3/data/
+
+이제 호스트1로간다. 
+[root@host1 ~]# vim /etc/auto.master.d/indirect.autofs
+[root@host1 ~]# cat /etc/auto.master.d/indirect.autofs
+/mnt    /etc/auto.indirect
+[root@host1 ~]# vim /etc/auto.indirect
+[root@host1 ~]# cat /etc/auto.indirect
+indirect	-rw,sync	192.168.100.102:/net-share2		간접매핑 선언완료.
+[root@host1 ~]# systemctl start autofs.service
+Job for autofs.service failed because a fatal signal was delivered causing the control process to dump core.
+See "systemctl status autofs.service" and "journalctl -xeu autofs.service" for details.
+#트러블슈팅 
+>>에러가 나는 이유는 다른 탭에서 작업을 해서(터미널이 열려서)그런 경우이다. 그 이후 
+[root@host1 ~]# umount -a 를 통해 언마운트를 하고, 다시 
+[root@host1 ~]# systemctl start autofs.service 를 통해서 마운트를 하면 된다.
+[root@host1 ~]# cd /mnt/
+[root@host1 mnt]# cd /mnt/indirect
+[root@host1 indirect]# ls -l
+합계 0
+[root@host1 indirect]# touch nfstest
+[root@host1 indirect]# ls -l
+합계 0
+-rw-r--r--. 1 nobody nobody 0 11월 14 14:31 nfstest	간접매핑으로 마운트포인트 연결됨.
+
+종료시=
+[root@host1 ~]# systemctl stop autofs.service 
+[root@host1 ~]# umount -a
+
+다시 mnt2로 변경해서 연결
+[root@host1 ~]# vim /etc/auto.master.d/indirect.autofs
+/mnt2    /etc/auto.indirect
+[root@host1 ~]# systemctl start autofs.service
+[root@host1 ~]# cd /mnt2
+[root@host1 mnt2]# ls -l
+합계 0
+[root@host1 mnt2]# cd indirect
+[root@host1 indirect]# pwd
+/mnt2/indirect
+[root@host1 ~]# systemctl stop autofs.service
+다시 실행시키고 mount를 입력해서 마운트목록을보면
+ 
+indirect(간접)매핑또한 나타난다. 접근한 순간 마운트포인트가 생기게되는것.
+실제로 
+[root@host1 ~]# cd /mnt2/indirect    로 들어가보면 원래 없던 마운트가
+[root@host1 indirect]# ll
+합계 0
+-rw-r--r--. 1 nobody nobody 0 11월 14 14:31 nfstest
+ 
+추가되서 나타나게 됨.
+
+SMB(Server Message Block) protocol
+삼바(Samba)는 마이크로소프트와 인텔에서 개발한 SMB 네트워크 프로토콜을 이용해 윈도우와 유닉스계열의 운영체제나 다른 시스템 간의 자원을 공유할 수 있도록 만든 프로그램이다.
+
+Samba 서비스 구축
+1. Samba 서비스 소프트웨어 패키지 설치
+# yum install samba samba-common
+
+2. Samba 서비스 시작
+# systemctl start smb.service
+# systemctl start nmb.service
+
+3. Samba 서비스를 부팅시 활성화(영구 설정)
+# systemctl enable smb.service
+# systemctl enable nmb.service
+
+4. 방화벽에서 Samba 서비스 허용
+# firewall-cmd --add-service=samba --permanent
+# firewall-cmc -reload
+Samba 구성 파일 내용
+
+[global]
+        workgroup = SAMBA  // Windows PC의 작업 그룹
+        security = user            // user : Windows 사용자 인증(ID, PW)
+                                            // share : 특정한 자원에 대해 패스워드 설정
+                                            // domain : Windows NT Domain 구성
+        passdb backend = tdbsam    // Samba 서비스 사용자 계정 정보 저장 방식
+        netbios name = rocky9                        // NETBIOS 이름 지정
+        server string = Computer Description // 컴퓨터 설명
+        printing = cups                       // Samba Printing 지원 방식
+        printcap name = cups
+        load printers = yes
+        cups options = raw
+
+[homes]                                          // 사용자에게 제공할 디렉터리 설정
+        comment = Home Directories       // 공유 자원에 대한 설명
+        valid users = %S, %D%w%S       //  공유 자원을 사용할 수 있는 사용자
+        browseable = No                          //  Windows 탐색기에서 공유항목 표시 여부
+        read only = No                             // (read only = writable) 읽기 쓰기 가능 여부
+        inherit acls = Yes
+        write list = smbuser                      // 쓰기 가능한 사용자 
+
+#실습- SMB 디렉터리 공유
+(필요시) Samba 사용자 생성   (test01, 02, 03)
+1. Linux 사용자 생성
+# useradd USER
+# passwd USER
+2. Samba 사용자 추가
+# smbpasswd -a USER
+1. 설정 파일 설정
+# vim /etc/samba/smb.conf
+# Samba Share Directories 맨뒤에 추가한다.
+[share1]
+        comment = samba share1
+        path = /share/share1
+        browseable = Yes
+        writable = Yes
+        write list = test01 @test02
+
+[share2]
+        comment = samba share2
+        path = /share/share2
+        browseable = No
+        writable = Yes
+        write list = test01 @test02
+
+Samba로 공유할 디렉터리 준비
+1. Samba로 공유할 디렉터리 생성
+# mkdir DIRECTORY
+[root@host2 ~]# mkdir /share
+[root@host2 ~]# mkdir /share/share1
+[root@host2 ~]# mkdir /share/share2
+
+2. Samba로 공유할 디렉터리에 적절한 권한 부여
+# chmod  PERM  DIRECTORY
+[root@host2 ~]# ls -lZ /share
+drwxr-xr-x. 2 root root unconfined_u:object_r:default_t:s0 6 Nov 14 16:35 share1
+drwxr-xr-x. 2 root root unconfined_u:object_r:default_t:s0 6 Nov 14 16:35 share2
+>>삼바에서 사용할 수 있으려면 삼바에 합당한 컨텍스트로 바꿔야 한다.
+[root@host2 ~]# semanage fcontext -a -t 'samba_share_t' '/share/share1(/.*)?'
+[root@host2 ~]# semanage fcontext -a -t 'samba_share_t' '/share/share2(/.*)?'
+[root@host2 ~]# restorecon -FRv /share/
+Relabeled /share from unconfined_u:object_r:default_t:s0 to system_u:object_r:default_t:s0
+Relabeled /share/share1 from unconfined_u:object_r:default_t:s0 to system_u:object_r:samba_share_t:s0
+Relabeled /share/share2 from unconfined_u:object_r:default_t:s0 to system_u:object_r:samba_share_t:s0
+
+>>이어서 권한주기
+[root@host2 ~]# chmod 777 /share/share1
+[root@host2 ~]# chmod 777 /share/share2
+[root@host2 ~]# systemctl restart smb.service nmb.service
+
+*[root@host2 ~]# smbpasswd -a test01 / 02 / 03 으로 패스워드도 설정한다.
+호스트1로 넘어간다.
+samba-client를 설치
+[root@host1 ~]# mkdir /mnt/share1
+[root@host1 ~]# mkdir /mnt/share2
+[root@host1 ~]# mount -t cifs -o username=test01,password=test //192.168.100.102/share1 /mnt/share1		>
+mount: /mnt/share1: mount(2) system call failed: 호스트로 갈 루트가 없음.
+>>이 오류가 떴을 때 트러블슈팅에서 생각해볼 것 = 대부분 방화벽이다. reload까지 해주기.
+[root@host1 ~]# mount |grep share
+//192.168.100.102/share1 on /mnt/share1 type cifs (rw,relatime,vers=3.1.1,cache=strict,username=test01,uid=0,noforceuid,gid=0,noforcegid,addr=192.168.100.102,file_mode=0755,dir_mode=0755,soft,nounix,serverino,mapposix,rsize=4194304,wsize=4194304,bsize=1048576,echo_interval=60,actimeo=1)
+
+[root@host1 ~]# setsebool -P samba_enable_home_dirs on 으로 홈디렉터리 접근을 허용해줘야함.
+이제 윈도우탐색기에서 \\192.168.100.102를 입력해주면 접근이 가능하다.
+
+
