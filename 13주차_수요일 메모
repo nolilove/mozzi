@@ -1,0 +1,223 @@
+13주차_수요일 메모(리눅스)
+개요- IP기반 네트워크에 블록스토리지를 제공하는 protocol ISCSI에 대해서 알아본다.
+* iSCSI 관련 용어
+타겟(Target) : 스토리지 장치를 제공하는 시스템으로 서버 역할을 수행하는 시스템
+초기자(Initiator) : 스토리지 장치를 제공받는 시스템으로 클라이언트 역할을 수행하는 시스템
+
+
+# iSCSI(Internet Small Computer Systems Interface) _SAN에 주로 사용된다.
+  - IP 기반으로 네트워크에 Block Storage를 제공하는 네트워크 프로토콜 /블록스토리지 
+  - 데이터의 저장공간을 제공할 수 있는 장비
+Storage 분류
+ # DAS(Direct Attached Storage)
+    - 스토리지 장비와 시스템이 케이블을 통해 직접 연결되는 스토리지 장비
+ # NAS(Network Attached Storage)
+   - 네트워크를 통해 시스템과 스토리지 장비를 연결하여 파일시스템 수준에서 저장 공간을 제공하는 스토리지 장비  
+  # SAN(Storage Area Network)
+- 스토리지를 위한 네트워크를 별도로 구성하여 해당 네트워크를 통해 스토리지 장비와 시스템이 연결되는 스토리지 장비로 네트워크를 통해 Block Storage를 제공하는 스토리지 장비
+  - 스토리지를 위한 고속의 네트워크를 구성하기 위해 일반적으로 FC Switch (Fibre Channel switch)를 통해 연결됨 >>비쌈! 스위치에 장애생기면 시스템이 마비!
+
+iSCSI 관련 용어
+타겟(Target) : 스토리지 장치를 제공하는 시스템으로 서버 역할을 수행하는 시스템
+초기자(Initiator) : 스토리지 장치를 제공받는 시스템으로 클라이언트 역할을 수행하는 시스템
+IQN(iSCSI Qualified Name) : iSCSI Target, Initiator에서 사용하는 이름
+TPG(Target Portal Group) : 대상 포털 그룹으로써 ACL, LUN, Portal을 묶은 대상의 설정 단위
+ACL(Access Control List) : 접근 제어 목록으로 대상에서 제공되는 스토리지에 접근할 수 있는 시스템을 지정
+Portal : 초기자가 대상에 접속할 때 사용하는 주소를 정의
+LUN(Logical Unit Number) : 초기자에게 제공할 스토리지 장치에 부여되는 장치 번호
+backstores - iSCSI 대상 시스템에서 저장공간을 제공하는 방식 정의
+  - block : 블록 장치(Block Device)
+  - fileio : 현재 시스템에서 사용하는 파일시스템의 일부를 제공하는 방식으로 사이즈 지정시 별도의 파일이 생성되며 해당 파일 안에 데이터가 저장됨
+  - pscsi : SCSI 장치를 직접 공유
+  - ramdisk : 시스템의 메모리에 램디스크(RAM Disk)를 생성해서 저장하는 방식으로 빠른 성능을 제공하나 대상(Target) 시스템 재부팅시 데이터가 손실됨
+
+<실습과정>
+[iSCSI Target System]
+iSCSI 서비스 구축 과정
+1. iSCSI 서비스 패키지 설치
+# yum install targetcli
+2. iSCSI 서비스 시작
+# systemctl start target.service
+3. iSCSI 서비스 부팅시 활성화(영구 설정)
+# systemctl enable target.service
+4. 방화벽에서 iSCSI 서비스를 허용
+# firewall-cmd --add-port=3260/tcp --permanent
+# firewall-cmd --reload
+
+iSCSI 타겟 구성 실습 (호스트2 - 서버) 
+# targetcli
+1. 타켓의 IQN 정의 및 TPG 생성
+/>  /backstores/block create name=disk1 dev=/dev/sdb
+2. 타겟의 IQN 정의 및 TPG 생성 (예: server.example.com)
+/> /iscsi create wwn=iqn.2023-11.com.example:host2
+3. TPG의 ACL 설정
+/> /iscsi/iqn.2023-11.com.example:host2/tpg1/acls create wwn=iqn.2023-11.com.example:host1
+4. TPG의 LUN 설정
+/> /iscsi/iqn.2023-11.com.example:host2/tpg1/luns create storage_object=/backstores/block/disk1
+5. TPG의 Portal 설정
+/> /iscsi/iqn.2023-11.com.example:host2/tpg1/portals delete 0.0.0.0 3260 로 먼저 해제
+/> /iscsi/iqn.2023-11.com.example:host2/tpg1/portals create 192.168.100.102 3260
+ 
+>>다했으면 iSCSI 타겟설정 내용을 확인하자. ( ls 명령어)
+ 
+>exit로 저장 및 종료함.
+
+[iSCSI Initiator] 구성하기. (호스트1 - 클라이언트)
+iSCSI Initiator 구성
+1. iSCSI Initiator 패키지 설치
+# yum install iscsi-initiator-utils
+2. iSCSI Initiator IQN 설정
+# vim /etc/iscsi/initiatorname.iscsi 을 새로 만들어준다.
+====
+InitiatorName=iqn.2023-11.com.example:host1   입력
+====
+3. iSCSI Initiator 서비스 시작
+# systemctl start iscsi.service
+4. iSCSI Initiator 서비스 부팅시 활성화(영구설정)
+# systemctl enable iscsi.service  //status로 상태도 확인.
+
+iSCSI 타겟 연결
+1. iSCSI 타겟 검색&찾기 (Discovery)
+# iscsiadm -m discovery -t sendtargets -p TARGET_IP[:PORT]
+[root@host1 ~]# iscsiadm -m discovery -t sendtargets -p 192.168.100.102:3260
+192.168.100.102:3260,1 iqn.2023-11.com.example:host2 >>타겟의 iqn을 찾았다.
+2. iSCSI 타겟 로그인(Login)
+# iscsiadm -m node -T TARGET_IQN  -p 192.168.100.102:3260 -l
+[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102:3260 -l
+Logging in to [iface: default, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260]
+Login to [iface: default, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260] successful.
+
+iSCSI 접속 상태 확인
+[root@host1 ~]# iscsiadm -m session -P 3
+
+iSCSI 타겟 연결 해제(로그아웃) 및 삭제
+# iscsiadm -m node -T  TARGET_IQN   -p  TARGET_IP[:PORT]  -l
+[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102 -u
+Logging out of session [sid: 1, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260]
+Logout of [sid: 1, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260] successful.
+>> 로그인은 -l / 로그아웃(언마운트)은 -u 이다.
+이어서 지우기 
+[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102 -o delete
+[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102 -l
+iscsiadm: No records found
+
+이 과정을 요약하자면 
+[root@host1 ~]# iscsiadm -m discovery -t st -p 192.168.100.102
+192.168.100.102:3260,1 iqn.2023-11.com.example:host2
+\[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102 -l
+Logging in to [iface: default, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260]
+Login to [iface: default, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260] successful.
+[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102 -u
+Logging out of session [sid: 2, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260]
+Logout of [sid: 2, target: iqn.2023-11.com.example:host2, portal: 192.168.100.102,3260] successful.
+[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102 -o delete 
+[root@host1 ~]# iscsiadm -m node -T iqn.2023-11.com.example:host2 -p 192.168.100.102 -l
+iscsiadm: No records found
+
+iSCSI로 제공된 디스크 사용하기. 
+=iSCSI 초기자(이니시에이터)에서 iSCSI 타겟에 연결한뒤 기존의 새로운 디스크 추가 과정과 동일하게 진행하면 된다. 다만 마운트 시 마운트 옵션을 별도로 지정해야 함.
+[root@host1 ~]# ls -l /dev/sd?
+brw-rw----. 1 root disk 8,  0 11월 15 10:12 /dev/sda
+brw-rw----. 1 root disk 8, 16 11월 15 10:12 /dev/sdb
+brw-rw----. 1 root disk 8, 32 11월 15 10:12 /dev/sdc
+brw-rw----. 1 root disk 8, 48 11월 15 10:12 /dev/sdd
+brw-rw----. 1 root disk 8, 64 11월 15 12:43 /dev/sde 	로그인하면 sde가 새로생겨있음.
+Mount 명령어를 사용한 마운트(1회성 마운트)
+# mount -t FSTYPE  DEVICE  MOUNT_POINT
+/etc/fstab 파일을 사용한 영구 마운트 설정
+# vim /etc/fstab
+=====
+#DEVICE                  MOUNT_POINT             FSTYPE     _netdev         0 0
+/dev/sde1               /mnt/data1              ext4    _netdev         0 0
+=====
+
+#Web Server 에 대해서 알아보자 
+
+*HTTP(Hypertext Transfer Protocol)
+  - 하이퍼 텍스트 문서(웹 문서)를 전송하기 위한 애플리케이션 프로토콜
+  - HTTP는 데이터 전송시 평문으로 데이터를 전송함.
+HTTPS(Hypertext Transfer Protocol Secure)
+-	HTTP + SSL/TLS 의 구성으로 된 프로토콜이다.(두가지 프로토콜이 같이 동작)
+-	웹 문서를 암호화해서 전송하는 애플리케이션 프로토콜임.
+Apache Webserver
+  - Apache 재단에서 개발한 오픈소스 웹 서버
+  - 다양한 모듈을 지원함
+  - VirtualHost 지원
+
+아파치 웹서버 구성해보기
+[root@host2 ~]# httpd -v
+Server version: Apache/2.4.53 (Rocky Linux)
+Server built:   Apr 28 2023 00:00:00
+>깔아놓은 httpd(아파치 데몬)의 버전을 확인했다.
+[root@host2 ~]# ls -l /etc/httpd/ 를 확인
+drwxr-xr-x. 2 root root   82 Sep 13 10:36 conf.d  << 여기에서 설정을 하게된다.
+/etc/httpd/conf 에서 파일을 살펴보자.
+Apache 웹서버 구성파일 내용
+[root@host2 conf]# vim httpd.conf 
+ServerRoot "/etc/httpd"    // Apache 웹서버 구성파일 경로
+DocumentRoot "/var/www/html"  // 웹 페이지 기본 경로
+Listen 80                         // 수신대기 포트 지정 (포트, IP주소+포트)
+User apache                     // Apache 웹서버 사용자 지정
+Group apache                   // Apache 웹서버 그룹 지정
+
+ServerAdmin root@localhost  // 관리자 정보
+#ServerName www.example.com:80   // 웹서버 주소
+Directory Block :  웹서버가 접근할 경로에 대해 허용/차단을 정의
+<Directory "PATH">
+</Directory>
+기본 웹사이트 DocumentRoot 디렉터리(/var/www/html/) 설정 내용
+<Directory "/var/www/html">
+    Options Indexes FollowSymLinks    // Directory Listing, Symbolic Link 허용
+    AllowOverride None                         // 일반적인 접근 방식만 허용
+    Require all granted                           // 접근 허용
+</Directory>
+기본 웹 페이지 및 우선순위 지정
+<IfModule dir_module>
+    DirectoryIndex index.html
+
+웹서버 만들기 실습
+[root@host2 conf]# cd /etc/httpd/conf
+[root@host2 conf]# pwd
+/etc/httpd/conf
+[root@host2 conf]# vim httpd.conf
+>47행에서 Listen을 확인하기.  (:set nu) >> 8080으로 변경.
+//  바꾸기전에 백업을 먼저생성함. [root@host2 conf]# cp httpd.conf httpd.conf.bak
+-	http://localhost:8080/으로 접속하면 아까 그 화면이 나타난다.
+-	curl 명령어로 웹서버를 미리 확인해보자
+[root@host2 conf]# curl http://192.168.100.102:8080
+hi there~ nice to meet you ^-^	
+[root@host2 conf]# curl http://192.168.100.102:80
+curl: (7) Failed to connect to 192.168.100.102 port 80: Connection refused
+-	이제 호스트1에서도 확인해보면 안되는데, 이는 방화벽 문제이다. 8080포트를 허용해준다.
+-	netstat -ant | grep 8080으로도 확인이 가능하다.
+[root@host2 conf]# netstat -ant | grep 8080
+tcp6       0      0 :::8080                 :::*                    LISTEN
+-	특정 IP로만 접속이 가능하도록 해본다. (Listen 192.168.100.112:80)
+host1에서 Listen 192.168.100.112:80
+>nmcli connection 으로 현재의 아이피를 192.168.100.112/24로 변경했다.
+[root@host2 conf]# nmcli connection modify ens160 +ipv4.addresses 192.168.100.112/24
+[root@host2 conf]# nmcli connection up ens160	
+호스트1에서 http://192.168.100.112:80으로 접속하니까 잘 접속이 되었다.
+다시 되돌려놓기 
+[root@host2 conf]# nmcli connection modify ens160 -ipv4.addresses 192.168.100.112/24
+[root@host2 conf]# nmcli connection up ens160 
+[root@host2 conf]# vim httpd.conf 	다시 80으로 변경해둔다.
+[root@host2 conf]# systemctl restart httpd.service 로 마무리.
+-	기본 경로 (DocumentRoot “/var/www/html”) 을 바꿔서 다른곳에서 서비스를 제공해본다
+>웹서비스와 웹페이지가 존재하는 위치를 바꾸면 된다. ex) /var/www/public 으로 변경.
+[root@host2 conf]# cd /var/www
+[root@host2 www]# mkdir public
+[root@host2 www]# ls -l
+[root@host2 www]# systemctl restart httpd.service	한뒤 
+index.html 파일을 제작해서 localhost를 조회(접속)해보면 된다.
+ 
+정리겸 iSCSI를 새로 구축해보는 실습과제를 해본다.
+호스트1에 sdb에 만들어보자.
+/> /backstores/block create iscsi_disk /dev/sdb
+/> /iscsi create iqn.2023-11.com.example:host1
+LU Number가 뭐야?
+ LU Number는 "Logical Unit Number"의 약어로, 논리적인 유닛을 식별하는 번호를 나타냅니다
+/> /iscsi/iqn.2023-11.com.example:host1/tpg1/luns create /backstores/block/iscsi_disk
+/> /iscsi/iqn.2023-11.com.example:host1/tpg1/portals create 192.168.100.102
+
+
