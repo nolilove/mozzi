@@ -1,0 +1,575 @@
+13주차_목요일 메모(리눅스) <23-11-16 오늘은 수능날!>
+
+개요- virtual host 설정(이름/ip/port)을 하는 법을 알아본다. 검색키워드는 특정**임
+//웹 컨텐츠란, // DB(데이터베이스) 사용(MySQL, Querry)
+지난시간- 오래전부터 사용되던 웹서버부터 현재 사용되는 웹서버에 대해서 알아봤음.
+Web Server : Web 서비스를 제공하는 서버
+HTTP(Hypertext Transfer Protocol)
+  - 하이퍼 텍스트 문서(웹 문서)를 전송하기 위한 애플리케이션 프로토콜
+  - HTTP는 데이터 전송시 평문으로 데이터를 전송함.
+HTTPS(Hypertext Transfer Protocol Secure)
+   - HTTP + SSL/TLS = HTTPS
+   - 웹 문서를 암호화해서 전송하는 애플리케이션 프로토콜
+Apache Webserver
+  - Apache 재단에서 개발한 오픈소스 웹 서버
+  - 다양한 모듈을 지원함
+  - VirtualHost 지원으로 여러 웹 사이트를 하나의 웹서버에 구성할 수 있음.
+Apache 웹서버 구성파일 경로 : /etc/httpd/
+Apache 웹서버 기본 웹 사이트 경로 :  /var/www/html/
+
+# 아파치 웹서버 구성단계: #1 httpd설치> #2 서비스시작start> #3 부팅시 영구활성화enable> #4 방화벽허용firewall-cmd --add-service=http or --add-port=[특정포트]/[tcp&udp] / 방화벽리로드 firewall-cmd --reload
+# ISCSI 구성단계: #1 iscsi설치> #2 서비스시작start> #3 부팅시 영구활성화enable> #4 방화벽허용하기 (특정포트) /방화벽 리로드
+
+
+실습
+[root@host2 conf.d]# pwd
+/etc/httpd/conf.d
+[root@host2 conf.d]# ls -l		조회하면
+-rw-r--r--. 1 root root 2916 May 16  2023 autoindex.conf
+-rw-r--r--. 1 root root  400 May 16  2023 README
+-rw-r--r--. 1 root root 1252 May 16  2023 userdir.conf
+-rw-r--r--. 1 root root  653 May 16  2023 welcome.conf	요런파일들이 나온다.
+userdir.conf 의 역할
+IfModule 사용자마다 홈디렉터리밑에 웹페이지디렉터리>웹서버를 두면 만들었을 때 사용자의 웹페이지 접속에 있어서 웹페이지가 보이게 됨 #UserDir public_html를 사용한다는게 보임. 주석을 해제해주자. 
+[root@host2 ~]# cd ~user
+[root@host2 user]# mkdir public_html
+[root@host2 user]# touch public_html/index.html
+[root@host2 user]# echo " User Website Index.html" > public_html/index.html
+[root@host2 user]# cat public_html/index.html 
+ User Website Index.html
+[root@host2 user]# chown -R user:user public_html/index.html   해주고 재시작한다.
+이러고 호스트1에서 접속해봄
+http://192.168.100.102/~user/ 로 접속해보면
+  >포비든(권한없음)이 뜨는데, 이 이유는 현재 호스트1에서 selinux가 작동하고 있기 때문에 selinux 보안context가 맞지않으면 통과시키지 않기 때문임. 
+[root@host2 user]# ls -lZ 
+drwxr-xr-x. 2 root root unconfined_u:object_r:httpd_user_content_t:s0 24 Nov 15 19:59 public_html
+[root@host2 user]# ls -lZ public_html/
+total 4
+-rw-r--r--. 1 user user unconfined_u:object_r:httpd_user_content_t:s0 25 Nov 15 20:00 index.html
+[root@host2 user]# setenforce 0 로 보안정책을 강제하지 않도록 잠시 설정
+>트러블슈팅 진행
+[root@host2 conf.d]# chmod 701 ~user
+[root@host2 conf.d]# setenforce 0
+http://192.168.100.102/~user/
+[root@host2 conf.d]# cd ~user 유저의 홈디렉토리로 간다. ls -lZ로 컨텍스트확인시 
+drwxr-xr-x. 2 root root unconfined_u:object_r:httpd_user_content_t:s0 24 Nov 16 09:59 public_html
+[root@host2 user]# chown -R user:user public_html/ 로 컨텍스트 변경.
+포비든은 퍼미션과 관련된 오류인데, 처음 /home/USER/public_html/은 755권한을가짐. 반면 사용자의 홈 디렉토리는 
+[root@host2 user]# ls -ld ~user
+drwx-----x. 15 user user 4096 Nov 16 10:14 /home/user		(700권한) 을 가진다.
+아파치 사용자는 other로 작동하기때문에 상위 디렉터리인 70’0’에서 막히므로 권한부여가 필요.
+chmod o+x ~user 로 권한을 부여하거나 701을 부여함.  두번째로
+[root@host2 user]# getenforce에서 enforcing 모드를 조회하고, setenforce로 permissive로 변경해준다.
+트러블슈팅 로그를 보자 Nov 15 20:48:57 localhost setroubleshoot[8971]: SELinux is preventing /usr/sbin/httpd from getattr access on the file /home/user/public_html/index.html. For complete SELinux messages run: sealert -l 3242a638-1ffe-419f-bfd4-6ee844a9f9ea
+[root@host2 user]# getsebool -a|grep httpd 로 들어가서 확인
+httpd_enable_homedirs --> off 으로 나타난부분을 명령어로 바꿔준다.
+[root@host2 user]# setsebool -P httpd_enable_homedirs on
+실습 이후 Userdir 설정 비활성화
+# vim userdir.conf
+<IfModule mod_userdir.c>
+    UserDir disabled
+</IfModule>
+
+
+#VirtualHost를 통한 다중 웹 사이트 구성
+VirtualHost
+  - 물리적인 하나의 웹서버에서 여러개의 웹사이트를 동시에 운영할 수 있도록 하는 Apache 웹서버의 기능
+
+VirtualHost 구성의 분류
+ - 1 이름 기반 가상호스트(Name Based VirtualHost) 
+ - 2 IP주소 기반 가상호스트(IP Based VirtualHost) 
+ - 3 Port 기반 가상호스트(Port Based VirtualHost) 
+
+#1. 이름기반 가상호스트 실습;
+특정이름 기반으로 웹사이트를정의>웹페이지경로 접근정의 두가지가 필요하다.
+샘플 구성파일 참조 :  /usr/share/doc/httpd-core/
+VirtualHost 관련 참고 :  http://httpd.apache.org/docs/2.4/vhosts/
+일단 샘플을 확인하자 [root@host2 conf.d]# ls -ld /usr/share/doc/httpd-core/
+drwxr-xr-x. 2 root root 4096 Nov 16 09:35 /usr/share/doc/httpd-core/	
+ 샘플파일들이 존재하는데, httpd-vhosts.conf가 바로 해당하는것이다.
+vim으로 열면 
+ 
+<VirtualHost *:80> 부터 </VirtualHost>까지의 내용을 참조해서 적으면 된다라고 예시가 나와있으므로 이를 참고해서 작성하면 될 것이다.
+/usr/share/doc/httpd-core/httpd-vhost.conf   와
+/etc/httpd/conf/httpd.conf  에서 예제를 찾자.
+<VirtualHost *:80>  # VirtualHost
+    ServerAdmin webmaster@dummy-host.example.com
+    DocumentRoot "/var/www/dummy-host.example.com"
+    ServerName dummy-host.example.com
+    ServerAlias www.dummy-host.example.com
+    ErrorLog "/var/log/httpd/dummy-host.example.com-error_log"
+    CustomLog "/var/log/httpd/dummy-host.example.com-access_log" common
+</VirtualHost>
+
+<Directory "/var/www/html">     << #웹 사이트 DocumentRoot 디렉터리 접근권한설정
+      Options Indexes FollowSymLinks
+AllowOverride None
+    # Allow open access:
+    Require all granted
+</Directory>
+
+
+    Options Indexes FollowSymLinks 설명
+1.	> Indexes:
+•	Indexes 옵션이 설정된 경우, 해당 디렉터리에 있는 파일 목록이 자동으로 생성되어 웹 브라우저에서 볼 수 있게 됩니다. 디렉터리에 index.html이나 index.php와 같은 기본 문서가 없을 때 유용하게 사용됩니다.
+2.	FollowSymLinks:
+•	FollowSymLinks 옵션이 설정된 경우, 심볼릭 링크를 따라가도록 허용합니다. 즉, 디렉터리 내의 심볼릭 링크를 통해 다른 파일이나 디렉터리로 연결할 수 있습니다.
+
+설정파일이름 작성하는것이 핵심이다. 다만 도메인주소에 대한 DNS서버구성이 되어야 함. 
+
+
+[root@host2 httpd-core]# cd /etc/httpd/conf.d 로 가서
+[root@host2 conf.d]# vim vhost-www.example.com.conf   를 먼저 생성.
+위 셀에서 기본 틀을 수정해서 편집한다.
+<VirtualHost *:80>  # VirtualHost
+    ServerAdmin webmaster@example.com
+    DocumentRoot "/var/www/www.example.com"
+    ServerName www.example.com
+    ServerAlias example.com
+    ErrorLog "/var/log/httpd/www.example.com-error_log"
+    CustomLog "/var/log/httpd/www.example.com-access_log" common
+</VirtualHost>
+여기서 줄친부분에 권한을 주어야 한다는 것이 필요하다.
+<Directory "/var/www/www.example.com">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    # Allow open access:
+    Require all granted
+</Directory>
+저장하고 닫기.
+[root@host2 conf.d]# cd /var/www/
+[root@host2 www]# ls -l
+drwxr-xr-x. 2 root root 6 May 17  2023 html
+[root@host2 www]# mkdir www.example.com
+[root@host2 www]# touch www.example.com/index.html
+[root@host2 www]# echo "www.example.com Web Site" > www.example.com/index.html
+로 만든다.
+[root@host2 conf.d]# systemctl restart httpd	로 재시작.
+이다음으로 Domain Zone 을 구성하면 된다. (yum install bind)
+[root@host2 www]# systemctl start named
+[root@host2 www]# systemctl enable named
+[root@host2 www]# vim /etc/named.conf 에서 any로 설정. 그리고 방화벽을 설정한다.
+[root@host2 www]# firewall-cmd --permanent --add-service=dns
+success
+[root@host2 www]# firewall-cmd --reload
+
+[root@host2 www]# cd /var/named/ 로 이동.
+아무 샘플파일을 복사해서 수정해보자.
+[root@host2 named]# cp named.localhost example.com.zone
+[root@host2 named]# chown :named example.com.zone
+[root@host2 named]# vim /etc/named.rfc1912.zones
+정방향 존만 구성해본다.
+# DOMAIN ZONE TESTYONG
+zone "example.com" IN {
+        type master;
+        file "example.com.zone";
+        allow-update { none; };
+};		을 추가해준다.
+-rw-r-----. 1 root  root   152 Nov 16 11:53 example.com.zone
+[root@host2 named]# vim example.com.zone
+$TTL 1D
+@       IN SOA  ns1 hostmaster (
+                                        0       ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+        IN NS   ns1
+        IN A    192.168.100.102
+ns1     IN A    192.168.100.102
+www     IN A    192.168.100.102
+test    IN A    192.168.100.102
+를 추가해주고 설정해본다.
+[root@host2 named]# systemctl restart named.service
+
+이제 호스트1로가서 nslookup으로 조회해본다
+[root@host1 ~]# nslookup
+> server 192.168.100.102
+Default server: 192.168.100.102
+Address: 192.168.100.102#53
+> example.com
+Server:		192.168.100.102
+Address:	192.168.100.102#53
+
+Name:	example.com
+Address: 192.168.100.102
+> www.example.com
+Server:		192.168.100.102
+Address:	192.168.100.102#53
+
+Name:	www.example.com
+Address: 192.168.100.102
+> test.example.com
+Server:		192.168.100.102
+Address:	192.168.100.102#53
+
+Name:	test.example.com
+Address: 192.168.100.102
+>>조회가 잘 됨. > exit
+
+dns 서버주소를 바꿔줄 차례다. 
+[root@host1 ~]# nmcli connection modify ens160 ipv4.dns 192.168.100.102
+[root@host1 ~]# nmcli connection up ens160
+
+일단 test.example.com 에대한 virtual host설정파일 > 버추얼블럭,디렉터리블럭 설정후에 > 도큐먼트 디렉토리 경로 > 웹사이트에 대한 Domain zone 구성 > systemctl재시작 정도로 생각해보면되겠다.
+[root@host2 conf.d]# vim test.example.com.conf 으로가서
+<VirtualHost *:80>  # VirtualHost
+    ServerAdmin webmaster@test.example.com
+    DocumentRoot "/var/www/test.example.com"
+    ServerName test.example.com
+    ErrorLog "/var/log/httpd/test.example.com-error_log"
+    CustomLog "/var/log/httpd/test.example.com-access_log" common
+</VirtualHost>
+
+<Directory "/var/www/test.example.com">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    # Allow open access:
+    Require all granted
+</Directory>
+하고 저장.
+
+
+
+
+[root@host2 conf.d]# touch 00-default.conf 로 만들어보자
+<VirtualHost *:80>
+    DocumentRoot "/var/www/html"
+</VirtualHost>
+[root@host2 conf.d]# vim /var/named/example.com.zone  에서 추가설정.
+[root@host2 conf.d]# systemctl restart named
+[root@host2 conf.d]# cp vhost-test.example.com.conf 03-vhost-test2.example.com.conf
+[root@host2 conf.d]# vim 03-vhost-test2.example.com.conf
+<VirtualHost *:80>  # VirtualHost
+    ServerAdmin webmaster@example.com
+    DocumentRoot "/web"
+    ServerName test2.example.com
+    ErrorLog "/var/log/httpd/test2.example.com-error_log"
+    CustomLog "/var/log/httpd/test2.example.com-access_log" common
+</VirtualHost>
+
+<Directory "/web">                      
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    # Allow open access:
+    Require all granted
+</Directory>		주의할것은 디렉터리 /web에다가 한다는것이다
+[root@host2 conf.d]# systemctl restart httpd
+[root@host2 conf.d]# systemctl restart named
+이제 이 /web에 대한 도큐먼트 디렉터리를 만들어야한다.
+[root@host2 conf.d]# mkdir /web
+[root@host2 conf.d]# echo "test2.example.com web site" > /web/index.html
+[root@host2 conf.d]# ls -l /web
+total 4
+-rw-r--r--. 1 root root 27 Nov 16 12:41 index.html
+[root@host2 conf.d]# systemctl restart httpd
+>>test페이지가 나오면 원인을 찾아야 한다.
+test2.example.com-access_log를 찾아본다.
+test2.example.com-error_log 를 찾아본다.
+Thu Nov 16 12:42:41.123426 2023] [core:error] [pid 13174:tid 13339] (13)Permission denied: [client 192.168.100.101:37238] AH00035: access to /index.html denied (filesystem path '/web/index.html') because search permissions are missing on a component of the path 라며 권한없음이 문제다.
+[root@host2 conf.d]# ls -l /web
+total 4
+-rw-r--r--. 1 root root 27 Nov 16 12:41 index.html  의 경우 644 권한을 가졌다.
+그래도 접근이 안되는 이유는? 
+로그를 보면 타겟 컨텍스트가 default_t 타입을 가지고있어서 그렇다.
+[root@host2 conf.d]# ls -lZ /web		를 조회해보면
+total 4
+-rw-r--r--. 1 root root unconfined_u:object_r:default_t:s0 27 Nov 16 12:41 index.html
+반면 
+[root@host2 conf.d]# ls -lZ /var/www 	를 조회하면
+total 0
+drwxr-xr-x. 2 root root system_u:object_r:httpd_sys_script_exec_t:s0  6 May 17  2023 cgi-bin
+drwxr-xr-x. 2 root root system_u:object_r:httpd_sys_content_t:s0      6 May 17  2023 html
+drwxr-xr-x. 2 root root unconfined_u:object_r:httpd_sys_content_t:s0 24 Nov 16 11:46 www.example.com
+>>다른 컨텍스트를 가지고 있으므로 default_t 를 httpd_sys_context_t로 변경해준다.
+#Apache 웹서버가 접근할 수 있게 하는 SElinux Context편집하기
+httpd_sys_content_t
+httpd_user_content_t
+[root@host2 conf.d]# ls -ldZ /web
+drwxr-xr-x. 2 root root unconfined_u:object_r:default_t:s0 24 Nov 16 12:41 /web
+[root@host2 conf.d]# semanage fcontext -a -t 'httpd_sys_content_t' '/web(/.*)?'
+[root@host2 conf.d]# restorecon -Rv /web
+Relabeled /web from unconfined_u:object_r:default_t:s0 to unconfined_u:object_r:httpd_sys_content_t:s0
+Relabeled /web/index.html from unconfined_u:object_r:default_t:s0 to unconfined_u:object_r:httpd_sys_content_t:s0
+
+이름기반 가상호스트 실습을 끝냈다.
+#2. IP주소 기반 가상호스트 실습
+[root@host2 conf.d]# cp vhost-test.example.com.conf 04-vhost-ip-based.conf
+[root@host2 conf.d]# vim 04-vhost-ip-based.conf
+특정아이피(특정IP)는 192.168.100.112로 설정해본다. 
+ 
+<VirtualHost 192.168.100.112>  # VirtualHost
+    ServerAdmin webmaster@test.example.com
+    DocumentRoot "/var/www/home-112"
+    ServerName test.example.com
+    ErrorLog "/var/log/httpd/192.168.100.112-error_log"
+    CustomLog "/var/log/httpd/192.168.100.112-access_log" common
+</VirtualHost>
+
+<Directory "/var/www/home-112">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    # Allow open access:
+    Require all granted
+</Directory>
+[root@host2 conf.d]# nmcli connection modify ens160 +ipv4.addresses 192.168.100.112/24
+[root@host2 conf.d]# nmcli connection up ens160
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/6)
+[root@host2 conf.d]# 
+[root@host2 conf.d]# systemctl restart httpd.service
+ 경로를 만들어주지 않아서 not found가 아직까지는 뜬다.
+[root@host2 conf.d]# mkdir /var/www/home-112
+[root@host2 conf.d]# echo "192.168.100.112 web site" > /var/www/home-112/index.html
+[root@host2 conf.d]# systemctl restart httpd		를 해준다.
+ 그럼 잘 나온다.
+이번엔 삭제해본다. 
+추가 IP를 더이상 사용하지 않기 위해 해당 구성파일을 삭제하고 IP 주소 설정 해제하는것.
+[root@host2 conf.d]# rm 04-vhost-ip-based.conf 
+rm: remove regular file '04-vhost-ip-based.conf'? y
+[root@host2 conf.d]# systemctl restart httpd
+ 
+[root@host2 conf.d]# nmcli connection modify ens160 -ipv4.addresses 192.168.100.112/24
+[root@host2 conf.d]# nmcli connection up ens160  을 해주면 이제 접속도 안될것.
+ 
+ip기반 가상호스트 실습이 끝났다.
+#3. Port 기반 가상호스트 실습
+특정포트를 설정후에 포트 부분을 다르게 설정해주면 된다.
+[root@host2 conf.d]# cp vhost-www.example.com.conf 05-vhost-port-based.conf
+[root@host2 conf.d]# vim 05-vhost-port-based.conf
+ 
+<VirtualHost *:10000>  # VirtualHost
+    ServerAdmin webmaster@example.com
+    DocumentRoot "/var/www/home-port-10000"
+    ErrorLog "/var/log/httpd/port-10000-error_log"
+    CustomLog "/var/log/httpd/port-10000-access_log" common
+</VirtualHost>
+
+<Directory "/var/www/home-port-10000">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    # Allow open access:
+    Require all granted
+</Directory>		모든포트에서 10000번 포트로 오는 설정을 생성했다.
+[root@host2 conf.d]# systemctl restart httpd
+이제 디렉터리를 준비한다.
+[root@host2 conf.d]# mkdir /var/www/home-port-10000
+[root@host2 conf.d]# echo "port based test(TCP/10000) web site" > /var/www/home-port-10000/index.html
+[root@host2 conf.d]# systemctl restart httpd
+현재 10000번 포트를 열고있지 않다. 따라서 방화벽에서 10000번 포트를 열어야 함. 따라서
+[root@host2 conf.d]# vim /etc/httpd/conf/httpd.conf 에서 
+Listen 10000  을 추가
+[root@host2 conf.d]# systemctl restart httpd
+Job for httpd.service failed because the control process exited with error code.
+See "systemctl status httpd.service" and "journalctl -xeu httpd.service" for details.
+>>정해지지않은 포트를 막게 된다. 물론 이경우 임시적으로 
+[root@host2 conf.d]# getenforce 
+Enforcing
+[root@host2 conf.d]# setenforce 0
+[root@host2 conf.d]# systemctl restart httpd		로 포트보안을 해제하면 가능하다
+but 이것은 임시적 방편일 뿐이다. 이 방법은 보안적인 문제가 상당히 따라온다. 따라서 
+[root@host2 conf.d]# semanage port -l |grep http	로 http와 관련된 포트를검색.
+http_cache_port_t              tcp      8080, 8118, 8123, 10001-10010
+http_cache_port_t              udp      3130
+http_port_t                    tcp      80, 81, 443, 488, 8008, 8009, 8443, 9000
+pegasus_http_port_t            tcp      5988
+pegasus_https_port_t           tcp      5989
+이제 http_port_t를 찾았으니 등록하면 된다.
+[root@host2 conf.d]# semanage port -a -t 'http_port_t' -p tcp 10000
+[root@host2 conf.d]# semanage port -l |grep http
+http_cache_port_t              tcp      8080, 8118, 8123, 10001-10010
+http_cache_port_t              udp      3130
+http_port_t                    tcp      10000, 80, 81, 443, 488, 8008, 8009, 8443, 9000
+pegasus_http_port_t            tcp      5988
+pegasus_https_port_t           tcp      5989 		보면 10000번 포트가 추가됐음.
+등록해준 다음에, 방화벽을 설정해주어야 한다.
+[root@host2 conf.d]# firewall-cmd --add-port=10000/tcp --permanent
+[root@host2 conf.d]# firewall-cmd  --reload
+호스트 2에서 꼭 방화벽까지 추가를 해줘야 호스트1에서 접속이 잘 된다
+
+# PHP 이용하기
+[root@host2 conf.d]# yum install php	로 우선 설치한다.
+[root@host2 conf.d]# systemctl restart httpd.service
+[root@host2 conf.d]# cd /var/www/html/
+[root@host2 html]# vim index.php
+<?php
+phpinfo();
+?>
+저장한다.
+http://192.168.100.102/index.php 로 웹에서 조회해본다.
+ 
+그러면 php파일이 나오게 된다.
+[root@host2 html]# mv index.php phpinfo.php 로 이름을 바꾸고 
+ 
+<?php
+        $num1 = 2^2;
+        $num2 = 2^5;
+        $result = $num1 + $num2;
+
+        echo " Faker is God!<br> ";
+        echo " Jingdong Down!! ";
+        echo " Newjeans na wha!! ";
+        echo  $num1." + ".$num2." = ".$result;
+?>
+변수를 입력하고 출력하는 내용을 작성했다.
+ 
+Faker is God!
+Jingdong Down!! Newjeans na wha!! 0 + 7 = 7
+라는 값이 웹에 표시되었다. 
+view-source:http://192.168.100.102/phpinfo.php 로 입력 그대로 표현도 가능하다.
+Faker is God!<br>  Jingdong Down!!  Newjeans na wha!! 0 + 7 = 7
+
+####
+#웹 컨텐츠란
+#1. 정적 웹 컨텐츠= 웹 페이지 문서의 내용이 고정된 웹 문서로 웹 문서 요청시 웹 문서 원본 내용이 그대로 클라이언트에 제공되는 웹 컨텐츠
+#2. 동적 웹 컨텐츠= 웹 페이지 문서의 내용 중 서버 사이드 언어가 포함된 웹 문서로 웹 문서 요청시 서버 사이드 언어 코드가 서버에서 처리된 후 처리된 결과를 웹 문서에 포함하여 클라이언트에게 제공하는 웹 컨텐츠
+#서버 사이드 언어란
+-코드 내용이 서버의 스크립트 엔진 또는 파서(Parser)가 처리하여 그 결과를 웹서버에게 전달하면 그 결과를 포함해서 클라이언트에 반환함.
+종류로는 ASP , JSP , PHP 가 있다.   (nodejs.같은건 서버역할도 함_주로는 서버역할로 쓰임.)
+#클라이언트 사이드 언어란
+-코드 내용이 클라이언트에서 해석되어 처리되는 언어임.
+종류로는 HTML, JavaScript
+
+# DB (데이터베이스) 란
+데이터베이스(Database, DB)
+ - 체계적으로 구조화된 데이터의 모음을 의미함.
+ - 이 데이터는 효과적으로 검색, 저장, 관리, 업데이트 및 조작할 수 있도록 설계되어 있음.
+ - 데이터베이스는 정보를 효율적으로 관리하기 위한 중요한 도구로 사용되며, 다양한 분야에서 응용되고 있음.
+
+데이터베이스의 주요 특징
+ - 구조화된 데이터: 데이터베이스는 테이블, 열, 행 등과 같은 구조를 가지고 있어 데이터의 일관성과 유지보수가 용이함.
+ - 데이터 독립성: 데이터베이스는 데이터와 응용프로그램을 독립시켜, 데이터의 변경이 응용프로그램에 영향을 미치지 않도록 함.
+ - 동시성 제어: 여러 사용자가 동시에 데이터에 접근하더라도 데이터베이스는 이를 효과적으로 관리하여 충돌을 방지함.
+
+데이터베이스의 분류
+ - 관계형 데이터베이스(Relational Database)
+ 데이터를 테이블 형태로 표현하고, 테이블 간에 관계를 설정하여 데이터를 관리함.
+ 예: Oracle, MySQL, MariaDB, Microsoft SQL Server
+
+ - 객체지향 데이터베이스(Object Database)
+ 객체 지향 프로그래밍의 개념을 데이터베이스에 도입하여, 객체 간의 관계를 중심으로 데이터를 조직함
+ 예: ObjectDB, db4o 등
+
+# 데이터베이스 기본 용어 정리
+Database (데이터베이스)
+ - 데이터의 체계적이고 구조화된 모음으로, 효과적인 데이터 관리를 위한 시스템.
+ - 구조화된 데이터를 저장하고 관리하는데 사용되며, 여러 테이블이나 컬렉션의 집합체로 이루어짐.
+Table (테이블)
+ - 데이터베이스 내에서 구조화된 형식으로 데이터를 저장하는 표 형태의 개체.
+ - 행과 열로 이루어져 있으며, 각 열은 특정 유형의 데이터를 나타냄. 테이블은 데이터베이스의 핵심 구성 요소 중 하나.
+Entity (엔터티)
+ - 데이터베이스에서 구별 가능한 실세계 객체나 사건으로, 테이블에 저장된 데이터의 논리적인 단위.
+ - 예: 고객, 주문, 제품 등 그런 단위를 말함.
+Row (행)
+ - 테이블에서 하나의 레코드를 나타내는 가로의 한 줄.
+Column (열)
+ - 테이블에서 수직으로 배열된 데이터의 유형을 나타내는 세로의 한 열.
+ - 각 열은 특정 유형의 데이터를 포함하며, 열의 집합이 테이블의 스키마를 형성함.
+Record (레코드) *로우(행)과 유사함.
+ -  테이블에서 하나의 행 또는 데이터 레코드를 나타냄.
+ - 레코드는 특정 엔터티에 대한 정보를 포함하며, 테이블 내에서 유일한 식별자를 가지는 경우가 많음.
+Field (필드) *컬럼(열)과 유사함.
+ - 테이블에서 각 열에 해당하는 데이터의 최소 단위.
+Schema (스키마)
+ - 스키마는 데이터베이스에서 데이터 구조, 데이터베이스 객체의 정의, 그리고 데이터베이스 객체 간의 관계를 정의하는 데 사용되는 구조
+Schema의 특징:
+ - 데이터 구조 정의: 테이블, 열, 데이터 유형 등과 같은 데이터 구조를 정의합니다.
+ - 객체 정의: 데이터베이스 객체(테이블, 뷰, 프로시저 등)의 속성과 특성을 정의합니다.
+ - 제약 조건 정의: 데이터의 무결성을 유지하기 위해 각 데이터베이스 객체에 적용되는 제약 조건(Primary Key, Foreign Key 등)을 정의합니다.
+
+스키마(Schema)의 종류:
+ - 데이터베이스 스키마(Database Schema): 전체 데이터베이스의 구조를 정의합니다.
+ - 테이블 스키마(Table Schema): 특정 테이블의 구조를 정의합니다.
+
+SQL(Structured Query Language)
+ - 데이터베이스에서 데이터를 관리하기 위한 표준화된 언어로, 데이터베이스의 생성, 수정, 삭제, 조회 등 다양한 작업을 수행하는데 사용됨.
+
+# SQL 쿼리문의 분류
+DDL (Data Definition Language):
+데이터베이스 구조를 정의하거나 변경하는 SQL 구문
+
+데이터베이스 생성: CREATE DATABASE database_name;
+데이터베이스 삭제: DROP DATABASE database_name;
+테이블 생성: CREATE TABLE table_name (column1 datatype, column2 datatype, ...);
+테이블 삭제: DROP TABLE table_name;
+테이블 변경 (열 추가): ALTER TABLE table_name ADD COLUMN column_name datatype;
+
+DML (Data Manipulation Language):
+데이터를 쿼리하거나 조작하는 SQL 구문
+
+데이터 삽입: INSERT INTO table_name (column1, column2, ...) VALUES (value1, value2, ...);
+데이터 수정: UPDATE table_name SET column1 = value1 WHERE condition;
+데이터 삭제: DELETE FROM table_name WHERE condition;
+데이터 조회: SELECT column1, column2, ... FROM table_name WHERE condition;
+
+DCL (Data Control Language):
+데이터베이스에 대한 액세스 권한을 제어하는 SQL 구문
+
+권한 부여: GRANT permission ON object TO user;
+권한 회수: REVOKE permission ON object FROM user;
+
+#### 
+#DBMS의 종류 (데이터베이스 소프트웨어)
+DBMS(Database Management System)
+  - 데이터베이스의 데이터를 안정적으로 관리하기 위한 소프트웨어
+      Oracle, MySQL, MariaDB, MS-SQL, PostgreSQL 등
+
+MySQL
+ - MySQL AB에서 개발한 Open Source DBMS
+ - 2008년 Sun Microsystems에 인수되고 Oracle에서 Sun Microsystems를 인수하며 현재 Oracle의 소유임.
+
+MariaDB
+ - MySQL의 개발자가 MySQL을 복제(Fork)하여 만든 DBMS
+ - MySQL과 기본적으로 동일하나 세부 기능에서 차이가 있을 수 있음
+
+#MariaDB로 DB서비스 구축해보기.
+yum install mariadb , mariadb-server -y 로 두개를 설치한다.
+[root@host2 ~]# systemctl start mariadb.service 
+[root@host2 ~]# systemctl enable mariadb.service
+[root@host2 ~]# firewall-cmd --add-service=mysql --permanent
+[root@host2 ~]# firewall-cmd --reload
+
+-다음으로 초기설정시 localhost로 mariadb에 접속해본다.
+[root@host2 ~]# mysql -h localhost -uroot  (루트사용자로 로그인_비밀번호없이)
+MariaDB [(none)]> 에서  none 부분은 쿼리문을 cli로 다루는부분인데 어느 데이터베이스에서 작업하는 지를 괄호 안에 표시해주는 곳이다. 초기에 데이터베이스가 없으므로 none으로 표기된다.
+
+#데이터베이스 목록 확인
+MariaDB [(none)]> show databases;  로 목록을 본다 이때, 세미콜론을 꼭 붙여야 쿼리문이끝남.
+
+#데이터베이스 생성, 삭제 명령
+MariaDB [(none)]> create database exampledb;
+Query OK, 1 row affected (0.000 sec)
+
+MariaDB [(none)]> drop database exampledb;
+Query OK, 0 rows affected (0.001 sec)
+ 
+생성된 상태의 exampledb 가 있다.
+
+# 접속하는 사용자 생성
+MariaDB [(none)]> create user 'user'@'localhost' =로컬호스트에서 @접속하는 user사용자를 의미.
+MariaDB [(none)]> create user 'user'@'localhost' identified by 'test1234'; 
+그러면 이 쿼리문은 localhost에서 접속하는 id: user이고 pw: test1234인 사용자를 의미하게된다.
+
+# 권한을 부여하기
+MariaDB [(none)]> grant all privileges on exampledb.* to 'user'@'localhost';
+Query OK, 0 rows affected (0.001 sec)
+이 쿼리문은 user@localhost사용자에게 exampledb데이터베이스의 모든 권한을 부여함.
+
+#권한에 대한 캐시를 제거하고 바로 지정(사용자에게 바로 권한 부여)
+MariaDB [(none)]> flush privileges;
+Query OK, 0 rows affected (0.000 sec)
+이 쿼리문은 사용자 계정, 권한설정을 즉시 반영한다는 뜻이다.
+
+>>그러면 user로 접속해보자.
+[root@host2 ~]# mysql -h localhost -u user -p 
+Enter password: test1234 를 입력하면 접속이 된다.
+ 
+MariaDB [(none)]> show databases; 로 조회해보면
+exampledb 가 사용가능하다고 목록에 나타난다. 
+
+#database 지정해서 사용하기
+MariaDB [(none)]> use exampledb;
+Database changed
+MariaDB [exampledb]> 로 바뀌게 되었다. 
+
+
+
