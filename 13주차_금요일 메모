@@ -1,0 +1,540 @@
+13주차_금요일 메모(리눅스)
+
+개요 - 지난시간에 이어서 DB를 다루는법에 대해서 알아본다. 
+	또한 Wordpress를 이용해 mariaDB&mySQL 을 활용하는 법을 알아본다//이후 과제
+
+#CRUD_ query 문
+CRUD 는 대부분의 컴퓨터 소프트웨어가 가지는 기본적인 데이터 처리 기능인 
+Create(생성) // Read(읽기) // Update(갱신) // Delete(삭제)  를 묶어서 일컫는 말이다.
+SQL(Structured Query Language)
+ - 데이터베이스에서 데이터를 관리하기 위한 표준화된 언어로, 데이터베이스의 생성, 수정, 삭제, 조회 등 다양한 작업을 수행하는데 사용됨.
+
+# SQL 쿼리문의 분류
+DDL (Data Definition Language): 데이터베이스 구조를 정의하거나 변경하는 SQL 구문
+데이터베이스 생성: CREATE DATABASE database_name;
+데이터베이스 삭제: DROP DATABASE database_name;
+테이블 생성: CREATE TABLE table_name (column1 datatype, column2 datatype, ...);
+테이블 삭제: DROP TABLE table_name;
+테이블 변경 (열 추가): ALTER TABLE table_name ADD COLUMN column_name datatype;
+
+DML (Data Manipulation Language): 데이터를 쿼리하거나 조작하는 SQL 구문 (조작어)
+데이터 삽입: INSERT INTO table_name (column1, column2, ...) VALUES (value1, value2, ...);
+데이터 수정: UPDATE table_name SET column1 = value1 WHERE condition;
+데이터 삭제: DELETE FROM table_name WHERE condition;
+데이터 조회: SELECT column1, column2, ... FROM table_name WHERE condition;
+
+DCL (Data Control Language): 데이터베이스에 대한 액세스 권한을 제어하는 SQL 구문
+권한 부여: GRANT permission ON object TO user;
+권한 회수: REVOKE permission ON object FROM user;
+
+
+#Mariadb 사용하기 _ secure 
+Mysql secure을 사용해본다. 묻는게 많다.
+[root@host2 ~]# mysql_secure_installation
+Enter current password for root (enter for none):   초기에는 pw가 없으므로 그냥 enter를 치자.
+Switch to unix_socket authentication [Y/n]  	권한설정을 하겠냐 n 을 하자.
+Change the root password? [Y/n]			루트에 pw설정을 하겠냐 y를 하자.
+Remove anonymous users? [Y/n]		익명사용자를 안쓸거냐? 묻는다. y 
+Disallow root login remotely? [Y/n]		원격으로 루트사용자 로그인을 막을거냐? y
+Remove test database and access to it? [Y/n]		테스트DB 지울거냐 y
+Reload privilege tables now? [Y/n]			미리설정한 테이블을 리로드할까? y
+>>이러면 서비스가 정상적으로 설치되었다
+
+[root@host2 ~]# mysql -uroot 	로 로그인한다.
+MariaDB [(none)]> create database testdb01;	로 db를 생성
+Query OK, 1 row affected (0.000 sec)
+MariaDB [(none)]> drop database testdb01;		로 db를 삭제
+Query OK, 0 rows affected (0.001 sec)
+MariaDB [(none)]> show databases;		로 db를 볼 수 있다.
+ 
+MariaDB [(none)]> use testdb01;  			내가 사용할 데이터베이스를 선택한다.
+Database changed
+내가 사용할 데이터베이스를 지정했으므로, 이제 내가 원하는 테이블을 생성하면 된다.
+MariaDB [testdb01]> create table phonebook (
+-> no int,
+    -> name char(10),
+    -> phone char(15),
+    -> memo text
+    -> );
+Query OK, 0 rows affected (0.003 sec)
+<설명>
+:필드이름을 no, 타입을 int
+:컬럼을 name - 캐릭터(10바이트) 로 지정
+:전화번호를 phone(15바이트) 로 지정
+:메모필드, 데이터타입은 text로
+괄호로 닫고 세미콜론으로 생성한다.
+
+MariaDB [testdb01]> show tables; 	로 확인해보면 만들어놓은 테이블이 나온다.
+ 
+MariaDB [testdb01]> desc phonebook; 	는 테이블을 보여주는데 : Describe
+ 
+Field / Type / Null / Key / Default / Extra 로 행이 나타나있다.
+1.	Field:  컬럼의 이름을 나타냅니다. 테이블에서 각 컬럼은 유일한 이름을 가져야 합니다.
+2.	Type: 컬럼에 저장될 데이터의 타입을 나타냅니다. 예를 들어, INT는 정수를 나타내며, VARCHAR(50)은 최대 50자의 가변 길이 문자열을 나타냅니다.
+3.	Null: 해당 컬럼이 NULL 값을 가질 수 있는지 여부를 나타냅니다. Null이 허용되면 컬럼에는 값이 없음을 의미하며, 허용되지 않으면 반드시 값이 있어야 합니다.
+4.	Key: 컬럼이 인덱스로 지정되었는지를 나타냅니다. PRI는 주 키(primary key)를 의미하며, UNI는 고유(unique) 제약 조건이 있는 인덱스를 의미합니다.
+5.	Default: 해당 컬럼에 명시적으로 값이 주어지지 않을 경우 사용되는 기본값을 나타냅니다.
+6.	Extra: 기타 속성을 의미합니다. 예를 들어, 자동 증가(AUTO_INCREMENT)가 설정된 경우 이를 나타냅니다.
+
+# 테이블 데이터 전체 조회
+SELECT  필드1, 필드2 FROM 테이블;
+SELECT  * FROM 테이블;
+# 테이블 데이터를 조건을 지정하여 조회
+SELECT  * FROM 테이블 WHERE  조건;
+# 테이블에 데이터 삽입
+INSERT INTO 테이블 VALUES (값1, 값2);
+# 테이블의 특정 필드를 지정하여 테이블에 데이터 삽입
+INSERT INTO 테이블 (필드1, 필드2) VALUES (값1, 값2);
+# 테이블의 전체 행 삭제
+DELETE FROM phonebook;
+# 테이블의 특정 조건에 해당하는 행 삭제
+DELETE FROM 테이블 WHERE 조건;
+# 테이블의 전체 행 수정
+UPDATE 테이블 SET 필드1=값1, 필드2=값2;
+# 테이블의 특정 조건에 해당하는 행 수정
+UPDATE 테이블 SET 필드1=값1 WHERE 조건;
+#테이블 구조 변경 - 필드 추가
+ALTER TABLE 테이블  ADD  필드1  데이터타입;
+#테이블 구조 변경 - 필드 삭제
+ALTER TABLE 테이블  DROP  필드1;
+#테이블 구조 변경 - 필드 이름 변경
+ALTER TABLE 테이블  CHANGE  필드1_원래이름  필드1_새이름  데이터타입
+
+
+#1. DB 생성부터의 실습
+MariaDB [testdb01]> select name, phone from phonebook;
+MariaDB [testdb01]> select * from phonebook;			처럼 사용이 가능하다.
+MariaDB [testdb01]> insert into phonebook (no, name, phone) values (1, "TEST1", "010-1234-5678");
+MariaDB [testdb01]> insert into phonebook (no, name, phone) values (2, "TEST2", "010-1234-1234");
+MariaDB [testdb01]> insert into phonebook (no, name, phone) values (3, "TEST3", "010-1234-6654");
+MariaDB [testdb01]> select name, phone from phonebook;
++-------+---------------+
+| name  | phone       |
++-------+---------------+
+| TEST1 | 010-1234-5678 |
+| TEST2 | 010-1234-1234 |
+| TEST3 | 010-1234-6654 |
++-------+---------------+
+MariaDB [testdb01]> select * from phonebook;
++------+-------+---------------+------+
+| no   | name  | phone      | memo |
++------+-------+---------------+------+
+|    1 | TEST1 | 010-1234-5678 | NULL |
+|    2 | TEST2 | 010-1234-1234 | NULL |
+|    3 | TEST3 | 010-1234-6654 | NULL |
++------+-------+---------------+------+
+ 
+조회하면 이런 형태로 조회할 수 있다.
+MariaDB [testdb01]> delete from phonebook;
+지우기도 할 수 있음.
+MariaDB [testdb01]> select * from phonebook;
+조회하면 아무것도 나오지않는다.
+참고로 키값을 복사해서 붙여넣으면 그대로 테이블에 저장할 수 있음.
+ ㅇㅣ런값을
+INSERT INTO phonebook (no, name, phone) VALUES (1,
+"TEST1", "010-1234-5678");
+INSERT INTO phonebook (no, name, phone) VALUES (2,
+"TEST2", "010-1235-1234");
+INSERT INTO phonebook (no, name, phone) VALUES (3,
+"TEST3", "010-1236-5678");			그대로 명령어 복사해넣으면 저장됨.
+특정 값(행)만 지우고 싶을때
+MariaDB [testdb01]> delete from phonebook where no=3;   을하면 
+MariaDB [testdb01]> select *from phonebook;
++------+-------+---------------+------+
+| no   | name  | phone       | memo |
++------+-------+---------------+------+
+|    1 | TEST1 | 010-1234-5678 | NULL |
+|    2 | TEST2 | 010-1235-1234 | NULL |
++------+-------+---------------+------+			조회시 3번값만 지워진다.
+특정 name을 변경하고 싶을때
+MariaDB [testdb01]> update phonebook set name="USER2" where no=2 ;	를하면
+MariaDB [testdb01]> select * from phonebook ;
++------+-------+---------------+------+
+| no   | name  | phone       | memo |
++------+-------+---------------+------+
+|    1 | TEST1 | 010-1234-5678 | NULL |
+|    2 | USER2 | 010-1235-1234 | NULL |
++------+-------+---------------+------+		조회시 test2가 user2로 변경되었다.
+새로운 address라는 필드를 추가하려면 
+MariaDB [testdb01]> alter table phonebook add address TEXT;
+ 
+desc phonebook; 으로 조회를하면 address라는 항목이 추가된 것을 볼 수 있다.
+반대로 기존 필드 memo를 삭제하려면 살짝 다르다.
+MariaDB [testdb01]> alter table phonebook drop memo ;
+ 
+desc phonebook; 으로 조회를하면 memo 필드가 지워진 것을 볼 수 있다
+아까만든 address (특정)필드의 이름을 변경하고 싶다.
+MariaDB [testdb01]> alter table phonebook change address address1 text;
+ 
+desc phonebook; 으로 조회를하면 address 에서 address1로 변경되었다.
+
+MariaDB [testdb01]> alter table phonebook add primary key (no);  키를 추가시
+ 
+no에 key가 생긴다. 
+MariaDB [testdb01]> alter table phonebook change no no int auto_increment; 를 입력하면
+ 
+extra 항목에 auto_increment 라는 부분이 추가되었는데 나중에 레코드를 추가할때, 넘버를 지정하지 않고 추가하게되면 자동으로 매겨지게 된다.
+#2. DB 실습(계속)
+MariaDB [testdb01]> create table phonebook (
+    -> no INT AUTO_INCREMENT, 
+    -> name char(10), 
+    -> phone char(15),
+    -> memo text,
+    -> address1 text,
+    -> PRIMARY KEY(no)
+    -> );
+로 phonebook 테이블을 새로 생성해본다.
+ 
+insert into phonebook (name, phone, memo) values ("TEST1", "010-1234-5678", "test user 01");
+insert into phonebook (name, phone, memo) values ("TEST2", "010-1534-4378", "test user 02");
+insert into phonebook (name, phone, memo) values ("TEST3", "010-6431-5998", "test user 03");  라는 값을 테이블에 추가해본다.
+MariaDB [testdb01]> select*from phonebook; 으로 조회하면
+ 
+만약 에러를 낸다면?
+insert into phonebook (1, name, phone, memo) values ("TEST4", "010-6431-5998", "regular staff");
+여기는 (1,) 이라는 변수가 순서에 맞지않게 추가되어서 에러를 내보낸다.
+또한 test3의 번호 010-6431-5998와 같기때문에 마찬가지로 에러를 내보냄.
+ 
+=primary key가 있으므로 각자 중복되지 않은, 고유한 값을 띠어야 번호가 매겨진다.
+
+# DB 명령어 - 사용자 권한 및 관리
+# 사용자 생성
+CREATE USER '사용자이름'@'호스트' IDENTIFIED BY '비밀번호';
+# 사용자 삭제
+DROP USER '사용자이름'@'호스트';
+# 권한 부여
+GRANT 권한1, 권한2 ON 데이터베이스이름.테이블이름 TO '사용자이름'@'호스트';
+# 권한 회수
+REVOKE 권한1, 권한2 ON 데이터베이스이름.테이블이름 FROM '사용자이름'@'호스트';
+# 패스워드 변경
+SET PASSWORD FOR '사용자이름'@'호스트' = PASSWORD('새비밀번호');
+ALTER USER '사용자이름'@'호스트' IDENTIFIED BY '새로운비밀번호';
+ 
+
+#실습-
+MariaDB [(none)]> use testdb01;		로 해당 db에 진입
+사용자를 추가해본다.
+MariaDB [testdb01]> CREATE USER 'user01'@'localhost' IDENTIFIED BY 'test1234';
+Query OK, 0 rows affected (0.001 sec)
+MariaDB [testdb01]> CREATE USER 'user02'@'%' IDENTIFIED BY 'test1234';
+Query OK, 0 rows affected (0.001 sec)
+MariaDB [testdb01]> CREATE USER 'user03'@'%' IDENTIFIED BY 'test1234';
+Query OK, 0 rows affected (0.002 sec)
+
+이제 사용자를 삭제해본다.
+MariaDB [testdb01]> drop user 'user03'@'%';  	로 삭제하고
+MariaDB [testdb01]> select user,host,password from mysql.user; 	로 조회한다.
+ 
+
+패스워드를 변경해본다.
+MariaDB [testdb01]> set password for 'user01'@'localhost' = password('test5678');
+Query OK, 0 rows affected (0.001 sec)
+ 
+조회를 해보면 user01의 암호화된 password값이 달라진것이 보인다.
+MariaDB [testdb01]> flush privileges; 		 로 반영해준다.
+Query OK, 0 rows affected (0.003 sec)
+
+DB에 권한 부여를 해본다 : GRANT [권한이름] or ALL PRIVILEGES on ~~
+MariaDB [testdb01]> create database testdb02;   	우선 db를 새로 만든다.
+MariaDB [testdb01]> show databases; 로 조회를 해보면 testdb02가 생성됨.
+  
+MariaDB [testdb01]> create user 'user03'@'%' identified by 'test1234';  로 유저03을 생성.
+Query OK, 0 rows affected (0.001 sec)
+마저 권한을 따로 부여해본다.
+MariaDB [testdb01]> grant select, insert on testdb01.* to 'user03'@'%';
+이의미는 testdb01의 테이블에 모든 권한부여함을 말한다.
+MariaDB [testdb01]> grant all privileges on testdb01.* to 'user01'@'localhost';
+user01에게 testdb1의 모든 테이블에 권한을 준다.
+MariaDB [testdb01]> grant all privileges on testdb02.* to 'user02'@'%';
+user02에게 testdb2의 모든 테이블에 권한을 준다.
+
+부여된 권한을 보는 방법 : show grants for
+MariaDB [testdb01]> show grants for 'user01'@'localhost';	를 입력하면
+ 
+또 유저03도 살펴보자
+ 
+| GRANT SELECT, INSERT ON `testdb01`.* TO `user03`@`%` |
+유저03은 testdb01데이터베이스에 대한 select, insert on 에 대한 권한이 부여되어 있다.
+
+부여된 권한 뺏기 / 해제하기 : REVOKE
+MariaDB [testdb01]> revoke insert on testdb01.* from 'user03'@'%';  를하면
+ 
+유저03에 대해서 insert 라는 권한을 회수해간다.
+모든 권한을 뺏기 위해서는 revoke all privileges on ~~으로 회수할 수 있다.
+이 모든 것을 반영해주려면 flush privileges를 입력하자
+MariaDB [testdb01]> flush privileges;
+
+
+# 내가 원하는 문자열, 레코드를 찾기
+재로그인하자
+[root@host2 ~]# mysql -h localhost -u user01 -p   / test5678로 로그인.
+MariaDB [(none)]> use testdb01;				로 테이블 사용
+MariaDB [testdb01]> show tables;				로 테이블을 본다.
+ 
+MariaDB [testdb01]> select*from phonebook where name="test1";	로
+name이 test1인 문자열을 찾을 수 있다.
+ 
+MariaDB [testdb01]> select*from phonebook where name like "TEST%";
+이 문장의 의미는 TEST로 시작하는데 뒤에는 어떤 문자라도 오는 것을 찾아준다는 의미이다.
+% : 아무 문자열이나 해당
+MariaDB [testdb01]> select*from phonebook where phone like "010-6431%"; 이것도 가능.
+3 | TEST3 | 010-6431-5998 | test user 03 | NULL 
+반대로 %를 뒤에도 사용가능 / user를 찾고자 하면 “%user%” 형태로도 사용 가능하다.
+
+MariaDB [testdb01]> select*from phonebook where no>1; 
+이것은 no 컬럼 값이 1보다 큰 행들을 선택해준다.
+ 
+
+####host1로 넘어간다.
+호스트1로 넘어가서 접속을해본다
+[root@host1 ~]# mysql -h 192.168.100.102 -u user01 -p
+mysql: Deprecated program name. It will be removed in a future release, use '/usr/bin/mariadb' instead
+Enter password: 
+ERROR 1045 (28000): Access denied for user 'user01'@'192.168.100.101' (using password: YES)
+허나 로그인되지않는데,
+[root@host1 ~]# mysql -h 192.168.100.102 -u user02 -p		로 로그인하면 접속이 가능하다. 미리 설정을 해놨으므로 다른 호스트에서도 접속이 가능한 것이다.
+(user01은 localhost만 접속가능하게 설정됨: “user01”@”localhost”)
+(user02는 모두 접속가능하게 설정됨: “user02”@”%”) 
+
+MariaDB [(none)]> use testdb02;			로 접속하고
+MariaDB [testdb02]> create table hello (
+    -> message TEXT
+    -> );						로 테이블을 만든다.
+MariaDB [testdb02]> show tables; 로 조회하면 
+ 
+다음과같은 결과가 바로 나오게 된다.
+
+# MariaDB(MySQL) 네트워크 통신 없이 로컬에서 운영하기
+[root@host2 ~]# netstat -antp |grep :3306 를 조회해본다.   (네트워크 통신을 하는지)
+tcp6       0      0 :::3306                 :::*       LISTEN      20791/mariadbd
+구성파일은 여기에 있다.
+[root@host2 ~]# ls -l /etc/my.cnf
+-rw-r--r--. 1 root root 202 May 27  2022 /etc/my.cnf
+[root@host2 ~]# ls -l /etc/my.cnf.d/
+total 24
+-rw-r--r--. 1 root root   42 Oct 13 00:24 auth_gssapi.cnf
+-rw-r--r--. 1 root root  295 May 27  2022 client.cnf
+-rw-r--r--. 1 root root  763 Aug 11 04:22 enable_encryption.preset
+-rw-r--r--. 1 root root 1458 Oct 13 00:17 mariadb-server.cnf
+-rw-r--r--. 1 root root  232 Aug 11 04:22 mysql-clients.cnf
+-rw-r--r--. 1 root root  120 Aug 11 04:22 spider.cnf
+
+[root@host2 my.cnf.d]# vim mariadb-server.cnf 에서
+skip-networking 을 [mysqld]에 추가한다.
+ 
+이러면 마리아db가 네트워크를 사용하지 않게된다.
+[root@host2 my.cnf.d]# systemctl restart mysql
+ 
+이럴경우 로컬상에서는 접속이 된다. 
+[root@host2 my.cnf.d]# mysql -h localhost -u user01 -p  >> 통과
+그러나 
+[root@host2 my.cnf.d]# mysql -h 192.168.100.102 -u user02 -p  >>
+ERROR 2002 (HY000): Can't connect to MySQL server on '192.168.100.102' (115)
+로컬이 아닌 외부에서 내부로의 로그인 시 차단된다.(포트자체를 열지 않음.)
+
+# DB 백업하기 ( 두가지 방법 : 물리적 // 논리적 )
+#물리적 백업 : 디스크에 file의 형태로 저장이 된다. 따라서 file자체를 백업을 하면 된다. (이때는 순수 데이터가아니라 dbms가 저장하는 특정 구조의 백업본을 가지게 됨)
+-다만 백업 전후 사용 환경이 달라지는 경우(OS 유형과 버전, DBMS 유형과 버전 등) 복원이 제대로 되지 않을 수 있다.
+
+#논리적 백업 : DBMS에 요청하여 데이터를 추출하는 방법이다.
+-다만 데이터베이스의 데이터는 백업이되지만, 데이터베이스 설정까지 백업되지는 않는다.
+-또한 데이터베이스에서 데이터를 추출하는 방식으로 데이터베이스의 데이터사이즈가 큰 경우에 백업 및 복원에 있어서 시간이 그만큼 소요된다.
+
+# mysqldump 명령어 :
+# DB백업
+$ mysqldump [OPTION]... -u USER -p DATABASE > DATABASE_FILE.dump
+# DB복원
+$ mysql -u root -p DATABASE < DATABASE_FILE.dump
+
+
+MariaDB [(none)]> DROP TABLE testdb02;
+MariaDB [(none)]> SHOW DATABASES;
+MariaDB [(none)]> EXIT;
+
+[root@host2 ~]# mysqldump -u root -p testdb01 > testdb01.dump
+[root@host2 ~]# ls -l
+[root@host2 ~]# file testdb01.dump 
+testdb01.dump: ASCII text
+[root@host2 ~]# vim testdb01.dump 
+[root@host2 ~]# mysql -h localhost -u root -p 
+
+MariaDB [(none)]> DROP DATABASE testdb01;
+MariaDB [(none)]> SHOW DATABASES;
+[root@host2 ~]# mysql -h localhost -u root -p testdb01_new < testdb01.dump 
+
+
+# 워드프레스 설치 
+https://ko.wordpress.org/download/ 에서 워드프레스 6.4.1버전을 다운로드.
+- 웹 사이트를 간단히 구축할 수 있도록 도와주는 오픈소스 CMS(Contents Management System) 도구// PHP, MySQL 를 이용한다.
+<기본 설치과정>
+yum install httpd
+yum install mysql-server/ yum install mariadb-server
+systemctl start httpd
+systemctl enable httpd
+systemctl start mysqld
+systemctl enable mysqld
+yum install php php-mysqlnd
+[root@host2 ~]# systemctl restart mysql		로 기본 패키지를 다 설치함.(방화벽필수)
+[root@host2 ~]# ls -ld /etc/my.cnf.d/mariadb-server.cnf 
+-rw-r--r--. 1 root root 1458 Nov 17 15:17 /etc/my.cnf.d/mariadb-server.cnf
+[root@host2 ~]# vim /etc/my.cnf.d/mariadb-server.cnf 	을가서 편집
+skip-networking 을 추가함
+ 
+[root@host2 ~]# systemctl restart mariadb.service
+
+<DB 구성하기>
+[root@host2 ~]# mysql -uroot
+MariaDB [(none)]> create database wordpress;
+MariaDB [(none)]> create user 'wordpress'@'localhost' identified by 'test1234';
+MariaDB [(none)]> grant all privileges on wordpress.* to 'wordpress'@'localhost';
+MariaDB [(none)]> flush privileges;    로 권한 반영하기.
+| GRANT USAGE ON *.* TO `wordpress`@`localhost` IDENTIFIED BY PASSWORD '*3D3B92F242033365AE5BC6A8E6FC3E1679F4140A' |
+| GRANT ALL PRIVILEGES ON `wordpress`.* TO `wordpress`@`localhost`  로 잘 반영됨.
+
+[root@host2 ~]# vim /var/www/html/index.php
+[root@host2 ~]# cat /var/www/html/index.php		php를 테스트한다.
+<?php
+	phpinfo();
+?>
+를 저장하고 파이어폭스에서 192.168.100.102로 접속하면 php페이지가 나온다.
+ 
+<워드프레스 다운>
+wget https://wordpress.org/latest.tar.gz     에서 해당 경로에 있는 파일을 받는다
+tar -zxvf latest.tar.gz			
+(만약 zip이면 #unzip latest.zip 명령어를 쓰면된다.)
+<웹 서버 디렉터리로 워드프레스 이동>
+cp -R wordpress/* /var/www/html/
+-rw-r--r--.  1 root   root       3013 Nov 17 15:38 wp-config-sample.php 
+샘플파일을 복사해서 사용한다.
+[root@host2 wordpress]# pwd
+/var/www/html/wordpress
+[root@host2 wordpress]# cp wp-config-sample.php wp-config.php 로 복사.
+vim 편집기로 wp-config.php를 수정한다.
+ 
+위에서 설정한것처럼 변경해주고 저장한다.
+바로 웹브라우저에서 접속해본다. host1에서
+ 
+그러면 wordpress 웹사이트가 등장한다.
+id: peacemaker@mozzi
+pw: ASAPaskanaboon!@#$ 로 설정했다. 
+ 
+ 
+그러면 성공적으로 설치가 완료되었다고 안내가 뜬다.
+ 
+로그인 시 wordpress 대시보드가 구성되어서 화면이 그림과 같이 등장한다.
+
+마리아DB에 로그인해보자.
+[root@host2 ~]# mysql -uroot -h localhost
+MariaDB [(none)]> use wordpress
+MariaDB [wordpress]> show tables;
++-----------------------+
+| Tables_in_wordpress   |
++-----------------------+
+| wp_commentmeta        |
+| wp_comments           |
+| wp_links              |
+| wp_options            |
+| wp_postmeta           |
+| wp_posts              |
+| wp_term_relationships |
+| wp_term_taxonomy      |
+| wp_termmeta           |
+| wp_terms              |
+| wp_usermeta           |
+| wp_users              |
++-----------------------+
+MariaDB [wordpress]> select*from wp_comments;    
+위처럼 테이블목록들이 나오는데, select * from [보고싶은테이블] 등으로 테이블을 선택해서 데이터를 조회하면 된다.
+
+>> 과제!! (개인 미니프로젝트형) 
+https://docs.google.com/document/d/1TfEJ4qIRYqR0QHsUcA25IAEeDbS2Bt7uGFn5YeUn5Cw/edit
+표지, 목차, 구성 을 그래도 잘 갖출것.
+
+기초세팅- 네트워크에디터> dhcp 세팅을 바꿔준다. vmnet1,8 이 있을건데 addnetwork 하기 vmnet2번 추가.
+172.30.0.0/24   172.30.0.0 / 255.255.255.0 으로 세팅 host-only / apply
+이미지 ova파일 불러오는법 - ova파일을 열고 기본 이미지를 www/db01/storage/ns01로 import
+C:\VMs\Rocky linux 9 에 하나씩 만들자.
+
+vim ~/.bashrc 
+alias cls='clear'
+source ~/.bashrc 꼭 설정할것
+
+각각의 네트워크카드를 세개로 구성(두개를 새로 설치) db01,storage는 첫번째애를 연결을 끊어버리면 된다.
+
+<과제1 설명>
+가상머신 4개를 두고, (www/ db01/ storage /ns01 )
+db01은 보안상 네트워크 연결을 하지 않고, storage도 외부네트워크와 연결하지 않게 설정함.
+스토리지가 사용할 전용 네트워크를 따로만듬(net2)
+
+www : 웹 서버
+  - WordPress를 이용한 웹 서비스 제공
+  - DocumentRoot : /var/www/html/
+  - Web Server와 DB 서버(db01)는 별도로 구성함.
+  - 웹 서비스(:80)으로 WordPress 제공
+
+ns01 : DNS 서버(네임서버)
+  - 관리 도메인 :  contoso.org
+- 위에 제시된 host의 이름을 기준으로 도메인 구성 
+= conf파일에서 www.contoso.org/ns01.contoso.org 등으로 구성하라는뜻임.
+  - 도메인 주소로 각 호스트에 접근 가능하도록 구성
+
+db01 DB 서버
+ - 외부 네트워크와의 연결이 되지 않아야 함.
+ -  DBMS : MariaDB
+ -  내부 네트워크에서만 접근 가능해야 함.
+
+storage : Storage 서버(NFS, iSCSI 서비스 제공)
+ - 외부 네트워크와의 연결이 되지 않게 설정한다.
+ - 스토리지 서비스는 스토리지 네트워크를 통해 제공되어야 함.
+ - 호스트에 하드디스크(10G) 2개 추가 
+ - 추가한 첫번째 디스크를 사용하여 NFS 서비스 구성
+ - 추가한 두번째 디스크를 사용하여 iSCSI 서비스 구성
+~~
+<과제2 설명>
+www : 웹 서버
+ Web Site 1 : WordPress
+  - 웹 사이트 주소 : http://www.contoso.org/wordpress
+  - WordPress를 이용한 웹 서비스 제공
+  - DocumentRoot : /var/www/html/
+  - Web Server와 DB 서버는 별도로 구성함.
+  - 웹 서비스(:80)으로 WordPress 제공
+
+  Web Site 2 : 단순 웹 사이트(web01)
+  - 웹 사이트 주소 : http://web01.contoso.org:8080/
+  - index.html 파일에 다음 내용 포함.
+     "Welcome to Apache Webserver (web01)"
+  - DocumentRoot :  /srv/www/web01 (NFS 제공 경로)
+  - Port: 8080
+
+www02 : 웹 서버
+  Web Site 2 : 단순 웹 사이트(web02)
+  - 웹 사이트 주소 : http://web02.contoso.org:8080/
+  - index.html 파일에 다음 내용 포함.
+     "Welcome to Apache Webserver (web02)"
+  - DocumentRoot :  /srv/www/web02 (NFS 제공 경로)
+  - Port: 8080
+
+ns01 : DNS 서버
+  - 관리 도메인 :  contoso.org
+  - 위에 제시된 host의 이름을 기준으로 도메인 구성
+  - 도메인 주소로 각 호스트에 접근 가능하도록 구성
+  - www, www02 호스트의 Web Site 2에 대해 DNS 기반 로드밸런싱을 구성하시오.
+    http://internal-portal.contoso.org:8080/ 접속시  "Welcome to Apache Webserver (web0X)" 로 접속됨. (web01, web02 번갈아 가며 접속됨.)
+
+db01 DB 서버
+ - 외부 네트워크와의 연결이 되지 않아야 함.
+ -  DBMS : MariaDB
+ -  내부 네트워크에서만 접근 가능해야 함.
+ -  db01의 mariadb DBMS의 데이터는 storage 서버에서  iSCSI로 제공된 디스크에 저장되도록 구성하시오.
+    만일 해당 구성이 어렵다면 iSCSI로 제공된 디스크를 연결하고 디스크 전체 공간을 사용하도록 파티셔닝 한 후 ext4 파일시스템으로 초기화 하여  /datastore  로 영구마운트 설정하시오.
+
+storage : Storage 서버(NFS, iSCSI 서비스 제공)
+ - 외부 네트워크와의 연결이 되지 않아야 함.
+ - 스토리지 서비스는 스토리지 네트워크를 통해 제공되어야 함.
+ - 호스트에 하드디스크(10G) 2개 추가 
+ - 추가한 첫번째 디스크를 사용하여 NFS 서비스 구성
+   (NFS는 Net2를 통해서 제공)
+ - 추가한 두번째 디스크를 사용하여 iSCSI 서비스 구성
+   (iSCSI는 Net2를 통해서 제공)
+
+
