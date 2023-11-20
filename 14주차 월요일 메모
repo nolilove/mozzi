@@ -1,0 +1,195 @@
+굉장히 답이없는 과제를 건드린것같다
+Network 구성
+	www	db01	storage	ns01
+NAT(VMnet8)	192.168.100.11/24	-	-	192.168.100.31/24
+Net1 Host-only Network(VMnet1)	192.168.110.11/24	192.168.110.21/24	192.168.110.41/24	192.168.110.31/24
+Net2 Host-only Network(VMnet2)	172.30.0.11/24	172.30.0.21/24	172.30.0.41/24	-
+
+www : 웹 서버
+  - WordPress를 이용한 웹 서비스 제공
+  - DocumentRoot : /var/www/html/
+  - Web Server와 DB 서버는 별도로 구성함.
+- 웹 서비스(:80)으로 WordPress 제공
+
+ns01 : DNS 서버
+  - 관리 도메인 :  contoso.org
+  - 위에 제시된 host의 이름을 기준으로 도메인 구성
+- 도메인 주소로 각 호스트에 접근 가능하도록 구성
+
+db01 DB 서버
+ - 외부 네트워크와의 연결이 되지 않아야 함.
+ -  DBMS : MariaDB
+ -  내부 네트워크에서만 접근 가능해야 함.
+
+storage : Storage 서버(NFS, iSCSI 서비스 제공)
+ - 외부 네트워크와의 연결이 되지 않아야 함.
+ - 스토리지 서비스는 스토리지 네트워크를 통해 제공되어야 함.
+ - 호스트에 하드디스크(10G) 2개 추가 
+ - 추가한 첫번째 디스크를 사용하여 NFS 서비스 구성
+ - 추가한 두번째 디스크를 사용하여 iSCSI 서비스 구성
+
+## 
+www에서 할 것
+httpd 설치
+http 방화벽허용
+vim /var/www/html/index.php
+< a href="/wordpress">WordPress</a><br>	추가
+[root@localhost ~]# ls -l /etc/httpd/conf.d
+php, php-mysqlnd설치
+httpd재시작
+워드프레스 받기 (/var/www/html 에)
+[root@localhost wordpress]# cp wp-config-sample.php  wp-config.php
+define( 'DB_NAME', 'wordpress' );
+/** Database username */
+define( 'DB_USER', 'user01' );
+/** Database password */
+define( 'DB_PASSWORD', 'test1234' );
+/** Database hostname */
+define( 'DB_HOST', '192.168.110.21' );
+[root@localhost ~]# hostnamectl set-hostname www.contoso.org
+[root@www ~]#
+
+
+#데이터베이스 서버를 구축해야함(DB서버로 이동)
+[root@localhost ~]# hostnamectl set-hostname db01.contoso.org
+마리아디비 서버 설치
+마리아디비 활성화
+방화벽추가
+
+MYSQL접속
+MariaDB [(none)]> create user 'user01'@'192.168.110.%' 설정
+MariaDB [(none)]> create user 'user01'@'192.168.110.%' identified by 'test1234'
+MariaDB [(none)]> grant all privileges on wordpress.* to 'user01'@'192.168.110.%';
+MariaDB [(none)]> flush privileges;
+MariaDB [(none)]> show grants for 'user01'@'192.168.110.%';
+| GRANT USAGE ON *.* TO `user01`@`192.168.110.%` IDENTIFIED BY PASSWORD '*3D3B92F242033365AE5BC6A8E6FC3E1679F4140A' |
+| GRANT ALL PRIVILEGES ON `wordpress`.* TO `user01`@`192.168.110.%`
+
+#www로 넘어옴
+[root@www ~]# getsebool -a | grep httpd_can
+httpd_can_check_spam --> off
+httpd_can_connect_ftp --> off
+httpd_can_connect_ldap --> off
+httpd_can_connect_mythtv --> off
+httpd_can_connect_zabbix --> off
+httpd_can_manage_courier_spool --> off
+httpd_can_network_connect --> off
+httpd_can_network_connect_cobbler --> off
+httpd_can_network_connect_db --> off
+httpd_can_network_memcache --> off
+httpd_can_network_relay --> off
+httpd_can_sendmail --> off
+[root@www ~]# setsebool -P httpd_can_manage_courier_spool  on
+[root@www ~]# setsebool -P httpd_can_network_connect on
+
+#DB로 다시넘어옴
+[root@db01 ~]# nmcli connection modify ens160 connection.autoconnect no
+
+#스토리지로 감
+[root@localhost ~]# hostnamectl set-hostname storage.contoso.org
+[root@storage ~]# yum install nfs-utils
+[root@storage ~]# yum install targetcli
+[root@storage ~]# nmcli connection modify ens160 connection.autoconnect no
+- 추가한 첫번째 디스크를 사용하여 NFS 서비스 구성
+ - 추가한 두번째 디스크를 사용하여 iSCSI 서비스 구성
+[root@storage ~]# ls -l /dev/sd?
+[root@storage ~]# fdisk /dev/sdb  10기가 다 할당
+[root@storage ~]# mkfs -t ext4 /dev/sdb1
+[root@storage ~]# vim /etc/fstab 에 영구마운트
+/dev/sdb1               /share/nfs              ext4    defaults        0 0 추가
+[root@storage ~]# mkdir -p /share/nfs
+[root@storage ~]# mount /share/nfs/
+[root@storage ~]# mount | grep /share/nfs 로 확인
+
+[root@storage ~]# yum install nfs-utils -y
+[root@storage ~]# systemctl enable --now nfs-server
+[root@storage ~]# firewall-cmd --add-service=nfs --permanent
+
+[root@storage ~]# vim /etc/exports
+/share/nfs 	*(rw,sync,sec=sys) 		추가
+[root@storage ~]# exportfs -rv
+exporting *:/shared/nfs
+
+#www로 넘어옴
+이번에 NFS설정을함
+[root@www ~]# yum install nfs-utils -y
+[root@www ~]# mkdir /mnt/nfs-test1
+[root@www ~]# mount -t nfs -o rw,sync  192.168.110.41:/share/nfs /mnt/nfs-test1/
+[root@www ~]# mount |grep -i /mnt/nfs-test1 로확인
+
+# iscsci target서버 설정을함(storage 서버)
+[root@storage ~]# targetcli
+/> /backstores/block create storage:disk1 /dev/sdc
+/>  /iscsi create iqn.2023-11.org.contoso:db01
+/>  /iscsi/iqn.2023-11.org.contoso:db01/tpg1/portals create 172.30.0.41 3260
+/>  /iscsi/iqn.2023-11.org.contoso:db01/tpg1/acls  create iqn.2023-11.org.contoso:db01	
+/>  /iscsi/iqn.2023-11.org.contoso:db01/tpg1/luns  create /backstores/block/storage:disk1
+/> ls 로 확인할 수 있다.
+/> exit
+
+#DNS서버 설정을 함. (ns01)
+bind를 설치
+서비스이름은 named임
+[root@localhost named]# systemctl enable --now named
+[root@localhost named]# firewall-cmd --add-service=dns --permanent 
+[root@localhost named]# firewall-cmd --reload
+[root@localhost named]# vim /etc/named.conf
+options {
+        listen-on port 53 { any; };
+        listen-on-v6 port 53 { any; };
+        directory       "/var/named";
+        dump-file       "/var/named/data/cache_dump.db";
+        statistics-file "/var/named/data/named_stats.txt";
+        memstatistics-file "/var/named/data/named_mem_stats.txt";
+        secroots-file   "/var/named/data/named.secroots";
+        recursing-file  "/var/named/data/named.recursing";
+        allow-query     { any; };
+recursion yes;
+:wq!
+선언하고 추가하는과정
+[root@localhost named]# vim /etc/named.rfc1912.zones 에서 정방향 추가.
+zone "contoso.org" IN {
+        type master;
+        file "contoso.org.zone";
+        allow-update { none; };
+};
+:wq!
+[root@ns01 named]#ls -l
+[root@ns01 named]# cp named.localhost contoso.org.zone
+$TTL 1D
+@       IN SOA  @ rname.invalid. (
+                                        0       ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+        NS      @
+        A       127.0.0.1
+        AAAA    ::1
+도메인 오리진과 마스터서버를 우선으로 지정해봄
+ 
+$TTL 1D
+@       IN SOA  ns01  domainmaster (
+                                        0       ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+        IN NS   @
+        IN NS   ns01
+        IN A    192.168.100.31
+db01    IN A    192.168.100.21
+ns01    IN A    192.168.100.31
+www     IN A    192.168.100.11
+storage IN A    192.168.100.41	로 구성후 저장
+[root@ns01 named]# systemctl restart named.service
+다른 호스트에서 접속해본다.
+# chgrp named contoso.org.zone		로 유저권한줌
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~까지를 1차과제로 진행하면된다. 
+*db서버는 mariadb 이고
+*스토리지는 말그대로 저장공간을 제공해주는것임. 
+스토리지는 저장공간만 제공해주는 서비스이다.
+2차는 db서버의 데이터를 별도의 스토리지 장비로부터 제공받는데, 서비스는 db에서 저장을하되 물리적으로는 storage서버에서 저장하도록하는게 목표임.
+
+
+
