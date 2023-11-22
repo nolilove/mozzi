@@ -1,0 +1,241 @@
+14주차 수요일 메모(앤서블)
+
+-오늘부터 VMware가 아닌 VirtualBox를 이용해서 실습을 한다. 또한 앤서블을 다루도록 한다.
+
+
+
+IaC가 뭘까? 
+Infrastructure as Code 의 약어이고, 코드형 인프라가 되는 개념이다.
+ - 인프라를 코드로 정의하고 관리하는 기술
+ - IaC 도구에 따라 인프라 생성, 구성 자동화 등을 수행할 수 있음.
+ - 다수의 시스템을 효율적으로 관리할 수 있음.
+
+IaC 장점
+  - 비용 절감
+      단순 인프라 관리 작업에 드는 비용, 시간 등을 줄여 다른 곳에 활용할 수 있음.
+  - 빠른 작업 속도
+  - 안정성
+  - 코드화 및 버전 관리
+  - 재사용성
+
+IaC 도구 및 특징
+ - 구성 관리 : Ansible, Chef, Puppet, SaltStack
+ - 인프라 배포도구 : AWS CloudFormation, OpenStack Heat, Terraform 등
+구성 관리 도구(Configuration Management Tool)
+  - 인프라가 이미 존재하는 상태에서 해당 인프라의 설정 변경을 수행할 수 있는 IaC 도구
+  - 소프트웨어 패키지 설치, 작업 실행, 서비스/애플리케이션 구성, 
+인프라 배포 도구(Infrastructure Provisioning Tool)
+  - 인프라스트럭처를 생성, 변경, 삭제할 수 있는 IaC 도구
+  - 네트워크 생성, 가상머신 생성
+
+가변 인프라(Mutable Infrastructure)
+  - 변경이 가능한 인프라를 의미하는 것으로 물리서버, 가상머신 등이 해당됨.
+불변 인프라(Immutable Infrastructure)
+ - 변하지 않는 인프라를 의미하는 것으로 가상머신 이미지, 컨테이너 이미지 등이 해당됨.
+
+절차적 언어
+  - 인프라 구축 완료 상태에 이르기까지의 절차를 정의하는 형태로 코드를 정의하는 언어
+  - Ansible, Chef 라는 도구들을 이용함.
+선언적 언어
+  - 최종적으로 원하는 형태를 코드 형태로 정의하는 언어
+  - AWS CloudFormation, OpenStack Heat, Puppet, SaltStack, Terraform 등
+
+마스터 - 서버의 역할을 하는 도구
+에이전트 - 클라이언트인데, 단순히 클라이언트가 아니라 서버명령을받아 호스트에서 작업을 실행하는 소프트웨어이다. 서버에 접속해서 작업들을 실행하게된다.
+ - 마스터 존재 : Chef, Puppet, SaltStack
+ - 에이전트 존재 : Chef, Puppet, SaltStack
+
+Ansible
+  - IT 인프라의 구성 관리를 자동화 할 수 있는 IaC 도구
+- 마스터와 에이전트가 없음
+- 다양한 운영체제를 지원한다.
+- 파이썬을 기반으로 개발되었다.
+
+Ansible 주요 용어
+제어 노드(Control Node)
+  - Ansible이 설치된 호스트
+  - Ansible의 제어 노드는 Linux를 사용함. (Windows 시스템은 사용 불가)
+관리 노드(Managed Node)
+  - Ansible 제어 노드에 의해 관리되는 노드
+인벤토리(Inventory)  _인벤토리에 정의된 노드만 관리가능
+  - 관리 노드의 목록으로 노드의 호스트네임, IP 주소 등의 정보를 포함 함.
+- 관리 노드를 그룹으로 묶어서 관리 할 수 있음.
+플러그인(Plugin)
+ - Ansible의 기능 확장을 위한 프로그램
+모듈(Module)
+  - Ansible에서 작업을 정의하기 위해 사용되며 Python 기반으로 작성됨
+작업(Task)
+ - Ansible의 기본 작업 실행 단위
+ - Ansible 모듈을 사용하여 작업을 정의함.
+Ad-Hoc 명령어
+  - Ansible 작업을 명령어를 작성하여 실행하는 명령어
+  - 1회성으로 작업을 실행하고자 하는 경우 주로 사용됨
+플레이(Play)
+ - 1개 이상의 작업(Task)가 모인 Ansible의 실행단위
+플레이북(Playbook)
+ - Ansible 플레이가 1개 이상 모여있는 파일
+  - 플레이북은 YAML 언어로 작성됨.
+
+인벤토리에서 정의> 태스크에서 기능들을 파이썬코드로 정의한 모듈 사용> 기본기능을 확장하는 보조적역할의 프로그램 플러그인> 이모든것이 앤시블 플레이북에 작성됨.
+ 
+%앤서블 환경설정%
+<환경설정>
+환경설정-입력-호스트키 조합 : 쉬프트+ 컨트롤+ 알트 키 로 설정함.
+도구-확장 패키지 관리자로 들어감_ https://www.virtualbox.org/wiki/Downloads 에서받은 확장팩을 설치함.
+도구-네트워크 관리자로 들어감_ 호스트전용네트워크(=내부네트워크)설정: 수동으로 어댑터 설정	ip주소 : 192.168.56.1
+	서브넷 : 255.255.255.0   (미리설정되어있음)
+				NAT 네트워크 설정 : 만들기
+<가상머신 ova파일을 불러오기>
+ansible-control 로 가상머신1 이름을 변경
+모든네트워크어댑터 mac 주소 포함 으로 구성
+ansible-node01, 02 로 가상머신 2, 3을 변경
+모든 네트워크 새주소 생성으로 불러옴
+
+
+
+  1-2. IP 주소 설정
+	ansible-control
+리눅스   10	ansible-node01
+리눅스    11	ansible-node02
+리눅스  12	ansible-node03
+(데비안계열)
+NAT Network (enp0s3)	DHCP	DHCP	DHCP	DHCP
+Host-Only Network (enp0s8)	192.168.56.10/24	192.168.56.11/24	192.168.56.12/24	192.168.56.13/24
+(1) 네트워크 설정 (default)
+ 1-1. Hostname 설정
+    # hostnamectl set-hostname  가상머신이름.example.com
+[root@ansible-control ~]# nmcli con sh
+[root@ansible-control ~]# nmcli con modify enp0s8 ipv4.addresses 192.168.56.10/24
+[root@ansible-control ~]# nmcli con modify enp0s8 ipv4.method manual
+[root@ansible-control ~]# nmcli con up enp0s8
+hostnamectl set-hostname ansible-control.example.com
+[root@ansible-control ~]# ls -l /etc/ssh 로 가서 키를 갱신할것임
+(2) SSH HostKey 갱신 (default)
+# rm -f /etc/ssh/ssh_host_* 
+# systemctl restart sshd.service 하면 갱신된다.
+장치-클립보드공유-양방향 설정하면 복사,붙여넣기가 가능하다.
+(3) ansible 사용자 추가 (default)
+   # useradd ansible
+   # passwd ansible		1111로 고정
+
+control > 설정 > 네트워크탭 
+*NAT와 NAT네트워크의 차이 _ 
+>NAT는 외부에 연결될 수 있는 것은 똑같음. 각각의 네트워크 카드가 각각의 독립적 게이트웨이로 연결됨. 그래서 가상머신들 간에 통신은 안됨  
+>NAT네트워크는 가상머신들끼리 통신이되나, 집합 네트워크는 호스트에서 네트워킹이 안됨.
+ansible-control, node1, node2 을 나트네트워크로 설정한다. 스냅샷으로 이동해서 ‘1.network’저장
+
+# Ansible 설치
+Ansible 패키지 설치를 위해 epel-release 패키지 설치
+[root@ansible-control ~]# yum install epel-release.noarch 
+Ansible 패키지 설치
+[root@ansible-control ~]# yum install ansible
+ 
+[root@ansible-control ~]# cd /etc/ansible 에서 확인할 수 있는것
+/etc/ansible/ansible.cfg  :  Ansible 기본 구성 파일
+/etc/ansible/hosts : Ansible 기본 inventory 파일이다.
+
+—-
+Ch04. 자동화 대상 호스트 선정하기 (Inventory)_  /etc/ansible/hosts
+Inventory :  Ansible을통해 관리할 관리 노드의 목록이 포함되는파일임.
+우선 인벤토리파일을 작성하는법을 알아본다.
+
+[user@ansible-control ~]$ mkdir work
+유저의 홈디렉토리에 work 디렉터리를 생성한다.
+[user@ansible-control work]$ 
+cd work 로 이동
+
+# 정적 인벤토리 , 동적 인벤토리의 작성
+정적인벤토리 : 사용자가 직접 인벤토리 파일을 작성한 것
+동적인벤토리 : 시스템이 자동으로 인벤토리 파일을 작성해주는 것, 클라우드 환경과 같이 관리 노드가 자주 변경되는 경우 API 서버 등을 통해 노드의 정보를 받아오는 인벤토리
+
+[user@ansible-control work]$ vim inventory1
+[user@ansible-control work]$ cat inventory1 
+web01.example.com
+web02.example.com
+db01.example.com
+db02.example.com
+192.168.56.100
+를 적고 저장해봤다.
+인벤토리파일을 저장해봤으니 노드의 목록을 본다
+[user@ansible-control work]$ ansible all --list-hosts
+[WARNING]: provided hosts list is empty, only localhost is available. Note that
+the implicit localhost does not match 'all'
+  hosts (0): 
+[user@ansible-control work]$ ansible all -i inventory1 --list-hosts 	호스트 목록을 보여준다.
+  hosts (5):
+    web01.example.com
+    web02.example.com
+    db01.example.com
+    db02.example.com
+    192.168.56.100
+
+인벤토리파일 그룹 설정&지정하기/조회 
+[user@ansible-control work]$ cat inventory1 
+[test1]
+web01.example.com
+db01.example.com
+
+[test2]
+web02.example.com
+db02.example.com
+192.168.56.100
+>의미하는바는 [test1]그룹에 해당 호스트, [test2]그룹에 해당 호스트가 있음을 나타낸다.
+[user@ansible-control work]$ ansible test1 -i inventory1 --list-hosts    이렇게 조회할 수 있다.
+  hosts (2):
+    web01.example.com
+    db01.example.com
+[user@ansible-control work]$ ansible test2 -i inventory1 --list-hosts
+  hosts (3):
+    web02.example.com
+    db02.example.com
+    192.168.56.100
+그룹핑하지 않은 호스트를 조회하기
+[user@ansible-control work]$ ansible ungrouped -i inventory1 --list-hosts 
+  hosts (5)
+    192.168.56.101
+    192.168.56.102
+    172.16.0.3
+    172.16.1.2
+    www.contoso.org
+특정 호스트만 지정해서 작업하고자 할때
+[user@ansible-control work]$ ansible www.contoso.org -i inventory1 --list-hosts
+  hosts (1):
+    www.contoso.org
+여러 호스트를 지정해서 작업하고자 할때 (주의: 콤마사이에 간격이 없어야 함.)
+[user@ansible-control work]$ ansible www.contoso.org,172.16.0.3 -i inventory1 --list-hosts
+  hosts (2):
+    www.contoso.org
+    172.16.0.3
+중첩 그룹을 작성하기(그룹과 그룹 묶기)
+vim inventory1 로 연뒤에 [GROUP:children] 형식으로 작성한다. ([main:children] 으로 작성함)
+[user@ansible-control work]$ ansible main -i inventory1 --list-hosts
+  hosts (5):
+    web01.example.com
+    db01.example.com
+    web02.example.com
+    db02.example.com
+    192.168.56.100
+중복되는 교집합 그룹을 작성하기_중복되는 호스트가 있을때 
+[user@ansible-control work]$ ansible test2 -i inventory1 --list-hosts
+  hosts (4):
+    web02.example.com
+    db02.example.com
+    192.168.56.100
+    1.2.3.4
+[user@ansible-control work]$ ansible test3 -i inventory1 --list-hosts
+  hosts (2):
+    1.2.3.4
+    www.example.org		처럼 중복되는게 있다.
+[user@ansible-control work]$ ansible backup -i inventory1 --list-host (test2와3은 backup그룹으로 묶임)
+  hosts (5):
+    web02.example.com
+    db02.example.com
+    192.168.56.100
+    1.2.3.4
+    www.example.org
+하지만 중복되는 호스트 1.2.3.4 는 한번만 나타나게 된다 (설정도 한번만 됨)
+
+
+
+
+
