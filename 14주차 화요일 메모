@@ -1,0 +1,218 @@
+www : 웹 서버
+ Web Site 1 : WordPress
+  - 웹 사이트 주소 : http://www.contoso.org/wordpress
+  - WordPress를 이용한 웹 서비스 제공
+  - DocumentRoot : /var/www/html/
+  - Web Server와 DB 서버는 별도로 구성함.
+  - 웹 서비스(:80)으로 WordPress 제공
+
+  Web Site 2 : 단순 웹 사이트(web01)
+  - 웹 사이트 주소 : http://web01.contoso.org:8080/
+  - index.html 파일에 다음 내용 포함.
+     "Welcome to Apache Webserver (web01)"
+  - DocumentRoot :  /srv/www/web01 (NFS 제공 경로)
+  - Port: 8080
+
+www02 : 웹 서버
+  Web Site 2 : 단순 웹 사이트(web02)
+  - 웹 사이트 주소 : http://web02.contoso.org:8080/
+  - index.html 파일에 다음 내용 포함.
+     "Welcome to Apache Webserver (web02)"
+  - DocumentRoot :  /srv/www/web02 (NFS 제공 경로)
+  - Port: 8080
+#위엣 부분 구성
+
+www에서
+cd /etc/httpd/conf.d 로가서 
+vim 00-default.conf
+httpd 재시작하기
+
+추가 웹사이트 구성 8080포트 web01
+-우선 web01 , web02, 등등 도메인 존이 있어야 됨 ns01에서 설정 // web02는 추가 가상머신
+ns01 named] vim contoso.org.zone 
+web01 IN A 192.168.100.11
+web02 IN A 192.168.100.12 추가
+named 서비스 재시작
+
+www로가서 nslookup
+>default server : 192.168.110.31
+>web01.contoso.org
+>web02.contoso.org
+
+www conf.d ] web01에 대해서 설정해준다  vim 01-web01.conf
+(:%s/dummy-host\.example\.com 머시기
+<VirtualHost *:8080>
+    ServerAdmin webmaster@web01.contoso.org
+    DocumentRoot “/srv/www/web01”
+    ServerName web01.contoso.org
+    ErrorLog “/var/log/httpd/web01/web01_error.log”
+    CustomLog “/var/log/httpd/web01/web01_access.log” combined
+
+    <Directory /srv/www/web01>
+        Options Indexes FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+</VirtualHost>
+를 작성.
+mkdir -p /srv/www/web01
+
+www conf.d] echo “web01.contoso.org local index.html” > /srv/www/web01/index.html
+systemctl restart httpd
+원하는 웹페이지는 아직 나오지 않음
+www conf.d]  semanage fcontext -a -t ‘httpd_sys_content_t’ ‘/srv/www(/.*)?’
+www conf.d]  restorecon -FRv /srv/www/ 지정해주면 된다.
+httpd재시작 
+그래도 8080 포트로 접속이 안되는데, 포트가 listen하는 포트가 아님.
+vim /etc/httpd/conf/httpd.conf 파일에
+listen 80
+listen 8080 추가
+*마찬가지로 web02가상머신에도 설치해서 설정하기
+web02 설정 
+www conf.d] cat 01-web01.conf 붙여넣기
+touch 00-default.conf 와 01-web02.conf 생성
+<VirtualHost *:8080>
+    ServerAdmin webmaster@web02.contoso.org
+    DocumentRoot /srv/www/web02
+    ServerName web02.contoso.org <<web02는 서버네임은 빼도됨.
+    ErrorLog /var/log/httpd/web02/web02_error.log
+    CustomLog /var/log/httpd/web02/web02_access.log combined
+    <Directory /srv/www/web02>
+        Options Indexes FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+</VirtualHost>
+mkdir -p /srv/www/web02 디렉터리를 생성 
+디렉터리에 
+semanage fcontext -a -t httpd_sys_content_t ‘/srv/www(/.*)?’
+restorecon -FRv /srv/www/
+echo “web02.contoso.org local index.html” > /srv/www/web02/index.html
+httpd재시작 (방화벽 당연히 허용)
+-----------------------------------------------------------------------------------------------
+
+storage로가서 cate /etc/exports를 연다
+storage ] mkdir /share/nfs/nfs-public
+mkdir /share/nfs/web01
+mkdir /share/nfs/web02
+mkdir /share/nfs/web-common 
+
+vim /etc/exports
+/share/nfs/nfs-public 172.30.0.0/24(rw,sync,sec=sys)
+/share/nfs/web01 172.30.0.0/24 (rw,sync,sec=sys)
+/share/nfs/web02 172.30.0.0/24 (rw,sync,sec=sys)
+/share/nfs/web-common 172.30.0.0/24 (rw,sync,sec=sys)
+exportfs -rv 
+내보내기설정완료
+
+www] mount -t nfs -o rw,sync 172.30.0.41:/share/nfs/web01 /srv/www/web01 로 마운트
+echo “web01.contoso.org nfs index.html” > /srv/www/web01/index.html
+>퍼미션거부가 뜨는데용 루트스쿼시때문이다 
+storage ] cd /share/nfs/로 가서
+groupadd -g 48 apache
+chgrp apache web01
+chgrp apache web02
+chmod +2000 web01
+ chmod +2000 web02
+chmod a+w web01 web02
+
+디렉터리들을 root 사용자 외 다른컨텍스트로 만들면된다 (아파치권한)
+www ] usermod -aG apache user  입력
+cd /srv/www/web01/
+echo “web01.contoso.org nfs index.html” > /srv/www/web01/index.html
+httpd 재시작 
+>setsebool -P httpd_use_nfs on 이 필요하다고한다. (가상머신 web02에도 실행)
+
+www ] /etc/fstab으로 가서 
+172.30.0.41:/share/nfs/web01 /srv/www/web01 nfs  rw,sync  0 0 설정 
+umount /srv/www/web01 
+mount /srv/www/web01
+mount |grep nfs로 확인해봄 
+
+web02도 가서 vim /etc/fstab
+172.30.0.41:/share/nfs/web02 /srv/www/web02 nfs  rw,sync  0 0 설정 
+www web02] mount /srv/www/web02/
+*nfs-utils를 깔아야할 수도 있다.
+cd /srv/www/web02/
+echo “web02.contoso.org nfs index.html” > index.html
+usermod -aG apache user
+재로그인해서 확인.
+-------------------------------------------------------------------------------
+ web01, web02 호스트의 Web Site 2에 대해 DNS 기반 로드밸런싱을 구성하시오.
+    http://internal-portal.contoso.org:8080/ 접속시  "Welcome to Apache Webserver (web0X)" 로 접속됨. (web01, web02 번갈아 가며 접속됨.)부분 해설 
+>별도로 로드밸런서를 두지 않고, 도메인 주소에 대한 요청시 요청을 한 도메인 주소에 대해서 /요청시마다 각기 다른 서버로 응답을 주게끔 하는것이 dns기반 라운드로빙 로드밸런싱이다.
+  http://internal-portal.contoso.org:8080라는 도메인 주소 레코드도 추가해준다.
+ns01 named ] vim contoso.org.zone
+internal-portal IN A 192.168.110.11
+internal-portal IN A 192.168.110.12
+을 추가해주면됨
+grep internal contoso.org.zone 입력시 조회가능
+named 재시작
+다른호스트에서 nslookup
+>server 192.168.100.31
+>web01.contoso.org
+>web02.contoso.org
+>internal-portal.contoso.org 입력시 아이피가 번갈아가면서 조회됨.(로드밸런싱)
+웹에서는 web01, web02가 번갈아가면서 출력된다.
+
+ -  db01의 mariadb DBMS의 데이터는 storage 서버에서  iSCSI로 제공된 디스크에 저장되도록 구성하시오.  부분 해설
+storage ] targetcli 
+>ls 
+
+/> /iscsi delete iqn.2023-11.org.contoso:db01 
+Deleted Target iqn.2023-11.org.contoso:db01.
+/> /iscsi create wwn=iqn.2023-11.org.contoso:storage
+/> /iscsi/iqn.2023-11.org.contoso:storage/tpg1/portals delete 0.0.0.0 3260
+Deleted network portal 0.0.0.0:3260
+/> /iscsi/iqn.2023-11.org.contoso:storage/tpg1/portals create 172.30.0.41 3260
+/> /iscsi/iqn.2023-11.org.contoso:storage/tpg1/acls  create iqn.2023-11.org.contoso:db01
+Created Node ACL for iqn.2023-11.org.contoso:db01
+/> /iscsi/iqn.2023-11.org.contoso:storage/tpg1/luns create /backstores/block/storage:disk1 
+Created LUN 0.
+Created LUN 0->0 mapping in node ACL iqn.2023-11.org.contoso:db01
+ 
+[root@db01 ~]# vim /etc/iscsi/initiatorname.iscsi
+InitiatorName=iqn.2023-11.org.contoso:db01 를 입력
+[root@db01 ~]# systemctl restart iscsi.service
+[root@db01 ~]# iscsiadm -m discovery -t st -p 172.30.0.41 3260
+
+안되면 방화벽을 열기 storage, db각각
+[root@db01 ~]# firewall-cmd --add-port=3206/tcp
+success
+[root@db01 ~]# iscsiadm -m discovery -t st -p 172.30.0.41 3260
+172.30.0.41:3260,1 iqn.2023-11.org.contoso:storage
+[root@db01 ~]# iscsiadm -m node -T iqn.2023-11.org.contoso:storage
+[root@db01 ~]# systemctl stop mariadb.service 서비스 중단후 백업하기
+[root@db01 ~]# ls -ld /var/lib/mysql/
+drwxr-xr-x. 6 mysql mysql 4096 Nov 21 17:32 /var/lib/mysql/
+
+[root@db01 mysql]# tar cvf /tmp/mariadb-backup.tar  로 백업
+이제 마운트할것
+[root@db01 ~]# fdisk /dev/sdb
+[root@db01 ~]# mkfs -t xfs /dev/sdb1
+[root@db01 ~]# mount -t xfs /dev/sdb1 /var/lib/mysql/  안될수있으니 잘확인
+[root@db01 ~]# mount |grep /var/lib/mysql
+[root@db01 ~]# vim /etc/fstab
+/dev/sdb1               /var/lib/mysql          xfs     _netdev         0 0 를 추가해줌
+[root@db01 ~]# mount /var/lib/mysql
+[root@db01 ~]# mount |grep /var/lib/mysql
+[root@db01 ~]# ls -l /var/lib/mysql/
+이제 백업본을 푼다.
+[root@db01 ~]# tar xvf /tmp/mariadb-backup.tar -C /var/lib/mysql/
+[root@db01 ~]# ls -l /var/lib/mysql/
+[root@db01 ~]# systemctl start mariadb.service
+>에러가 뜰 수 있음.
+SElinux가 read,write를 제한하고있을수있음 _
+[root@db01 ~]# ls -ldZ /var/lib/mysql/
+drwxr-xr-x. 6 mysql mysql system_u:object_r:mysqld_db_t:s0 4096 Nov 21 17:40 /var/lib/mysql/
+이거를 
+[root@db01 ~]# restorecon -FRv /var/lib/mysql^C
+[root@db01 ~]# systemctl restart mariadb.service
+>안될수 있음(실제로안됨)
+다시 지웠다가 깐다.(mysql/mariadb)
+워드프레스 접속
+스토리지에서 제공한 부분에서 동작되도록 했다.
+
+
+
+
