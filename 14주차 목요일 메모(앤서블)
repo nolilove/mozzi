@@ -1,0 +1,564 @@
+231123 목요일 메모
+
+요약 지난시간부터 VirtualBox를 이용해서 IaC 에 대해 알아보는시간을 가지도록 한다.
+-Inventory파트 / SSH PASSWD기반 인증방식(--ask-pass) / 권한상승 (--Become) 
+-SSH Key기반 인증방식
+
+IaC(Infrastructure as Code)
+ - 인프라를 코드로 정의하고 관리하는 기술로, 인프라를 생성하고 구성 자동화를 이루어
+다수의 시스템을 효율적으로 관리할 수 있다.
+IaC 장점
+  - 비용 절감 : 단순 인프라 관리 작업에 드는 비용, 시간 등을 줄여 다른 곳에 활용할 수 있음.
+  - 빠른 작업 속도
+  - 안정성
+  - 코드화 및 버전 관리의 수월
+  - 재사용성
+
+인프라 구축까지의 단계를 정의하는데/ 필요한 여러 작업들을 처리하는 언어를 절차적언어라고함.
+내가원하는 ‘최종의 상태’를 정의만 하면/ 구성이 될 수 있도록 하는 언어를 선언적언어라고함.
+>예를들면 특정 ip대역을 사용하는, 어떤것이 연결되어야하는 서비스다 라는것만 정의를 함.
+
+-앤서블은 configuration management 성격을 띠는 IaC도구이며 파이썬기반임. RedHat에서 개발.
+마스터나 에이전트가 필요없고, 앤서블을 실행할 호스트(서버아님)하나만 있으면 사용이 가능하다.
+유닉스, 리눅스, 윈도우로도 다룰 수 있음(윈도우는 ssh가 아닌 다른프로토콜Winrm으로 접속)
+-앤서블의 ‘제어노드’는 앤서블이 실행되는 노드로서 다른 관리노드를 제어함.( only for LINUX ) 
+‘관리노드’는 제어노드가 관리를 실행하게될 대상 호스트들이다.  
+-인벤토리 : 제어>관리노드의 목록을 나열해놓은 파일이고, 목록으로 사전정의된 관리노드에만 접근 가능한 ‘파일’이다.
+-모듈 : 앤서블의 작업을 실행 및 확장해주는 ‘바탕이 되는 코드 덩어리’
+-플러그인 : 앤서블의 기능을 확장해주는 보조적 도구
+-플레이북 : YAML 문법으로 작성된 관리노드에서 수행될 작업의 ‘파일’이다. 작성된 플레이북을 활용해서 앤시블이 관리노드에 ssh로 접근해서 작업하게된다. 자동화를 완성하는 가장 중요한 파일이고 사용자(개발자)가 직접 작성함. txt형태로 작성.
+
+기본 앤서블 구성파일 위치 :    /etc/ansible 
+/> ls     /etc/ansible/ansible.cfg 기본구성파일
+	 /etc/ansible/hosts	기본인벤토리파일
+
+~~~
+#앤서블 실습>
+[user@ansible-control work]$ vim inventory2
+web01.example.com
+web02.example.com
+dba.example.com
+dbb.example.com
+storagea.example.com
+storageb.example.com
+storagec.example.com
+172.17.0.1
+172.17.0.2
+172.17.0.3
+172.17.0.4
+172.17.0.5
+192.168.10.10
+192.168.10.11
+192.168.10.12
+192.168.10.200
+192.168.10.201
+192.168.10.203
+192.168.10.204
+192.168.10.205
+10.0.0.11
+1.2.3.4
+1.2.3.5
+2.3.4.5
+이렇게 많은 호스트를 적어뒀다
+#모두 조회하기
+[user@ansible-control work]$ ansible all -i inventory2 --list-hosts 로 모두 조회가능하다.
+성격에따라 묶어보자
+[user@ansible-control work]$ vim inventory2
+192.100.10.150
+192.100.20.101
+140.160.54.11
+140.160.54.21
+
+[infrastructure]
+web01.example.com
+web02.example.com
+dba.example.com
+
+[seoul]
+dbb.example.com
+storagea.example.com
+storageb.example.com
+
+[incheon]
+storagec.example.com
+172.17.0.1
+172.17.0.2
+172.17.0.3
+172.17.0.4
+172.17.0.5
+192.168.10.10
+192.168.10.11
+192.168.10.12
+
+[gwangju]
+192.168.10.200
+192.168.10.201
+192.168.10.203
+192.168.10.204
+192.168.10.205
+10.0.0.11
+1.2.3.4
+1.2.3.5
+2.3.4.5
+#그룹 조회하기 
+>그룹을 [인프라],[서울],[인천],[광주]로 나누어뒀다.
+서울 조회
+[user@ansible-control work]$ ansible seoul -i inventory2 --list-host
+  hosts (3):
+    dbb.example.com
+    storagea.example.com
+    storageb.example.com
+인천 조회
+[user@ansible-control work]$ ansible incheon -i inventory2 --list-host
+  hosts (9):
+    storagec.example.com
+    172.17.0.1
+    172.17.0.2
+    172.17.0.3
+    172.17.0.4
+    172.17.0.5
+    192.168.10.10
+    192.168.10.11
+    192.168.10.12
+광주 조회
+[user@ansible-control work]$ ansible gwangju -i inventory2 --list-host
+  hosts (9):
+    192.168.10.200
+    192.168.10.201
+    192.168.10.203
+    192.168.10.204
+    192.168.10.205
+    10.0.0.11
+    1.2.3.4
+    1.2.3.5
+    2.3.4.5
+#중복된 그룹 조회하기 : *주의: [그룹명:children]
+그룹끼리를 중복되게 묶어본다.
+[north_datacenters:children]
+seou
+incheon
+[south_datacenters:children]
+gwangju
+를 작성하고, 실행해본다.
+[user@ansible-control work]$ ansible north_datacenters -i inventory2 --list-host
+  hosts (12):
+    dbb.example.com
+    storagea.example.com
+    storageb.example.com
+    storagec.example.co
+    172.17.0.1
+    172.17.0.2
+    172.17.0.3
+    172.17.0.4
+    172.17.0.5
+    192.168.10.10
+    192.168.10.11
+    192.168.10.12
+[user@ansible-control work]$ ansible south_datacenters -i inventory2 --list-host
+  hosts (9):
+    192.168.10.200
+    192.168.10.201
+    192.168.10.203
+    192.168.10.204
+    192.168.10.205
+    10.0.0.11
+    1.2.3.4
+    1.2.3.5
+    2.3.4.5
+# 다수의 비슷한 호스트들을 관리하는법 (범위설정 : [start:end] 형식)
+Inventory 작성시 호스트 목록 간소화
+ - 범위를 사용한 간소화
+web01, web02 호스트가 있다.
+[infrastructure]
+web01.example.com
+web02.example.com
+dba.example.com
+두개면 적을만하지만 이 수가 100,200개면 어떻게 관리할까?
+[infrastructure]
+web0[1:2].example.com
+dba.example.com
+연속되는 범위를 대괄호를 사용해서 적어주면된다.
+[infrastructure]
+web0[1:2].example.com
+dba.example.com
+
+[seoul]
+dbb.example.com
+storage[a:b].example.com
+
+[incheon]
+storagec.example.com
+172.17.0.[1:5]
+192.168.10.1[0:2]
+
+[gwangju]
+192.168.10.20[0:5]
+10.0.0.11
+1.2.3.4
+1.2.3.5
+2.3.4.5
+정리하면 이렇게되는데, 정상적으로 모두 나온다. 
+이제 생성해둔 inventory1, 2를 삭제해준다. (백업하고)
+
+[user@ansible-control work]$ ls
+inventory1  inventory2
+[user@ansible-control work]$ tar cvf inventory_backup.tar inventory1 inventory2
+inventory1
+inventory2
+[user@ansible-control work]$ mv inventory_backup.tar /tmp
+[user@ansible-control work]$ rm inventory*
+
+Ansible로 작업 실행을 위한 실습 환경 구성
+[user@ansible-control work]$ mkdir inventory
+[user@ansible-control work]$ vim inventory/inventory
+ansible-node01
+ansible-node02
+
+# Hostname으로 접근하기 위해 /etc/hosts 파일에 host 정보 등록
+[user@ansible-control work]$ sudo vim /etc/hosts
+# Ansible
+192.168.56.10   ansible-control
+192.168.56.11   ansible-node01
+192.168.56.12   ansible-node02
+192.168.56.13   ansible-node03   >>(node03 가상머신은 아직 설치안해서 ping안됨)
+
+# SSH 접속하기 
+- ssh 요청을 하게되면 서버가 신원증명을위해 공개키를 클라이언트에 보내준다. 따라서 처음접속한 경우에는 호스트 키 부분이 접근대상이 맞는지 물어보게되고(fingerprint), 한번이라도 접속에 성공하면 재접속 시 물어보지 않는다. 만약 이전의 주소가 맞는데 호스트 키가 달라지면 접속에 경고를 준다
+ssh user@127.0.0.1
+ssh user@localhost
+ssh user@192.168.56.10
+ssh user@192.168.56.11
+ssh user@192.168.56.12
+ssh user@ansible-control
+ssh user@ansible-node01
+ssh user@ansible-node02
+한번씩 접속해서 핑거프린트를 생성한다. 
+#앤서블 패스워드 기반 인증방식 : --ask-pass 
+앤서블로 다른 호스트와 통신을 테스트( ping ‘모듈’을 사용, ping 명령어{ICMP}가 아님)
+[user@ansible-control work]$ ansible all -i inventory/inventory -m ping    입력시
+ansible-node01 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Failed to connect to the host via ssh: user@ansible-node01: Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password).",
+    "unreachable": true
+}
+ansible-node02 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Failed to connect to the host via ssh: user@ansible-node02: Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password).",
+    "unreachable": true
+에러가 뜬다 > 정상임.
+앤서블은 Key 기반 인증방식을 기본으로 사용한다. 사전에 key를 등록하지 않아 이런 메세지가 뜨는 것이다. 물론 password를 사용하지 못하는 것은 아니고, Ansible --help 매뉴얼에서 -k, --ask-pass 라는 옵션을 사용해서 패스워드기반 인증을 사용할 수 있다.
+[user@ansible-control work]$ ansible all -i inventory/inventory -m ping --ask-pass
+SSH password: user
+ansible-node01 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+ansible-node02 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+# 모듈에 ARGUMENT 지정하기 ( command -a “ARGUMENT” )
+[user@ansible-control work]$ ansible all -i inventory/inventory -m command -a "hostname" --ask-pass
+SSH password: 
+ansible-node02 | CHANGED | rc=0 >>
+ansible-node02.example.com
+ansible-node01 | CHANGED | rc=0 >>
+ansible-node01.example.com
+
+# 앤서블 구성파일 작성방법 ( /etc/ansible/ansible.cfg 파일)
+[user@ansible-control work]$ touch ansible.cfg
+*이상한 오류가 뜨면 권한변경을 해준다
+[user@ansible-control work]$ chmod go-w /home/user/work
+#[defaults] 섹션
+  - Ansible 실행시 기본 동작에 관련된 사항을 정의하는 섹션으로 Ansible 구성 파일의 기본 섹션
+  - inventory : Ansible 실행시 기본 Inventory 파일을 지정
+  - ask_pass : Ansible 실행시 SSH 패스워드 인증 방식을 사용함 (true, false)
+# [privilege_escalation] 섹션
+  - Ansible 실행시 기본 사용자와 다른 사용자(일반적으로 관리자 사용자)의 권한으로 작업을 실행하는 것과 관련된 섹션
+  - become : 권한 상승을 사용할지 여부를 지정(true, false)
+  - become_method : 권한 상승시 권한 상승 방식 지정(기본값: sudo)
+  - become_user : 권한 상승시 전환할 사용자를 지정(기본값 : root)
+  - become_ask_pass : 권한 상승시 패스워드 인증을 사용할지 여부(true, false)
+
+
+#실습
+[user@ansible-control work]$ vim ansible.cfg
+[user@ansible-control work]$ cat ansible.cfg 
+[defaults]
+inventory = inventory/inventory
+  ask_pass = true
+ --ask-pass = 옵션을 명시적으로 지정하지 않아도 ansible.cfg 구성파일의 설정에 따라 패스워드를 물어봄
+
+# Ansible 실행시 특정 사용자(remote_user)를 지정하여 실행
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass
+[user@ansible-control work]$ ansible all -m command -a "id" -u ansible --ask-pass
+ -u 사용자 : Ansible 작업 실행시 실행할 사용자 지정
+
+# 특정 사용자 ansible 사용자를 Ansible 실행시 사용할 사용자로 지정하여 Ansible 실행
+[user@ansible-control work]$ vim ansible.cfg
+[defaults]
+inventory = inventory/inventory
+remote_user = ansible
+ask_pass = true
+
+#권한 상승 관련 옵션 ( -- BECOME  / --BECOME-METHOD / --BECOME-USER )
+--become  : Ansible 실행시 권한 상승 사용
+--become-method BECOME_METHOD  : 권한 상승 방식 지정
+--become-user BECOME_USER  :  권한 상승 사용자 지정
+--ask-become-pass  :  권한 상승 사용시 패스워드 입력 옵션
+
+[user@ansible-control work]$ vim ansible.cfg
+[defaults]
+inventory = inventory/inventory
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass
+SSH password: 
+ansible-node01 | CHANGED | rc=0 >>
+uid=1000(user) gid=1000(user) groups=1000(user),10(wheel) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node02 | CHANGED | rc=0 >>
+uid=1000(user) gid=1000(user) groups=1000(user),10(wheel) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+그런데 여기서 --become 옵션을 붙이면
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass --become
+SSH password: 
+ansible-node02 | FAILED | rc=-1 >>
+Missing sudo password
+ansible-node01 | FAILED | rc=-1 >>
+Missing sudo password
+
+sudo password가 빠져있다는 오류가 뜬다. 이 사용자가 sudo 작업을 실행해야한다.
+[user@ansible-control work]$ sudo id
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass --become --ask-become-pass
+SSH password: user
+BECOME password[defaults to SSH password]: user
+ansible-node02 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node01 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+
+# 권한상승 sudo로 했을 때
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass --become --ask-become-pass --become-method sudo
+SSH password: 
+BECOME password[defaults to SSH password]: 
+ansible-node01 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node02 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+
+# 권한상승 su로 했을때 (이때는 유저가 아닌 루트사용자로 접속임)
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass --become --ask-become-pass --become-method su
+SSH password: user
+BECOME password[defaults to SSH password]: user 
+ansible-node02 | FAILED | rc=-1 >>
+Incorrect su password
+ansible-node01 | FAILED | rc=-1 >>
+Incorrect su password
+에러가 뜬다. 그렇다면 다시입력하자
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass --become --ask-become-pass --become-method su
+SSH password: user
+BECOME password[defaults to SSH password]:  root
+ansible-node02 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node01 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+
+BECOME password[defaults to SSH password]: 
+밑줄친 바의 의미는 , become passwd를 다시 입력시 동일하다면 위에서 입력한 ssh pw와 같게 입력된다(enter) 
+
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass --become --ask-become-pass --become-user ansible
+앤서블이라는 유저의 권한으로 실행되었음
+ansible-node02 | CHANGED | rc=0 >>
+uid=1001(ansible) gid=1001(ansible) groups=1001(ansible) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node01 | CHANGED | rc=0 >>
+uid=1001(ansible) gid=1001(ansible) groups=1001(ansible) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+
+
+# 앤서블 구성파일 편집하기(권한상승 관련)
+[user@ansible-control work]$ cat ansible.cfg 
+[defaults]
+inventory = inventory/inventory
+이 상태에서 권한상승과 관련한것들을 적어본다.
+
+[user@ansible-control work]$ cat ansible.cfg 
+[defaults]
+inventory = inventory/inventor
+[privilege_escalation]
+become = true		를 추가한다
+그런다음 실행
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass
+SSH password: 
+ansible-node01 | FAILED | rc=-1 >>
+Missing sudo password
+ansible-node02 | FAILED | rc=-1 >>
+Missing sudo password
+>>sudo방식으로 권한상승이 된다는의미이고 passwd를 user가 아닌 become passwd로 입력해야함
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass -ask-become-pass
+
+[user@ansible-control work]$ vim ansible.cfg
+[defaults]
+inventory = inventory/inventory
+
+[privilege_escalation]
+become = true
+become_ask_pass = true
+이렇게 하단에 추가해주면
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass
+SSH password: user
+BECOME password[defaults to SSH password]: user
+ansible-node01 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node02 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+
+# 내가 권한상승을 쓰지 않겠다 = false로 변경
+[user@ansible-control work]$ cat ansible.cfg 
+[defaults]
+inventory = inventory/inventory
+
+[privilege_escalation]
+become = false
+become_ask_pass = true
+~~~
+[user@ansible-control work]$ ansible all -m command -a "id" --ask-pass
+SSH password: user
+BECOME password[defaults to SSH password]: user
+ansible-node02 | CHANGED | rc=0 >>
+uid=1000(user) gid=1000(user) groups=1000(user),10(wheel) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node01 | CHANGED | rc=0 >>
+uid=1000(user) gid=1000(user) groups=1000(user),10(wheel) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+become에 passwd를 입력해도 권한상승이 false상태이므로 그런거없음.
+>>앤서블 교안 59~61p를 확인해보자
+
+ 
+# 키(Key) 기반 SSH 앤서블 인증방식 ( ssh-keygen )
+1.	키를 우선 생성한다.
+[user@ansible-control work]$ ssh-keygen  
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/user/.ssh/id_rsa):  별일없으면 enter
+Enter passphrase (empty for no passphrase): enter 뭔가 입력해주면 키사용시 pw도 사용해야됨.
+ 
+2.	키가 생성되었으면 공개키를 배포한다. ( ssh-copy-id )
+[user@ansible-control work]$ ssh-copy-id ansible@127.0.0.1  (로컬호스트)
+[user@ansible-control work]$ ssh-copy-id ansible@ansible-node01
+[user@ansible-control work]$ ssh-copy-id ansible@ansible-node02
+
+[user@ansible-control work]$ vim ansible.cfg    	이전단계에서 권한상승섹션을 지워준다.
+[defaults]
+inventory = inventory/inventory
+>>[privilege_escalation] 섹션제거했음.
+[user@ansible-control work]$ ansible all -m ping -u ansible 
+ 로 모든호스트에 핑모듈테스트를한다.
+ansible-node01 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+ansible-node02 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+잘됨. 
+
+[user@ansible-control work]$ ansible all -m command -a "ls -al" -u ansible
+ansible 유저의 홈디렉터리를 파헤쳐준다.
+ansible-node02 | CHANGED | rc=0 >>
+total 44
+drwx------. 16 ansible ansible 4096 Nov 23 14:50 .
+drwxr-xr-x.  4 root    root      33 Nov 22 12:36 ..
+drwxr-xr-x.  3 ansible ansible   17 Nov 23 14:26 .ansible
+
+[user@ansible-control work]$ ansible all -m command -a "pwd" -u ansible
+ansible 유저의 홈 디렉터리 및 지금 위치를 설명해준다.
+ansible-node01 | CHANGED | rc=0 >>
+/home/ansible
+ansible-node02 | CHANGED | rc=0 >>
+/home/ansible
+
+# Sudoer을 이용한 작업 (Passwordless sudo 구성방법)
+[user@ansible-control work]$ ls -l /etc/sudoers
+-r--r-----. 1 root root 4328 Apr 24  2023 /etc/sudoers
+[user@ansible-control work]$ ls -ld /etc/sudoers.d/
+drwxr-x---. 2 root root 6 Apr 24  2023 /etc/sudoers.d/
+-이번실습은 모든 노드에서 작업을 해본다.  (user유저면 sudo vim으로, root면 vim으로 편집)
+[root@ansible-control work]# vim /etc/sudoers.d/ansible
+[root@ansible-control work]# vim /etc/sudoers.d/ansible
+[root@ansible-control work]# cat /etc/sudoers.d/ansible
+ansible  ALL=(ALL) NOPASSWD:ALL
+이렇게설정하면 ansible이라는 유저(사용자)는 password없이 sudo 기능을 사용할 수 있다.
+control, node01, node02도 똑같이 ansible유저에 대해서 설정해주자.
+
+[user@ansible-control work]$ ansible all -m command -a "id" --become
+ansible-node01 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Failed to connect to the host via ssh: user@ansible-node01: Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password)."
+    "unreachable": true
+}
+ansible-node02 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Failed to connect to the host via ssh: user@ansible-node02: Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password).",
+    "unreachable": true
+}
+[user@ansible-control work]$ ansible all -m command -a "id" -u ansible --become
+ansible-node01 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node02 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+>>그냥하면 안되는데, ansible 사용자로 접속하면 잘 되는것을 볼 수 있다(sudo passwd없이)
+# 사용자를 별도로 지정하지 않고 앤서블 사용하기
+ansible 유저 원격으로 설정을 해준다.
+[user@ansible-control work]$ vim ansible.cfg 
+[user@ansible-control work]$ cat ansible.cfg 
+[defaults]
+inventory = inventory/inventory
+remote_user = ansible
+>>ansible이라는 유저로 설정했기때문에 이 유저 권한으로 실행하게된다.
+[user@ansible-control work]$ ansible all -m command -a "id" --become
+ansible-node02 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node01 | CHANGED | rc=0 >>
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+깔끔하게 결과가 나온다.
+
+# Ad-Hoc 명령어를 통한 Ansible 실행
+Ad-Hoc 명령어 실행시 명령어 기본 실행 구조
+$ ansible  HOST_PATTERN  -i  INVENTORY  -m  MODULE  -a  ARGUMENT
+
+Ansible의 Module, Plugin 정보 확인 명령어
+ansible-doc
+
+Ansible Module, Plugin 목록 확인
+$ ansible-doc -l
+
+특정 모듈 검색
+$ ansible-doc -l | grep MODULE
+
+이번시간정리 
+[user@ansible-control work]$ ansible ansible-node01 -m command -a "cat /etc/hosts"
+ansible-node01 | CHANGED | rc=0 >>
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+>cat 모듈들을 써서 결과를 바로 받아볼 수 있다.
+
+파일을 복사하고싶으면 
+[user@ansible-control work]$ ansible ansible-node01 -m copy -a "src=/etc/hosts dest=/tmp"
+>copy 모듈을 사용해서 /etc/hosts를 /tmp에 복사했다.
+
+[user@ansible-control work]$ ansible ansible-node01 -m command -a "ls -l /tmp/hosts"
+ansible-node01 | CHANGED | rc=0 >>
+-rw-r--r--. 1 ansible ansible 296 Nov 23 16:25 /tmp/hosts
+>확인했더니 존재한다.
+
+>한번에 모든가상머신끄기!(애드혹명령어)
+[user@ansible-control work]$ ansible all -m command -a "poweroff" --become
+
