@@ -1,0 +1,492 @@
+14주차 금요일 메모(앤서블-IaC)
+
+지난시간에는 -Inventory파트 / SSH PASSWD기반 인증방식(--ask-pass) / 권한상승 (--Become) 
+-SSH Key기반 인증방식과 애드혹( ADHOC ) 명령어에 대해서 알아봤다.
+이번시간에는 YAML파일의 개념과, 작성방법(문법), 모듈, PLAYBOOK을 작성하는방법에 대해서 공부한다.
+•	-YAML과 INI 파일은 모두 설정 파일의 형식으로 사용되지만, 각각의 형식은 몇 가지 차이가 좀 있다. YAML은 계층적인 데이터 구조를 다루기에 더 적합하며, 복잡한 설정이나 데이터를 다룰 때 선호됩니다. (마찬가지로 JSON파일도 그러하다)
+•	INI는 간단한 설정을 다루는 데 적합하며, 복잡한 데이터 구조를 갖지 않는 경우에 사용 INI는 간결하고 읽기 쉽지만, YAML에 비해 데이터 구조를 표현하는 데는 한계가 있다
+
+*참고
+Ansible 모듈 목록 페이지
+https://docs.ansible.com/ansible/latest/collections/index_module.html
+Ansible 플러그인 목록 페이지
+https://docs.ansible.com/ansible/latest/collections/all_plugins.html
+
+
+앤서블의 큰 특징으로는
+멱등성  : 몇번의 작업을 실행하더라도 동일한 결과값을 나타내주는 멱등성(Idempotent)이 있다.
+
+[user@ansible-control ~]$ cd work
+[user@ansible-control work]$ ls
+ansible.cfg  inventory
+[user@ansible-control work]$ pwd
+/home/user/work
+
+#앤서블 구성파일 작성(복습)
+[user@ansible-control work]$ mkdir 20231124
+[user@ansible-control work]$ cd 20231124
+[user@ansible-control 20231124]$ pwd
+/home/user/work/20231124
+
+[user@ansible-control 20231124]$ ansible all --list-hosts
+[WARNING]: provided hosts list is empty, only localhost is available. Note that
+the implicit localhost does not match ‘all’
+  hosts (0):
+>>이 오류가 뜨는이유는 인벤토리 파일에 대한것을 명시적으로 지정해주지 않았기 때문이다.
+
+따라서 inventory 파일을 명시적으로 지정해주고 리스트를 조회해주자.
+[user@ansible-control 20231124]$ ansible all -i inventory --list-hosts
+  hosts (2):
+    ansible-node01
+    ansible-node02
+작업디렉터리(경로)를 바꿨더니 인벤토리를 인식하지 못하는데, 그 이유는 앤서블을 실행하는 데 있어서 그 실행의 방식을 결정하는 ansible.cfg 구성파일이 현재 디렉토리에 없기 때문에, 어제 지정했던 인벤토리를 인식하지 못하는 것임.
+>그러면, ansible.cfg를 새로 만들어줘야 할까?
+[user@ansible-control 20231124]$ ls -l ~/.ansible.cfg
+ls: cannot access '/home/user/.ansible.cfg': No such file or directory
+현재 디렉토리 밑에 이 파일은 없다.
+
+
+[user@ansible-control 20231124]$ vim ~/.ansible.cfg  로 홈디렉터리에 생성해주자
+[defaults] 섹션은 작업을 실행할때 기준이되는 것들이 들어가는 섹션이다.
+[user@ansible-control 20231124]$ cat ~/.ansible.cfg
+[defaults]
+inventory = /home/user/work/20231124/inventory
+그러면  조회해본다.
+[user@ansible-control 20231124]$ ansible all --list-hosts
+  hosts (2):
+    ansible-node01
+    ansible-node02
+여기에 우리가 사용할 
+ansible-node03		을 추가해두자.
+그럼 어제 만들어둔 인벤토리 파일을 다음으로 본다.
+[user@ansible-control 20231124]$ ansible all -i ../inventory/inventory --list-hosts
+  hosts (2):
+    ansible-node01
+    ansible-node02
+
+오늘작업하는 디렉터리에도 vim ansible.cfg를 만들어주자
+[user@ansible-control 20231124]$ cat ansible.cfg 
+[defaults]
+remote_user = ansible
+>ansible 유저만 원격접근 가능하게 설정했다. 
+[WARNING]: provided hosts list is empty, only localhost is available. Note that
+the implicit localhost does not match &apos;all&apos;
+  hosts (0):
+똑같이 오류가나고있는 부분(반영이 되었다)
+그러면 user가 아닌 ansible 사용자의 권한으로 play하도록 확인해보도록 한다.
+
+[user@ansible-control 20231124]$ ansible all -i inventory -m command -a "id"
+ansible-node02 | CHANGED | rc=0 >>
+uid=1001(ansible) gid=1001(ansible) groups=1001(ansible) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node01 | CHANGED | rc=0 >>
+uid=1001(ansible) gid=1001(ansible) groups=1001(ansible) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+ansible-node03 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Failed to connect to the host via ssh: ssh: connect to host ansible-node03 port 22: No route to host",
+    "unreachable": true
+}
+>node01, node02는 접속이 잘 되었고, node03은 현재 없기때문에 에러가 뜬 모습이다.
+
+# ansbile 구성파일의 우선순위를 설정 및 정리해보자.
+(1) ANSIBLE_CONFIG
+  $ export ANSIBLE_CONFIG=ansible.cfg_파일경로
+(2) ./ansible.cfg
+(3) ~/.ansible.cfg
+(4) /etc/ansible/ansible.cfg 순서대로 적용이 된다. (위에서 아래로)
+
+-Ansible 버전, 현재 적용되는 ansible 구성파일등 실행환경을 확인하려면
+$ ansible --version
+
+[user@ansible-control 20231124]$ ANSIBLE_CONFIG=/home/user/work/ansible.cfg 
+[user@ansible-control 20231124]$ export ANSIBLE_CONFIG=/home/user/work/ansible.cfg 
+[user@ansible-control 20231124]$ ansible all -m ping
+ansible-node02 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+ansible-node01 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+>이것을 ansible --version으로 확인해보면 된다.
+ 
+
+>환경변수의 해제 
+[user@ansible-control 20231124]$ env	 로 환경변수를 한번 본다. 
+ANSIBLE_CONFIG=/home/user/work/ansible.cfg 가 나오는데 unset [환경변수 이름]으로 해제가능하다.
+[user@ansible-control 20231124]$ unset ANSIBLE_CONFIG 
+[user@ansible-control 20231124]$ rm ~/.ansible.cfg 		으로 구성파일을 삭제함.
+그러면 원 상태로 복구되어
+[user@ansible-control 20231124]$ ansible --version
+ansible [core 2.14.9]
+  config file = /home/user/work/20231124/ansible.cfg 		가 조회된다.
+
+
+
+# Ansible에서 작업 실행하는 방법
+  - 1. Ad-Hoc 명령어로 Ansible Play 실행
+  - 2. Ansible Playbook으로 Ansible Play 실행
+
+#1. AD-HOC 명령어로 작업을 실행하기
+$ ansible  HOST_PATTERN  -i  INVENTORY  -m  MODULE  -a  ARGUMENT
+
+-Ansible Module, Plugin 목록 확인
+$ ansible-doc -l
+-특정 모듈 검색
+$ ansible-doc -l | grep MODULE
+-특정 모듈에 대한 설명 확인
+$ ansible-doc  MODULE
+-특정 모듈에 대한 사용 예시 확인
+$ ansible-doc -s MODULE
+
+
+# 실습 
+[user@ansible-control 20231124]$ cat ansible.cfg 
+[defaults]
+inventory = inventory
+remote_user = ansible
+
+[user@ansible-control 20231124]$ ansible ansible-node01 -m command -a "touch /home/ansible/ansiblefile1.txt"
+ansible-node01 | CHANGED | rc=0 >>
+
+[user@ansible-control 20231124]$ ansible ansible-node01 -m command -a "ls -l /home/ansible"
+ansible-node01 | CHANGED | rc=0 >>
+total 0
+-rw-r--r--. 1 ansible ansible 0 Nov 24 11:33 ansiblefile1.txt
+>새로 ansiblefile1.txt가 생성된 것을 찾을 수 있다.
+
+# ansible-doc 에서 file 모듈을 찾아본다
+바로 ansible.builtin.file 모듈인데 파일을 다룰 수 있는 모듈이다.
+-파일 만들기/ 디렉터리 만들기/ 파일의 종류에 해당하는 (심볼릭,하드)링크파일, 파일지우기 등이 가능한 모듈이다.
+[user@ansible-control 20231124]$ ansible-doc file 로 확인할 수 있다.
+<필수항목: = / 옵션항목: - 로 표기되고 있다>
+= path
+        Path to the file being managed.
+        aliases: [dest, name]
+        type: path
+이를 참조해서
+[user@ansible-control 20231124]$ ansible ansible-node01 -m file -a "path=/home/ansible/ansiblefile2.txt state=touch"		를해본다
+[user@ansible-control 20231124]$ ansible ansible-node01 -m file -a "path=/home/ansible/ansiblefile2.txt state=touch"	를 하면 last modified time(최종수정일)이 변경된다.
+[user@ansible-control 20231124]$ ansible ansible-node01 -m command -a "cp /etc/hosts /home/ansible/test01.txt"
+ansible-node01 | CHANGED | rc=0 >>
+[user@ansible-control 20231124]$ ansible ansible-node01 -m copy -a "src=/etc/passwd dest=/home/ansible/ansiblefile3.txt"
+[user@ansible-control 20231124]$ ansible ansible-node01 -m command -a "ls -l /home/ansible"
+-rw-r--r--. 1 ansible ansible    0 Nov 24 11:33 ansiblefile1.txt
+-rw-r--r--. 1 ansible ansible    0 Nov 24 11:51 ansiblefile2.txt
+-rw-r--r--. 1 ansible ansible 2190 Nov 24 12:04 ansiblefile3.txt
+로 조회도 가능.
+
+[user@ansible-control 20231124]$ ansible all -m yum -a "name=tree state=latest" --become
+으로 tree라는 패키지를 최신버전으로 설치할 수도 있다.
+-만약 설치가 되어있는 패키지라면 “changed” : false 로 뜨며,
+ 설치가 안되어있어서 설치가능한 패키지라면 “changed” : true 로 표기된다.
+반대로 지우려면 
+[user@ansible-control 20231124]$ ansible all -m yum -a "name=tree state=absent" --become
+으로 삭제가 가능하다. 
+
+#2. PLAYBOOK으로 작성하기 ( YAML 파일형태로 작성 )
+-YAML(YAML Ain’t Markup Language) 이란?
+  - 데이터를 표현하기 위한 언어
+- Key-Value 형식으로 데이터를 표현, JSON 보다 간결한 문법을 추구함
+-주의할점: 공백 문자 사용(space 권장), 일관성(들여쓰기레벨 통일), 들여쓰기레벨(데이터구조화)
+ 
+-YAML 기본 문법
+주석 : #
+# This is a comment line
+-데이터 표현방식
+KEY : VALUE 의 형태.
+KEY0: VALUE0
+
+KEY1: 
+  KEY2: VALUE2
+
+KEY11:
+  KEY12:
+    KEY13: VALUE13
+
+기본 자료형(Data Types)
+int_data: 1
+string_data: "string data value"
+boolean_data1: true
+boolean_data1: false
+
+Dictionary(Hash)
+key0:
+  key01: value01
+  key02: value02
+key0: {
+  key01: value01
+  key02: value02
+}
+
+List   >>하나의 데이터타입 뿐 아니라 여러개의 데이터타입이 통제될 수 있는 타입.
+list_data:
+  - value1
+  - value2
+  - value3
+
+list_data: [value1, value2, value3]
+
+list_data: [
+  value1, value2, value3
+]
+
+Line1
+Line2
+Line3
+
+# Multi Line Data 
+(1) : |  (블록 스칼라 스타일)
+      - 여러 줄의 텍스트를 그대로 유지하면서 들여쓰기를 포함합니다. 주로 텍스트의 구조와 들여쓰기가 중요한 경우에 사용한다.
+string_literal_block_data: |
+Line1
+Line2
+Line3
+>   string_literal_block_data: "Line1\nLine2\nLine3"
+(2) : >  (폴딩 스칼라 스타일)
+      - 여러 줄의 텍스트를 유지하면서 불필요한 들여쓰기를 제거합니다. 주로 텍스트의 구조를 유지하면서 가독성을 향상시키는 데 사용한다.
+string_folded_block_data: > 
+  Line1
+  Line2
+  Line3
+  string_folded_block_data: "Line1 Line2 Line3"
+>>들여쓰기 : 데이터들이 여러개의 계층을 이룰 때, 이런 여러 계층을 다루기 위해서(원래는 묶어주거나 했지만) yaml에서는 간결한 문법을 추구하기때문에 들여쓰기와 관련된 부분에 민감하다. 
+-그 예시가 바로 tab (bash completion)자동완성에 해당하며, yaml작성시에는 tab을 자제할것을 요함.
+-들여쓰기 레벨을 2칸으로했으면 2칸으로 해줘야하며, 4칸으로했으면 4칸을 맞춰주어야 한다.
+-단, 하나의 YAML 문서에서는 들여쓰기 레벨에 사용하는 공백문자의 개수를 통일해야한다.
+
+#YAML 문서의 기본 틀 예시 (공백을 2칸간격으로 하는게 보통이다.)
+--- # This is a comment
+document_name: system_log_data
+document_body:
+  data1:
+    data_id: 1
+    data_type: temp
+    data_content: "Sample Data log"
+    data_tags:
+      - operation
+      - alert
+      - networking
+… # This is a comment
+>위 예제에서 데이터 덩어리를 따지면
+document_name: system_log_data가 하나의 덩어리,
+-------------
+document_body:
+  data1:
+    data_id: 1
+    data_type: temp
+    data_content: "Sample Data log"
+    data_tags:
+      - operation
+      - alert
+      - networking		가 또 하나의 덩어리,
+-----------
+  data1:
+    data_id: 1
+    data_type: temp
+    data_content: "Sample Data log"
+    data_tags:
+      - operation
+      - alert
+      - networking		도 하나의 덩어리,
+----------
+    data_id: 1
+    data_type: temp
+    data_content: "Sample Data log"
+    data_tags:
+      - operation
+      - alert
+      - networking		도 하나의 덩어리로서 계층에 따라서 작성해준다.
+
+#실습 
+[user@ansible-control 20231124]$ vim my-first-yaml.yaml	로 생성
+대시(---)3개로 시작하고, 마침표(...)3개로 끝마친다.
+ 
+---
+name: "Hello YAML Document"
+category: "Technical Report"
+job_title: "Engineer"
+my_work:
+  - Collect Application Logs
+  - Backup Daily Data
+  - Monitoring System Performance
+  - Maintain Firewall Rules
+department: "Infra Operationg Team"
+office:
+  - Main Branch
+  - South Datacenter
+  - Backup Datacenter
+...
+ 
+두번째 야믈파일을 만들어보면 Yaml 파일이 이런 구성임을 알 수 있다.
+
+[user@ansible-control 20231124]$ vim ~/.vimrc
+[user@ansible-control 20231124]$ cat ~/.vimrc
+syntax on
+autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab autoindent
+이라고 적고 저장한다.
+>이 내용은 yaml 파일 작성할때, 기본적으로 두칸씩 띄워주는 명령을 작성해둔것이다.
+
+Ansible Playbook 작성 기본 틀
+---
+- name: ANSIBLE_PLAY_NAME
+  hosts: HOST_PATTERN
+  tasks:
+    - name: TASK1_NAME
+      MODULE:
+        field1: value1
+        field2: value2
+    - name: TASK2_NAME
+      MODULE:
+        field1: value1
+        field2: value2
+…
+
+ 
+하나의 플레이북을 만들었다. 
+디버그: 어떤 내용을 출력해주기 위한 모드이다 (print) 여기서 보면, msg라는 변수를 사용한다.
+[user@ansible-control 20231124]$ cat playbook-first.yaml 
+---
+- name: My First Ansible Playbook
+  hosts: all
+  tasks: 
+    - name: "task1 - Hello Ansible"
+      debug:
+        msg: "Hello Ansible"
+    - name: "task2 - Print a Message"
+      debug:
+        msg: "Ansible is running..."
+...
+이것을 실행해본다.
+[user@ansible-control 20231124]$ ansible-playbook playbook-first.yaml  로 실행한다.
+PLAY [My First Ansible Playbook] ***********************************************
+TASK [Gathering Facts] *********************************************************
+ok: [ansible-node01]
+ok: [ansible-node02]
+fatal: [ansible-node03]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh: ssh: connect to host ansible-node03 port 22: No route to host", "unreachable": true}
+TASK [task1 - Hello Ansible] ***************************************************
+ok: [ansible-node01] => {
+    "msg": "Hello Ansible"
+ok: [ansible-node02] => {
+    "msg": "Hello Ansible"
+}
+TASK [task2 - Print a Message] *************************************************
+ok: [ansible-node01] => {
+    "msg": "Ansible is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "Ansible is running..."
+}
+PLAY RECAP *********************************************************************
+ansible-node01             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=0    changed=0    unreachable=1    failed=0    skipped=0    rescued=0    ignored=0   
+플레이 리캡을 확인해보면  실행된 플레이북의 요약이 나온다.
+다시 실제 명령형으로 동작하는 플레이북하나를 더 만든다.(선언형)
+[user@ansible-control 20231124]$ vim playbook-example1.yaml   로 편집기를 열고
+---
+- name: Playbook Example1
+  hosts: all			#그룹을 지정하거나, 호스트 단일을 지정할수있다.
+  tasks:
+    - name: Copy a file		#task1  
+      copy:
+        src: /etc/hosts
+        dest: /tmp/ansiblefile01.txt
+    - name: Make a Directory	#task2  
+      file:
+        path: /home/ansible/exampledir1
+        state: directory
+    - name: Make a Directory using command module	#task3  
+      command: "mkdir /home/ansible/exampledir2"
+...				
+하고 저장한다.
+ 
+>host: all은 인벤토리내 모든 호스트에서 실행하겠다는 뜻이다.
+tasks는 현재 3개의 task가 있는데 정의하는 명령의 단위이다.
+여기서는 각 copy라는 모듈, file이라는 모듈, command라는 모듈이 사용되었다.
+이 예제는 대부분 선언적인 특성을 가지고 있는데, 나열하자면 
+1.	모듈 사용: 각 작업(tasks)은 Ansible이 제공하는 모듈을 사용하여 작업을 정의한다. 여기서 copy 모듈과 file 모듈이 사용되었다. 이 모듈들은 상태를 명시적으로 정의하는 데 사용된다.
+2.	상태 정의: 예를 들어, file 모듈을 사용하여 디렉토리를 생성하는 작업은 상태를 정의하는 데 사용했다. state: directory라는 옵션은 /home/exampledir1이라는 디렉토리를 만들도록 선언한다.
+3.	명령형 사용: 마지막 작업에서는 command 모듈을 사용하여 명령형 스타일로 디렉토리를 생성하는 명령을 실행하는데 이 부분은 비교적 명령형이지만, Ansible이 제공하는 모듈을 활용하는 것이 일반적이다.
+
+플레이북을 실행하고, 결과값을 한번 보자.
+[user@ansible-control 20231124]$ ansible-playbook playbook-example1.yaml 
+PLAY [Playbook Example1] *******************************************************
+TASK [Gathering Facts] *********************************************************
+ok: [ansible-node02]
+ok: [ansible-node01]
+fatal: [ansible-node03]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh: ssh: connect to host ansible-node03 port 22: No route to host", "unreachable": true}
+TASK [Copy a file] *************************************************************
+changed: [ansible-node02]
+changed: [ansible-node01]
+TASK [Make a Directory] ********************************************************
+changed: [ansible-node01]
+changed: [ansible-node02]
+TASK [Make a Directory using command module] ***********************************
+changed: [ansible-node01]
+changed: [ansible-node02]
+PLAY RECAP *********************************************************************
+ansible-node01             : ok=4    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=4    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=0    changed=0    unreachable=1    failed=0    skipped=0    rescued=0    ignored=0   
+라고 도출된다.
+>gathering facts는 팩트를 수집하는단계이고, 나중에 변수를 다룰때 설명한다. 정보를 수집하는정도로만 알도록 하자. / 다음으로 Task가 총3개가 실행되었고 changed가 변경점으로 나타난다. ok는 변경점은 없으나 작업은 성공했다고 표기된다. / 빨간색 node03 unreachable은 현재 노드가 02까지밖에 생성되지 않았기에 표시되는 것이다.
+
+#멱등성
+>앤서블은 기본적으로 멱등성을 나타내므로 여러번 playbook을 실행하더라도 같은 결과를 나타내준다. 또다시 같은 플레이북을 실행하면
+[user@ansible-control 20231124]$ ansible-playbook playbook-example1.yaml 
+PLAY [Playbook Example1] *******************************************************
+TASK [Gathering Facts] *********************************************************
+ok: [ansible-node02]
+ok: [ansible-node01]
+fatal: [ansible-node03]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh: ssh: connect to host ansible-node03 port 22: No route to host", "unreachable": true}
+TASK [Copy a file] *************************************************************
+ok: [ansible-node02]
+ok: [ansible-node01]
+TASK [Make a Directory] ********************************************************
+ok: [ansible-node02]
+ok: [ansible-node01]
+TASK [Make a Directory using command module] ***********************************
+fatal: [ansible-node01]: FAILED! => {"changed": true, "cmd": ["mkdir", "/home/ansible/exampledir2"], "delta": "0:00:00.005209", "end": "2023-11-24 16:44:18.523093", "msg": "non-zero return code", "rc": 1, "start": "2023-11-24 16:44:18.517884", "stderr": "mkdir: cannot create directory ‘/home/ansible/exampledir2’: File exists", "stderr_lines": ["mkdir: cannot create directory ‘/home/ansible/exampledir2’: File exists"], "stdout": "", "stdout_lines": []}
+fatal: [ansible-node02]: FAILED! => {"changed": true, "cmd": ["mkdir", "/home/ansible/exampledir2"], "delta": "0:00:00.007028", "end": "2023-11-24 16:44:18.546954", "msg": "non-zero return code", "rc": 1, "start": "2023-11-24 16:44:18.539926", "stderr": "mkdir: cannot create directory ‘/home/ansible/exampledir2’: File exists", "stderr_lines": ["mkdir: cannot create directory ‘/home/ansible/exampledir2’: File exists"], "stdout": "", "stdout_lines": []}
+PLAY RECAP *********************************************************************
+ansible-node01             : ok=3    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=3    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=0    changed=0    unreachable=1    failed=0    skipped=0    rescued=0    ignored=0   
+>뭔가 빨간게 많은데, task 3( make a directory using command module)이 죄다 빨갛다. 이 에러는 바로 ‘ File exists ‘라는 이유를 내뱉고있다. 모듈이 보고를 하는 것이다. 노드01,노드02를 보면 failed카운트가 하나씩 존재하는데 바로 task3을 실행하지 못했다는 보고를 준다.
+
+[user@ansible-control 20231124]$ vim playbook-example2.yaml   다시 하나를 더 만든다
+---
+- name: Playbook example2
+  hosts: all
+  tasks:
+    - name: task1 - Install a package nfs-utils
+      yum:
+        name: nfs-utils
+        state: latest
+    - name: task2 - Download a URL
+      get_url:
+        url: https://docs.ansible.com/index.html
+        dest: /tmp/index.html
+...
+>앤서블은 get_url을 사용한다.이를 사용해서 nfs-utils를 설치하는 모듈을 사용했다.	
+이 작업은 에러가 날것이다. 왜냐면 root 유저로 실행하기때문이다. 따라서 권한상승과 관련된것을 추가해줘야 한다.
+ 
+따라서 yaml파일에 become을 추가해주고 실행한다.
+[user@ansible-control 20231124]$ ansible-playbook playbook-example2.yaml 
+
+[user@ansible-control 20231124]$ ssh ansible@ansible-node01   잘 실행됐나 확인을 해보면
+Last login: Fri Nov 24 17:01:06 2023 from 192.168.56.10
+[ansible@ansible-node01 ~]$ rpm -qa | grep nfs-utils
+nfs-utils-2.5.4-20.el9.x86_64
+>nfs-utils 패키지가 잘 설치된 것을 확인할 수 있다.
+필요에 따라서 관리자(root)권한이나 특정 유저권한이 필요하면 권한상승(become)을 통해서 yaml파일을 작성해주면 되겠다.
+
+
+
