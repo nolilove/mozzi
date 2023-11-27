@@ -1,0 +1,549 @@
+15주차 월요일 메모(앤서블-node03)
+
+-지난주 playbook 작성에 이어서 오늘은 node03(ubuntu os)를 추가하고 플레이북을 다시 작성.
+Ansible Playbook 기본 형태 (공백 2칸씩)
+---
+- name: ANSIBLE_PLAY_NAME
+  hosts: HOST_PATTERN
+
+  tasks:
+    - name: TASK1_NAME
+      MODULE:
+        field1: value1
+        field2: value2
+    - name: TASK2_NAME
+      MODULE:
+        field1: value1
+        field2: value2
+…
+
+11/24 실습했던 파일(ansible.cfg / inventory/)을 가져온다.
+[user@ansible-control 20231127]$ cp ../20231124/ansible.cfg  .
+[user@ansible-control 20231127]$ ll
+total 4
+-rw-r--r--. 1 user user 59 Nov 27 09:39 ansible.cfg
+[user@ansible-control 20231127]$ cp ../20231124/inventory .
+node03은 다른 os이기때문에 다른 그룹으로 묶어준다.(inventory)
+
+[user@ansible-control 20231127]$ vim inventory 
+[rocky]
+ansible-node01
+ansible-node02
+[ubuntu]
+ansible-node03
+
+이제 플레이북1을 작성해보자.
+$ vim playbook-example1.yaml
+---
+- name: Playbook example1
+  hosts: all
+
+  tasks:
+    - name: task1 - Print Hello world
+      debug:
+        msg: "Hello World"
+    - name: task2 - remove a file
+      command: "rm /tmp/hosts"
+    - name: task3 - remove a file using file module
+      file:
+        path: /tmp/ansiblefile01.txt
+        state: absent
+...
+ 
+
+# 플레이북 작성 시 오류를 체크하는법(문법적인 오류만, 그마저도 100%는 아님)
+[user@ansible-control 20231127]$ ansible-playbook playbook-example1.yaml --syntax-check
+playbook: playbook-example1.yaml
+
+# 플레이북 실행하기
+[user@ansible-control 20231127]$ ansible-playbook playbook-example1.yaml 
+PLAY [Playbook example1] *******************************************************
+TASK [Gathering Facts] *********************************************************
+The authenticity of host 'ansible-node03 (192.168.56.13)' can't be established.
+ED25519 key fingerprint is SHA256:dn2zkaX+ofEfsY1W06RtA940zGSNdDzb6qlrBFCLmMI.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? ok: [ansible-node02]
+ok: [ansible-node01]
+노드03의 경우 처음 사용하므로 ssh로 접속한적이 없다. 따라서 위 핑거프린트문이 생기고 yes해주자.
+
+ 
+그러면 이렇게 나오는데, 태스크에 실패하지 않은 노드들에서만 작업이 진행된다.
+play recap을 보며 파악하도록 한다.
+
+# node03 세팅 (키 기반 인증을 하도록 세팅)
+[user@ansible-control 20231127]$ ssh user@ansible-node03
+[user@ansible-control 20231127]$ ssh user@192.168.56.13
+각각 로그인 한번씩해서 들어갔다가 exit로 나온다.
+
+[user@ansible-control 20231127]$ ssh-copy-id ansible@ansible-node03
+유저 사용자의 공개키를 ansible-node03으로 옮겼다. 이러면 비밀번호를 생략할 수 있다.
+이렇게 세팅한뒤 conrtol인스턴스에서 다시 yaml playbook을 실행해본다.
+[user@ansible-control 20231127]$ ansible-playbook playbook-example1.yaml 
+PLAY [Playbook example1] *************************************************************************
+TASK [Gathering Facts] ***************************************************************************
+ok: [ansible-node03]
+ok: [ansible-node02]
+ok: [ansible-node01]
+TASK [task1 - Print Hello world] *****************************************************************
+ok: [ansible-node01] => {
+    "msg": "hello world
+}
+ok: [ansible-node02] => {
+    "msg": "hello world"
+}
+ok: [ansible-node03] => {
+    "msg": "hello world"
+태스크1까지는 모두 실행되었다.
+
+TASK [task2 - remove a file] *********************************************************************
+fatal: [ansible-node03]: FAILED! => {"changed": true, "cmd": ["rm", "/tmp/hosts"], "delta": "0:00:00.005560", "end": "2023-11-27 10:26:25.992845", "msg": "non-zero return code", "rc": 1, "start": "2023-11-27 10:26:25.987285", "stderr": "rm: cannot remove &apos;/tmp/hosts&apos;: No such file or directory", "stderr_lines": ["rm: cannot remove &apos;/tmp/hosts&apos;: No such file or directory"], "stdout": "", "stdout_lines": []}
+fatal: [ansible-node02]: FAILED! => {"changed": true, "cmd": ["rm", "/tmp/hosts"], "delta": "0:00:00.004243", "end": "2023-11-27 10:26:26.110492", "msg": "non-zero return code", "rc": 1, "start": "2023-11-27 10:26:26.106249", "stderr": "rm: cannot remove &apos;/tmp/hosts&apos;: No such file or directory", "stderr_lines": ["rm: cannot remove &apos;/tmp/hosts&apos;: No such file or directory"], "stdout": "", "stdout_lines": []}
+fatal: [ansible-node01]: FAILED! => {"changed": true, "cmd": ["rm", "/tmp/hosts"], "delta": "0:00:00.004179", "end": "2023-11-27 10:26:26.121047", "msg": "non-zero return code", "rc": 1, "start": "2023-11-27 10:26:26.116868", "stderr": "rm: cannot remove &apos;/tmp/hosts&apos;: No such file or directory", "stderr_lines": ["rm: cannot remove &apos;/tmp/hosts&apos;: No such file or directory"], "stdout": "", "stdout_lines": []}
+
+PLAY RECAP ***************************************************************************************
+ansible-node01             : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+태스크2부터는 작업이 실행되지 않았다.
+실패를 했을 때 별도의 제어부분은 앤서블의 제어문 부분을 다룰 때 자세히 다룬다.
+*태스크가 실패하게 되면, 다음 태스크에 대해서 노드에 실행하지 않는다.
+
+# 플레이북 실행시 패스워드 묻기 (--ask-pass)
+[user@ansible-control 20231127]$ ansible-playbook playbook-example1.yaml --ask-pass
+SSH password:  ansible
+
+다시 나와서 새로운 플레이북을 작성한다.
+[user@ansible-control 20231127]$ vim playbook-example2.yaml
+---
+- name: Playbook example2 - multiple play
+  hosts: all
+  tasks:
+    - name: task01
+      debug:
+        msg: "first play - task1"
+    - name: task02
+      file:
+        path: /tmp/test01
+        state: touch
+
+- name: Playbook example2 - second play
+  hosts: ubuntu
+  tasks:
+    - name: task11
+      file:
+        path: /home/ansible/ubuntufile01.txt
+        state: touch
+    - name: task12
+      copy:
+        src: /etc/crontab
+        dest: /tmp/crontab.bak
+...
+
+이번 플레이북의 형태는 플레이북 두개가 합쳐진 형태이다. 
+
+[user@ansible-control 20231127]$ mv playbook-example_multiple.yaml playbook-example2_multiple.yaml[user@ansible-control 20231127]$ ansible-playbook playbook-example2_multiple.yaml 
+피일이름을 바꿨다.
+[user@ansible-control 20231127]$ ansible-playbook playbook-example2_multiple.yaml로 실행하면 여러개의 플레이를 포함하는 플레이북을 작성했다.
+
+# remote_user 플레이북
+ 
+user 유저에게 권한이 있는 플레이북을 생성했다.
+[user@ansible-control 20231127]$ ansible-playbook playbook-example3.yaml --ask-pass
+ssh password: user 를 입력하면 진행된다.
+ 
+[user@ansible-control 20231127]$ ansible all -m command -a "cat /home/user/exampledir1/userfile01.txt" -u user --ask-pass		입력시
+SSH password:
+ansible-node03 | CHANGED | rc=0 >>
+Hello ansible
+ansible-node01 | CHANGED | rc=0 >>
+Hello ansible
+ansible-node02 | CHANGED | rc=0 >>
+Hello ansible
+플레이북에서 실행된 내역(만든 파일들)이 조회된다.
+
+# 관리자 권한으로 사용&실행하기( 권한상승 관련, --become )
+ 
+[user@ansible-control 20231127]$ vim playbook-example4_become1.yaml
+[user@ansible-control 20231127]$ cat playbook-example4_become1.yaml 
+---
+- name: playbook example4 - become1
+  hosts: all
+  tasks:
+    - name: Install a package cifs-utils
+      yum: 
+        name: cifs-utils
+        state: latest
+    - name: Remove a file /tmp/hosts
+      file:
+        path: /tmp/hosts
+        state: absent
+...
+이렇게 작성을 하고 실행한다.
+
+[user@ansible-control 20231127]$ ansible-playbook playbook-example4_become1.yaml 
+으로 실행하면
+TASK [Install a package cifs-utils] **************************************************************
+fatal: [ansible-node03]: FAILED! => {"ansible_facts": {"pkg_mgr": "apt"}, "changed": false, "msg": ["Could not detect which major revision of yum is in use, which is required to determine module backend.", "You should manually specify use_backend to tell the module whether to use the yum (yum3) or dnf (yum4) backend})"]}
+fatal: [ansible-node01]: FAILED! => {"changed": false, "msg": "This command has to be run under the root user.", "results": []}
+fatal: [ansible-node02]: FAILED! => {"changed": false, "msg": "This command has to be run under the root user.", "results": []}
+빨간색이 우리를 맞이한다. 권한문제이다.
+[user@ansible-control 20231127]$ vim playbook-example4_become1.yaml
+에서 become: true를 추가해준다
+ 
+다시 실행해보면 
+ 
+node01과 node02는 실행되었는데, node03은 실행이 안된 것을 알 수 있다. 이 이유는, node03이 “yum”이 아닌 “apt-get” 를 써야하는 Ubuntu os 이기때문에 발생한다. 
+따라서 다시 수정한다. 
+  hosts: all 을 hosts: rocky 로 수정하고 실행.
+ 
+이 경우에는 에러없이 잘 작동한다.
+
+이번에는 Ubuntu도 작동하게끔 만드는 야믈파일 플레이북을 다시 만들어보자. 
+[user@ansible-control 20231127]$ vim playbook-example5_become2.yaml 
+
+ 
+---
+- name: Playbook example5 - become2
+  hosts: all
+
+  tasks:
+    - name: make a directory using normal user ansible
+      file: 
+        path: /home/ansible/exampledir2
+        state: directory
+        mode: &apos;0755&apos;
+    - name: make a directory using super user root
+      file:
+        path: /work
+        state: directory
+        mode: &apos;0777&apos;
+    - name: copy a file
+      copy:
+        src: /etc/crontab
+        dest: /work/crontab.example
+        mode: &apos;0777&apos;
+...
+우선 위와같이 먼저 작성을 한다. 여기서 root유저권한으로 뭔가를 설정하는 부분이 있는데, 여기에 추가할 내용은 become이다. 
+      become: true
+      become_user: root
+를 추가로 적어주면, 특정사용자(루트)의 권한으로 실행하는 야믈파일이 생성된다.
+ 
+이제 실행을 해보게 되면, 
+[user@ansible-control 20231127]$ ansible-playbook playbook-example5_become2.yaml 
+PLAY [Playbook example5 - become2] ***************************************************************
+TASK [Gathering Facts] ***************************************************************************
+ok: [ansible-node03]
+ok: [ansible-node02]
+ok: [ansible-node01]
+TASK [make a directory using normal user ansible] ************************************************
+changed: [ansible-node03]
+ok: [ansible-node02]
+ok: [ansible-node01]
+TASK [make a directory using super user root] ****************************************************
+changed: [ansible-node03]
+changed: [ansible-node02]
+changed: [ansible-node01]
+TASK [copy a file] *******************************************************************************
+changed: [ansible-node03]
+changed: [ansible-node01]
+changed: [ansible-node02]
+PLAY RECAP ***************************************************************************************
+ansible-node01             : ok=4    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=4    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=4    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+잘 실행되었다.
+
+[user@ansible-control 20231127]$ ssh ansible-node01 에 가서 확인해본다. 
+user@ansible-node01&apos;s password: 
+Activate the web console with: systemctl enable --now cockpit.socket
+Last login: Mon Nov 27 11:31:00 2023 from 192.168.56.10
+[user@ansible-node01 ~]$ ls -l
+total 0
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Desktop
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Documents
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Downloads
+drwxrwxr-x. 2 user user 28 Nov 27 11:19 exampledir1
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Music
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Pictures
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Public
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Templates
+drwxr-xr-x. 2 user user  6 Jul 10 00:50 Videos
+[user@ansible-node01 ~]$ ls -ld
+drwx------. 16 user user 4096 Nov 27 11:19 .
+[user@ansible-node01 ~]$ ls -ld /work
+drwxrwxrwx. 2 root root 29 Nov 27 12:01 /work
+플레이북으로 생성한 부분이 조회된다. 
+
+위에서 기본적인 부분을 다루었다.
+# 플레이북을 어떤 값을 기준으로 동작을 제어하고자 할때 ( “변수” )
+변수(Variable) : 변할 수 있는 값
+변수 이름 지정 규칙
+  - 사용 가능한 문자 종류 : 영문자, 숫자, '_'
+  - 변수 이름의 시작은 영문자 혹은 '_'로만 시작할 수 있음.
+      variable1
+      varable2
+      _testvariable1
+      1stvariable   (X)
+   - Ansible의 키워드, Python 키워드를 변수 이름으로 지정할 수 없음.
+   - 유효하지 않은 변수 이름
+       1stvariable ,  test-port  ,  test.part , 1234
+
+Ansible Keywords
+https://docs.ansible.com/ansible/latest/reference_appendices/playbooks_keywords.html
+
+Python Keywords
+https://docs.python.org/ko/3/reference/lexical_analysis.html#keywords
+
+# Ansible 변수의 종류 {{ }}
+ - 기본 변수
+remote_dir: /test/abc
+
+"remote directory path is {{ remote_dir }} ."
+
+ - 목록 변수 (각각의 순서로 위에서 아래로,  index로 나타나있다)
+list_variable1:
+  - northeast
+  - southeast
+  - midwest
+
+"{{ list_variable1[0] }}"                       <<# 대괄호안에 인덱스값을 넣는다
+"{{ list_variable1[1] }}"
+"{{ list_variable1[2] }}"
+
+ - 사전 변수(dictionary variables)     필드에 접근하기위한 기준
+dic_variable1:
+  field1: one             <해당 데이터의 key를 적음
+  field2: 2
+
+(1) 사전변수_대괄호 표기법 참조
+"{{ dic_variable1['field1'] }}"               <(key의 이름부분을 인용부호로)
+"{{ dic_variable1['field2'] }}"
+
+(2) 사전변수_점 표기법 참조
+"{{ dic_variable1.field1 }}"                 
+"{{ dic_variable1.field2 }}"
+
+적을때 꼭 데이터 계층레벨을 맞춰주어야 한다(공백간)
+#실습
+
+[user@ansible-control 20231127]$ cat playbook-variable1.yaml 
+---
+- name: Playbook variable1
+  hosts: all
+  vars: 
+    var1: 1
+    var2: "hello ansible"
+    books:
+      - "moby-dick"
+      - "wuthering heights"
+      - "Faust"
+      - "the divine comedy by dante"
+      - "the odyssey"
+      - "Don Quixote"
+      - "the stranger"
+      - "wings"
+      - "the inferno"
+      - "the dream of crimson mansion"
+    main_app:
+      name: "SNS Messenger"
+      location: "North datacenter"
+      access: "Private"
+   
+  tasks:
+    - name: Print variable var1, var2
+      debug:
+        msg: "var1 is {{ var1 }}, var2 is {{ var2 }}"
+    - name: Print list variable books[0]
+      debug:
+        msg: "{{ books[0] }}."
+    - name: Print list variable books[1]
+      debug:
+        msg: "{{ books[1] }}."
+    - name: Print list variable books[2]
+      debug:
+        msg: "{{ books[2] }}."
+    - name: Print dictionary variable main_app
+      debug:
+        msg: "name - {{ main_app[&apos;name&apos;] }}, location - {{ main_app.location }}, access - {{ main_app[&apos;access&apos;] }}"
+...
+>>단순 디버그 모듈을 사용해서 결과값을 출력해보는 실습이다. 
+[user@ansible-control 20231127]$ ansible-playbook playbook-variable1.yaml 
+로 먼저 문법에 오류가 없는지 확인해본다.
+
+#변수 정의 위치 (변수를 설정 가능한 필드)
+  - Inventory
+  - Playbook
+  - 외부 참조 파일
+  - Ansible Role
+  - 명령어 -e 옵션 지정
+
+변수파일하나를 생성한다.
+[user@ansible-control 20231127]$ cat playbook-vars_files1.yaml
+---
+- name: playbook vars_files1
+  hosts: all
+  vars_files:
+    - external_var1.yaml
+
+  tasks:
+    - name: "print variable test1"
+      debug:
+        msg: "{{ test1 }}"
+    - name: "print variable list1[1]"
+      debug:
+        msg: "{{ list1[1] }}"
+...
+
+>파일을 하나 더 만든다. (외부변수파일) 
+[user@ansible-control 20231127]$ vim external_var1.yaml
+이 외부 변수파일이 있어야 바로위의 yaml파일이 동작하니 필수적으로 있어야 한다. 
+# External Variable File
+test1: 1234
+list1:
+  - "Hello world"
+  - "Ansible Automation"
+  - "Public Cloud"
+
+# Inventory 에서 변수 설정(선언) 하기. 
+[user@ansible-control 20231127]$ cp inventory inventory.bak
+[user@ansible-control 20231127]$ vim inventory 
+[rocky]
+ansible-node01
+ansible-node02
+
+[ubuntu]
+ansible-node03
+여기에서 변수를 선언하기위해서는 
+[user@ansible-control 20231127]$ cp inventory inventory.bak
+[user@ansible-control 20231127]$ vim inventory
+[rocky]
+ansible-node01    test1=hello service_name=httpd
+ansible-node02    test1=hi    service_name=httpd
+
+[ubuntu]
+ansible-node03    test1=hello service_name=apache2
+
+[rocky:vars]
+http_port=80
+
+[ubuntu:vars]
+http_port=8080
+https_port=8443
+
+"playbook-variable2_inventory.yaml" 하나를 더 작성한다.
+[user@ansible-control 20231127]$ vim playbook-variable2_inventory.yaml
+---
+- name: Playbook variable2 inventory variable
+  hosts: all
+
+  tasks:
+    - name: Print Host Variable test1, service_name
+      debug:
+        msg: "test1 - {{ test1 }}, service_name - {{ service_name }}"
+    - name: Print Group Variable http_port
+      debug:
+        msg: "http_port is {{ http_port }}"
+
+- name: Play for ubuntu group
+  hosts: ubuntu
+
+  tasks:
+    - name: Print Group Variable https_port
+      debug:
+        msg: "https_port is {{ https_port }}"
+...
+ 
+작성한 플레이북을 실행시키면, 
+
+[user@ansible-control 20231127]$ ansible-playbook playbook-variable2_inventory.yaml 
+PLAY [Playbook variable2 inventory variable] *****************************************************
+TASK [Gathering Facts] ***************************************************************************
+ok: [ansible-node01]
+ok: [ansible-node03]
+ok: [ansible-node02]
+TASK [Print Host Variable test1, service_name] ***************************************************
+ok: [ansible-node01] => {
+    "msg": "test1 - hello, service_name - httpd"
+}
+ok: [ansible-node02] => {
+    "msg": "test1 - hi, service_name - httpd"
+}
+ok: [ansible-node03] => {
+    "msg": "test1 - hello, service_name - apache2"
+}
+TASK [Print Group Variable http_port] ************************************************************
+ok: [ansible-node01] => {
+    "msg": "http_port is 80"
+}
+ok: [ansible-node02] => {
+    "msg": "http_port is 80"
+}
+ok: [ansible-node03] => {
+    "msg": "http_port is 8080"
+}
+PLAY [Play for ubuntu group] *********************************************************************
+TASK [Gathering Facts] ***************************************************************************
+ok: [ansible-node03]
+TASK [Print Group Variable https_port] ***********************************************************
+ok: [ansible-node03] => {
+    "msg": "https_port is 8443"
+}
+PLAY RECAP ***************************************************************************************
+ansible-node01             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=5    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+# -e 옵션을 사용하는 외부 변수
+[user@ansible-control 20231127]$ vim playbook-variable3_extra_variable.yaml 작성
+ 
+[user@ansible-control 20231127]$ cat playbook-variable3_extra_variable.yaml 
+---
+- name: playbook variable4 extra_variable
+  hosts: all
+  vars: 
+    var1: "playbook variable"
+
+  tasks:
+    - name: print playbook variable var1
+      debug:
+        msg: "var1 is {{ var1 }}"
+    - name: print extra variable extra_var1
+      debug:
+        msg: "extra_var1 is {{ extra_var1 }}"
+...
+플레이북을 실행해보면
+[user@ansible-control 20231127]$ ansible-playbook playbook-variable3_extra_variable.yaml -e "Variable1=value1" 형식이고
+[user@ansible-control 20231127]$ ansible-playbook playbook-variable3_extra_variable.yaml -e "extra_var1=&apos;Extra variable&apos;"
+PLAY [playbook variable4 extra_variable] *********************************************************
+TASK [Gathering Facts] ***************************************************************************
+ok: [ansible-node03]
+ok: [ansible-node01]
+ok: [ansible-node02]
+TASK [print playbook variable var1] **************************************************************
+ok: [ansible-node01] => {
+    "msg": "var1 is playbook variable"
+}
+ok: [ansible-node02] => {
+    "msg": "var1 is playbook variable"
+}
+ok: [ansible-node03] => {
+    "msg": "var1 is playbook variable"
+}
+TASK [print extra variable extra_var1] ***********************************************************
+ok: [ansible-node01] => {
+    "msg": "extra_var1 is Extra variable"
+}
+ok: [ansible-node02] => {
+    "msg": "extra_var1 is Extra variable"
+}
+ok: [ansible-node03] => {
+    "msg": "extra_var1 is Extra variable"
+}
+PLAY RECAP ***************************************************************************************
+ansible-node01             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+
+
