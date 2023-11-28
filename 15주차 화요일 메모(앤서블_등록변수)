@@ -1,0 +1,765 @@
+15주차 화요일 메모(앤서블_변수)
+
+오늘개요- # Register (레지스터) 구문을 사용하기 _등록변수 / ansible 변수의 우선순위 / 앤서블 팩트 변수
+>>’등록변수는 어떤 모듈에 실행결과를 저장하는것’
+>> ansible_facts 변수- 딕셔너리의 각 키는 특정 유형의 정보를 나타내며, 이를 통해 해당 정보에 접근할수 있음을 기억하자
+
+지난개요- 지난시간부터 ansible 변수 파트에 대해서 학습했고, 오늘이어서 진행함
+Ansible 변수의 종류 {{ }}
+- 기본 변수
+- 목록 변수
+- 사전 변수 ( 대괄호 표기법, 점 표기법 )
+#변수 정의 위치 (변수를 설정 가능한 필드)
+  - Inventory
+  - Playbook
+  - 외부 참조 파일
+  - Ansible Role
+  - 명령어 -e 옵션 지정
+Inventory 에서 변수 설정(선언) 하기.
+-e 옵션을 사용하는 외부 변수
+중간점검_ Ansible은 어디에 쓰일까
+1. 인프라 가시성(가독성) 2. 규정 준수(Compliance) 3. 비즈니스 연속성 4. 클라우드 운영 업무 5. 클라우드 마이그레이션 6. 인프라 최적화 7. 인프라 오케스트레이션 8. 자동화된 문제 해결(Troubleshooting)을 위해서 쓰인다.
+
+#실습  
+오늘날짜 폴더를 만들고 앤시블 구성파일을 생성한다.
+[user@ansible-control 20231128]$ cat ansible.cfg 
+[defaults]
+inventory = inventory
+remote_user = ansible
+
+[user@ansible-control 20231128]$ cat inventory 
+[rocky]
+ansible-node01
+ansible-node02
+[ubuntu]
+ansible-node03
+
+[user@ansible-control 20231128]$ vim playbook-variable1.yaml
+---
+- name: Playboook variable1
+  hosts: all
+  vars:
+    var1: 5678
+  vars_files:
+  - vars/external_variable1.yaml
+
+  tasks:
+  - name: Print Playbook Variable var1
+    debug:
+      msg: "var1 - {{ var1 }}"
+  - name: Print Playbook External File Variable var2
+    debug:
+      msg: "var2 - {{ var2 }}"
+  - name: Print External Variable var3
+    debug:
+      msg: var3 - {{ var3 }}
+...
+
+>>VAR 3는 -E 옵션을 가지고 사용할 예정이므로 큰따옴표를 안넣었다.
+mkdir vars 로 폴더생성
+[user@ansible-control 20231128]$ vim vars/external_variable1.yaml
+var2: external_variable1.yaml
+status: started
+op_mode: operational
+
+
+# Ansible 변수의 우선순위
+ - 외부 변수 (명령어에서 -e 옵션을 지정하여 변수를 Ansible Play로 전달)
+ - task 변수 (지정한 task 내에서만 유효한 변수)
+ - block 변수 (지정한 block 내에서만 유효한 변수)
+ - Ansible Role의 vars에서 정의한 파일 / include_vars 모듈로 읽은 변수를 정의한 파일
+ - Ansible Play의 vars_files 변수
+ - Ansible Play의 vars_prompt 변수
+ - Ansible Play의 vars 변수
+ - set_fact로 지정한 값
+ - 등록 변수(Registered Variable, register로 지정한 값)
+ - Ansible Fact
+ - Playbook 디렉터리에서 host_vars의 호스트 변수를 정의한 파일
+ - Playbook 디렉터리에서 group_vars의 그룹 변수를 정의한 파일
+ - Inventory 디렉터리에서 host_vars의 호스트 변수를 정의한 파일
+ - Inventory 디렉터리에서 group_vars의 그룹 변수를 정의한 파일
+ - Inventory 파일에서 정의한 변수
+ - Ansible Role의 defaults 디렉터리에서 default 변수를 정의한 파일
+
+[user@ansible-control 20231128]$ vim playbook-variable2_vars_prompt1.yaml
+---
+- name: Playbook variable2 vars_prompt 1
+  hosts: all
+  vars_prompt:
+  - name: username
+    prompt: What is your name?
+    private: false
+
+  tasks:
+  - name: Print Input value
+    debug:
+      msg: "Hello {{ username }}."
+...
+
+이를 실행해보면 
+[user@ansible-control 20231128]$ ansible-playbook playbook-variable2_vars_prompt1.yaml
+what is your name?": user
+PLAY [Playbook variable2 vars_prompt 1] ****************************************
+TASK [Gathering Facts] *********************************************************
+ok: [ansible-node01]
+ok: [ansible-node02]
+ok: [ansible-node03]
+TASK [print input value] *******************************************************
+ok: [ansible-node01] => {
+    "msg": "Hello user."
+}
+ok: [ansible-node02] => {
+    "msg": "Hello user."
+}
+ok: [ansible-node03] => {
+    "msg": "Hello user."
+}
+PLAY RECAP *********************************************************************
+ansible-node01             : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+>>간단하게 텍스트를 출력해주는 플레이북이 실행되었다.
+
+# 유저를 생성하는 플레이북 작성하기
+[user@ansible-control 20231128]$ vim playbook-vars_prompt_create_user1.yaml 를 새로생성
+ 
+
+---
+- name: Playbook vars_prompt create user 1
+  hosts: all
+  vars_prompt:
+  - name: username
+    prompt: "Please Enter the username."
+    private: false
+
+  tasks:
+  - name: Create a user {{ username }}
+    user:
+      name: "{{ username }}"
+      state: present
+      create_home: true
+...
+
+이제 이를 실행해본다.
+TASK [create the user dante] ***************************************************
+fatal: [ansible-node03]: FAILED! => {"changed": false, "msg": "useradd: Permission denied.\nuseradd: cannot lock /etc/passwd; try again later.\n", "name": "dante", "rc": 1}
+fatal: [ansible-node01]: FAILED! => {"changed": false, "msg": "useradd: Permission denied.\nuseradd: cannot lock /etc/passwd; try again later.\n", "name": "dante", "rc": 1}
+fatal: [ansible-node02]: FAILED! => {"changed": false, "msg": "useradd: Permission denied.\nuseradd: cannot lock /etc/passwd; try again later.\n", "name": "dante", "rc": 1}
+라며 에러가 출력되는데 보면 권한문제이다.
+[user@ansible-control 20231128]$ ansible-playbook playbook-vars_prompt_create_user1.yaml --become  를 해주거나, become : true 를 추가해주면 된다.
+ 
+ 
+결과값이 잘 출력된다.
+유저를 생성하는 플레이북을 조회해보면, 
+[user@ansible-control 20231128]$ ansible all -m command -a "tail -n 1 /etc/passwd"
+ansible-node03 | CHANGED | rc=0 >>
+yaml:x:1002:1002::/home/yaml:/bin/sh
+ansible-node01 | CHANGED | rc=0 >>
+yaml:x:1002:1002::/home/yaml:/bin/bash
+ansible-node02 | CHANGED | rc=0 >>
+yaml:x:1002:1002::/home/yaml:/bin/bash
+로 yaml이라는 사용자가 잘 추가된 것을 확인할 수 있다.
+
+# 유저를 지우는 플레이북 작성하기
+간단하다.
+[user@ansible-control 20231128]$ cp playbook-vars_prompt_create_user1.yaml playbook-vars_prompt_remove_user1.yaml		로 플레이북을 생성한다.
+ 
+[user@ansible-control 20231128]$ cat playbook-vars_prompt_remove_user1.yaml 
+---
+- name: playbook vars_files create user 1
+  hosts: all
+  become: true
+  vars_prompt: 
+    - name: username
+      prompt: Please enter the username.
+      private: false
+
+  tasks: 
+    - name: remove the user {{ username }}
+      user: 
+        name: "{{ username }}"
+        state: absent 
+...
+이제 실행해보자.
+[user@ansible-control20231128]$ ansible-playbook playbook-vars_prompt_remove_user1.yaml 
+ 
+이제 확인해보면
+[user@ansible-control 20231128]$ ansible all -m command -a "grep yaml /etc/passwd"
+ansible-node03 | FAILED | rc=1 >>
+non-zero return code
+ansible-node01 | FAILED | rc=1 >>
+non-zero return code
+ansible-node02 | FAILED | rc=1 >>
+non-zero return code
+명령한 yaml 조회에 return값이 오지않아(지워져서) 잘 실행되었음을 알 수 있다.
+
+# 플레이북으로 만든 사용자로 접속하기
+[user@ansible-control 20231128]$ ansible-playbook playbook-vars_prompt_create_user1.yaml
+로 user01을 생성해본다. 
+그리고 node01에 접속을 시도해본다.
+[user@ansible-control 20231128]$ ssh user01@ansible-node01
+user01@ansible-node01&apos;s password: 
+Permission denied, please try again.
+그런데 접속하기위해서는 user01@ansible-node01의 Passwd가 필요하다.
+ansible 플레이북 작성 모듈을 한번찾아본다.
+/etc/shadow 파일에 생기는것처럼 설정을 해보자.
+
+[user@ansible-control 20231128]$ cp playbook-vars_prompt_create_user1.yaml  playbook-vars_prompt_create_user2.yaml 
+일단 user1>user2 yaml파일로 복사했다.
+패스워드를 해시값의 형태로 만들어줘야 한다.
+ 
+[user@ansible-control 20231128]$ cat playbook-vars_prompt_create_user2.yaml 
+---
+- name: playbook vars_files create user 2
+  hosts: all
+  become: true
+  vars_prompt: 
+    - name: username
+      prompt: "Please enter the username."
+      private: false
+    - name: password
+      prompt: "Please enter the password."
+      private: true
+
+  tasks: 
+    - name: create the user {{ username }}
+      user: 
+        name: "{{ username }}"
+        state: present 
+        create_home: true
+    - name: print the password ( hash value_plain text style)
+      debug:
+        msg: "{{ password }}"
+...
+실행해본다 (대문자없게 조심)
+
+[user@ansible-control 20231128]$ ansible-playbook playbook-vars_prompt_create_user2.yaml
+Please enter the username.: user02
+Please enter the password.: 			유저02와 user라는 pw를 생성한다.
+PLAY [playbook vars_files create user 2] ***************************************
+TASK [Gathering Facts] *********************************************************
+ok: [ansible-node03]
+ok: [ansible-node02]
+ok: [ansible-node01]
+
+TASK [create the user user02] **************************************************
+changed: [ansible-node03]
+changed: [ansible-node01]
+changed: [ansible-node02]
+TASK [print the password (plain text style)] ***********************************
+ok: [ansible-node01] => {
+    "msg": "user"
+}
+ok: [ansible-node02] => {
+    "msg": "user"
+}
+ok: [ansible-node03] => {
+    "msg": "user"
+}
+PLAY RECAP *********************************************************************
+ansible-node01             : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+# 이번엔 암호화를 해보자.
+
+- name: playbook vars_files create user 2
+  hosts: all
+  become: true
+  vars_prompt: 
+    - name: username
+      prompt: "Please enter the username."
+      private: false
+    - name: password
+      prompt: "Please enter the password."
+      encrypt: sha512_crypt
+      private: true
+      salt_size: 16
+
+  tasks: 
+    - name: create the user {{ username }}
+      user: 
+        name: "{{ username }}"
+        state: present 
+        create_home: true
+    - name: print the password (plain text style)
+      debug:
+        msg: "{{ password }}"
+...
+암호화한다는 옵션을 껴넣었다.
+이제 실행을 해보면,
+[user@ansible-control 20231128]$ ansible-playbook playbook-vars_prompt_create_user2.yaml
+Please enter the username.: user01
+Please enter the password.: 
+[DEPRECATION WARNING]: Encryption using the Python crypt module is deprecated. 
+The Python crypt module is deprecated and will be removed from Python 3.13. 
+Install the passlib library for continued encryption functionality. This 
+feature will be removed in version 2.17. Deprecation warnings can be disabled 
+by setting deprecation_warnings=False in ansible.cfg.
+PLAY [playbook vars_files create user 2] ***************************************
+TASK [Gathering Facts] *********************************************************
+ok: [ansible-node03]
+ok: [ansible-node01]
+ok: [ansible-node02]
+TASK [create the user user01] **************************************************
+ok: [ansible-node03]
+ok: [ansible-node02]
+ok: [ansible-node01]
+TASK [print the password (plain text style)] ***********************************
+ok: [ansible-node01] => {
+    "msg": "$6$qKop0wrhJC3KQ01I$1yptSEotjuwxj/X/kcKbMnbJa7mbXGNm.uYCeH7DiAgrAtBG0XumM.BgxPyuRL/yP.W3ePMzsBmUBoAfwdsPo1"
+}
+ok: [ansible-node02] => {
+    "msg": "$6$qKop0wrhJC3KQ01I$1yptSEotjuwxj/X/kcKbMnbJa7mbXGNm.uYCeH7DiAgrAtBG0XumM.BgxPyuRL/yP.W3ePMzsBmUBoAfwdsPo1"
+}
+ok: [ansible-node03] => {
+    "msg": "$6$qKop0wrhJC3KQ01I$1yptSEotjuwxj/X/kcKbMnbJa7mbXGNm.uYCeH7DiAgrAtBG0XumM.BgxPyuRL/yP.W3ePMzsBmUBoAfwdsPo1"
+}
+PLAY RECAP *********************************************************************
+ansible-node01             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+>> 암호화된 해시값(비밀번호)가 그대로 들어갔다.
+다시한번 task를 수정한다.
+---
+- name: playbook vars_files create user 2
+  hosts: all
+  become: true
+  vars_prompt:
+    - name: username
+      prompt: "Please enter the username."
+      private: false
+    - name: password
+      prompt: "Please enter the password."
+      encrypt: sha512_crypt
+      private: true
+      salt_size: 16
+
+  tasks:
+    - name: create the user {{ username }}
+      user:
+        name: "{{ username }}"
+        state: present
+        create_home: true
+        password: "{{ password }}"
+...
+>>추가한 부분이다.
+실행해본다.
+[user@ansible-control 20231128]$ ansible-playbook playbook-vars_prompt_create_user2.yaml
+Please enter the username.: user01
+Please enter the password.: 
+[DEPRECATION WARNING]: Encryption using the Python crypt module is deprecated. 
+The Python crypt module is deprecated and will be removed from Python 3.13. 
+Install the passlib library for continued encryption functionality. This 
+feature will be removed in version 2.17. Deprecation warnings can be disabled 
+by setting deprecation_warnings=False in ansible.cfg.
+PLAY [playbook vars_files create user 2] ***************************************
+TASK [Gathering Facts] *********************************************************
+ok: [ansible-node03]
+ok: [ansible-node02]
+ok: [ansible-node01]
+TASK [create the user user01] **************************************************
+changed: [ansible-node03]
+changed: [ansible-node01]
+changed: [ansible-node02]
+PLAY RECAP *********************************************************************
+ansible-node01             : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+이제 노드01에 접속해본다.
+[user@ansible-control 20231128]$ ssh user01@ansible-node01
+user01@ansible-node01&apos;s password:  user
+Last failed login: Tue Nov 28 11:54:01 KST 2023 from 192.168.56.10 on ssh:notty
+There were 2 failed login attempts since the last successful login.
+잘 로그인 됐다.
+[user@ansible-control 20231128]$ ansible all -m command -a "tail -n 2 /etc/passwd"
+로 계정을 조회해보자
+[user@ansible-control 20231128]$ ansible all -m command -a "tail -n 2 /etc/passwd"
+ansible-node03 | CHANGED | rc=0 >>
+user01:x:1002:1002::/home/user01:/bin/sh
+user02:x:1003:1003::/home/user02:/bin/sh
+ansible-node01 | CHANGED | rc=0 >>
+user01:x:1002:1002::/home/user01:/bin/bash
+user02:x:1003:1003::/home/user02:/bin/bash
+ansible-node02 | CHANGED | rc=0 >>
+user01:x:1002:1002::/home/user01:/bin/bash
+user02:x:1003:1003::/home/user02:/bin/bash
+>>생성한 user01과 user02를 삭제해주자.
+[user@ansible-control 20231128]$ ansible-playbook playbook-vars_prompt_remove_user1.yaml 
+user01, user02 삭제
+
+# 다른형태로 사용자 생성하기(password 설정, 자동화된 암호화)
+[user@ansible-control 20231128]$ vim playbook-create_user1.yaml
+ 
+---
+- name: Playbook create user 1
+  hosts: all
+  become: true
+  vars:
+    username: user02
+    password: test1234
+
+  tasks:
+  - name: Create a user {{ username }}
+    user:
+      name: "{{ username }}"
+      state: present
+      password: "{{ password }}"
+...
+이 형태로 생성해본다. 여기서 
+sha512해시 알고리즘을 사용한 password 생성을 해보고자 한다.
+ 
+---
+- name: Playbook create user 1
+  hosts: all
+  become: true
+  vars:
+    username: user02
+    password: test1234
+
+  tasks:
+  - name: Create a user {{ username }}
+    user:
+      name: "{{ username }}"
+      state: present
+      password: "{{ password | password_hash(‘sha512’) }}"
+...
+의 형태로 수정해주면 시스템이 알아먹는 해시값 알고리즘을 사용하는 passwd설정을 할 수 있다.
+여기서 실행해주게되면
+
+[user@ansible-control 20231128]$ ansible-playbook playbook-create_user1.yaml --syntax-check
+playbook: playbook-create_user1.yaml			문법에 오류없다.
+[user@ansible-control 20231128]$ ansible-playbook playbook-create_user1.yaml
+PLAY [Playbook create user 1] ********************************************************************
+TASK [Gathering Facts] ***************************************************************************
+ok: [ansible-node03]
+ok: [ansible-node01]
+ok: [ansible-node02]
+TASK [Create a user user02] **********************************************************************
+[DEPRECATION WARNING]: Encryption using the Python crypt module is deprecated. The Python crypt 
+module is deprecated and will be removed from Python 3.13. Install the passlib library for 
+continued encryption functionality. This feature will be removed in version 2.17. Deprecation 
+warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+[DEPRECATION WARNING]: Encryption using the Python crypt module is deprecated. The Python crypt 
+module is deprecated and will be removed from Python 3.13. Install the passlib library for 
+continued encryption functionality. This feature will be removed in version 2.17. Deprecation 
+warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+[DEPRECATION WARNING]: Encryption using the Python crypt module is deprecated. The Python crypt 
+module is deprecated and will be removed from Python 3.13. Install the passlib library for 
+continued encryption functionality. This feature will be removed in version 2.17. Deprecation 
+warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+changed: [ansible-node03]
+changed: [ansible-node01]
+changed: [ansible-node02]
+PLAY RECAP ***************************************************************************************
+ansible-node01             : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+>> user02가 각각 노드에 생성되었고, pw test1234를 가지는 유저가 생성되었다.
+
+
+등록 변수(Registered Variable)
+  - Ansible 모듈의 실행 결과를 저장하는 특별한 변수
+- register 구문을 사용하여 모듈의 실행 결과를 저장한 후 이를 활용함.
+tasks:
+  - name: TASK_NAME
+    MODULE:
+      field1: value1
+      field2: value2
+    register: REGISTERED_VARIABLE_NAME
+
+
+# Register (레지스터) 구문을 사용하기 _등록변수
+ 
+
+[user@ansible-control 20231128]$ vim playbook-variable3_registered_variable1.yaml
+---
+- name: playbook variable3 registered variable 1
+  hosts: all
+
+  tasks:
+    - name: task1 - list files
+      command: "ls -l /work"
+      register: result
+    - name: print file lists
+      debug:
+        msg: "{{ result }}"
+...
+~                 
+이러면 
+ 
+노드마다 실행결과를 print 하는 task에서 볼 수 있다. msg를 보면
+    "msg": {
+        "changed": true,
+        "cmd": [
+            "ls",
+            "-l",
+            "/work"
+등 실제로 한 내용을 비롯하여 조회하는 단계를 보여준다.
+        "stdout": "total 12\n-rwxrwxrwx 1 ansible ansible  451 11월 27 12:01 crontab.example\n-rw-rw-r-- 1 ansible ansible   14 11월 27 17:03 motd\n-rw-rw-r-- 1 ansible ansible 1187 11월 27 17:03 selinux-config-test",
+>>stdout은 표준 출력결과를 의미하며(standard output) 정상출력된 부분이 나타난다. "stderr": "" 는 에러부분을 나타내는데 지금 정상실행이므로 나타나진 않았다. 
+"stdout_lines" 에서는 stdout에서 한줄로 보여주던것을 라인별로 나눠서 데이터를 뽑아야 할 때 사용하기 편하도록 나온다.
+>>내가 출력부분만 줄별로 보고싶다면 stdout_lines 만을 선택해서 볼 수 있다. 이는 바로 아래에서 실습한다.
+
+
+# 결과 출력부분을 줄별로 나타내는 플레이북 작성하기 
+[user@ansible-control 20231128]$ cp playbook-variable3_registered_variable1.yaml  playbook-variable3_registered_variable2.yaml 복사해주고
+ 
+[user@ansible-control 20231128]$ cat playbook-variable3_registered_variable2.yaml 
+---
+- name: playbook variable3 registered variable 1
+  hosts: all
+
+  tasks:
+    - name: task1 - list files 
+      command: "ls -l /work"
+      register: result
+    - name: print file lists
+      debug: 
+        msg: "{{ result.stdout_lines }}"
+...
+이후 플레이북을 실행하고 조회를 해보면
+[user@ansible-control 20231128]$ ansible-playbook playbook-variable3_registered_variable2.yaml
+ 
+TASK [print file lists] ******************************************************************************************************************
+ok: [ansible-node01] => {
+    "msg": [
+        "total 12",
+        "-rwxrwxrwx. 1 ansible ansible  451 Nov 27 12:01 crontab.example",
+        "-rw-rw-r--. 1 ansible ansible   14 Nov 27 17:03 motd",
+        "-rw-r--r--. 1 ansible ansible 1187 Nov 27 17:03 selinux-config-test"
+    ]
+}
+위와 같이 내가 보고싶은 필드만 조회할 수 있다.
+
+# Ansible Fact 변수 (시스템정보)
+Ansible Fact
+  - Ansible이 관리 노드에서 자동으로 검색한 변수
+  - Ansible Fact는 관리 노드의 다양한 시스템 정보(장착된 Hostname, OS, Kernel, HardWare{Disk, NIC, CPU, RAM} , IP주소 등)를 포함하고 있다. 
+
+[user@ansible-control 20231128]$ ansible localhost -m setup
+>>이를 실행하게되면 fact 변수가 굉장히 굉장히 많이 나온다. localhost 호스트 하나만 보는건데도 팩트변수가 많이 조회된다.
+ 
+대충 스무페이지가까이 나오므로 다 적지는 않겠다.
+
+# Fact 변수의 표기법 (2가지- 이전버전표기법/신규표기법)
+이전 버전 표기법	ansible_facts 표기법(신규 표기법)	설명	비고
+ansible_hostname	ansible_facts['hostname']	Hostname	
+ansible_fqdn	ansible_facts['fqdn']	도메인 주소	
+ansible_enp0s3['ipv4']['address']	ansible_facts['enp0s3']['ipv4']['address']	enp0s3 네트워크 카드의 IPv4 주소	
+ansible_eth0['ipv4']['address']	ansible_facts['eth0']['ipv4']['address']	eth0 네트워크 카드의 IPv4 주소	
+ansible_dns['nameservers']	ansible_facts['dns']['nameservers']	DNS 서버 목록	
+ansible_vda1	ansible_facts['vda1']	디스크 파티션 vda1 정보	
+ansible_distribution	ansible_facts['distribution']	리눅스 배포판 확인	
+ansible_os_family	ansible_facts['os_family']	OS 계열 확인	
+ansible_kernel	ansible_facts['kernel']	커널 정보 확인	
+
+이제 실습으로 알아보자. 
+플레이북으로 확인하고싶으면
+
+[user@ansible-control 20231128]$ vim playbook-ansible_facts1.yaml 로 작성.
+
+---
+- name: playbook ansible_facts 1
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: print hostname
+      debug:
+        msg: "{{ ansible_hostname }}"
+    - name: print IP address enp0s3
+      debug:
+        msg: "{{ ansible_enp0s3[&apos;ipv4&apos;][&apos;address&apos;] }}"
+    - name: Print OS
+      debug:
+        msg: "{{ ansible_distribution }}"
+    - name: print OS version number
+      debug:
+        msg: "{{ ansible_distribution_version }}"
+    - name: print partiton size
+      debug:
+        msg: "{{ ansible _devices[&apos;sda&apos;][&apos;partitions&apos;][&apos;sda1&apos;][&apos;size&apos;] }}"
+...                                         
+                 
+하고 저장해보자
+[user@ansible-control 20231128]$ ansible-playbook playbook-ansible_facts1.yaml
+TASK [print hostname] *******************************************************************************
+ok: [ansible-node01] => {
+    "msg": "ansible-node01"
+}
+ok: [ansible-node02] => {
+    "msg": "ansible-node02"
+}
+ok: [ansible-node03] => {
+    "msg": "ansible-node03"
+}
+
+TASK [print IP address enp0s3] **********************************************************************
+ok: [ansible-node01] => {
+    "msg": "10.0.2.4"
+}
+ok: [ansible-node02] => {
+    "msg": "10.0.2.5"
+}
+ok: [ansible-node03] => {
+    "msg": "10.0.2.15"
+}
+
+TASK [Print OS] *************************************************************************************
+ok: [ansible-node01] => {
+    "msg": "Rocky"
+}
+ok: [ansible-node02] => {
+    "msg": "Rocky"
+}
+ok: [ansible-node03] => {
+    "msg": "Ubuntu"
+}
+
+TASK [print OS version number] **********************************************************************
+ok: [ansible-node01] => {
+    "msg": "9.2"
+}
+ok: [ansible-node02] => {
+    "msg": "9.2"
+}
+ok: [ansible-node03] => {
+    "msg": "22.04"
+}
+
+TASK [print partiton size /dev/sda1] ****************************************************************
+ok: [ansible-node01] => {
+    "msg": "1.00 GB"
+}
+ok: [ansible-node02] => {
+    "msg": "1.00 GB"
+}
+ok: [ansible-node03] => {
+    "msg": "1.00 MB"
+
+위는 이전방식으로만든 플레이북이므로 새로운 방식의 표기법을 적용해준다.
+ 
+
+[user@ansible-control 20231128]$ cat playbook-ansible_facts2.yaml 
+---
+- name: playbook ansible_facts 1
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: print hostname
+      debug: 
+        msg: "{{ ansible_facts[&apos;hostname&apos;] }}"
+    - name: print IP address enp0s3
+      debug: 
+        msg: "{{ ansible_facts[&apos;enp0s3&apos;][&apos;ipv4&apos;][&apos;address&apos;] }}"
+    - name: Print OS
+      debug: 
+        msg: "{{ ansible_facts[&apos;distribution&apos;] }}"
+    - name: print OS version number
+      debug: 
+        msg: "{{ ansible_facts[&apos;distribution_version&apos;] }}"
+    - name: print partiton size /dev/sda1
+      debug:
+        msg: "{{ ansible_devices[&apos;sda&apos;][&apos;partitions&apos;][&apos;sda1&apos;][&apos;size&apos;] }}"
+...
+실행을 해보면, 잘 된다.
+다시 user3을 만들어보자
+ 
+[user@ansible-control 20231128]$ vim playbook-facts3.yaml 
+---
+- name: Playbook ansible_facts 3
+  hosts: all
+  gather_facts: yes
+
+  tasks:
+  - name: Print fqdn Domain Name
+    debug:
+      msg: "{{ ansible_facts['fqdn'] }}"
+  - name: Print CPU Spec
+    debug:
+      msg: "CPU Model : {{ ansible_facts['processor'][2] }}"
+  - name: Print Number of CPU Cores
+    debug:
+      msg: "CPU Core : {{ ansible_facts['processor_cores'}}"
+  - name: Print CPU Architecture
+    debug:
+      msg: "CPU Architecture : {{ ansible_facts['architecture'] }}"
+  - name: Print RAM Size
+    debug:
+      msg: "RAM : {{ ansible_facts['memtotal_mb'] }} MB "
+...
+>>오타에 조심. 또 조심하자
+한줄씩만 따오면, 불러온 결과값으로 print되는것들은 이렇다.
+TASK [Print fqdn Domain Name] ***********************************************************************
+ok: [ansible-node01] => {
+    "msg": "ansible-node01.example.com"
+}
+TASK [Print CPU Spec] *******************************************************************************
+ok: [ansible-node01] => {
+    "msg": "CPU Model : AMD Ryzen 9 6900HX with Radeon Graphics"
+}
+TASK [Print Number of CPU Cores] ********************************************************************
+ok: [ansible-node01] => {
+    "msg": "CPU Core : 1"
+}
+TASK [Print CPU Architecture] ***********************************************************************
+ok: [ansible-node01] => {
+    "msg": "CPU Architecture : x86_64"
+}
+TASK [Print RAM Size] *******************************************************************************
+ok: [ansible-node01] => {
+    "msg": "RAM : 1778 MB "
+}
+
+# Facts 변수를 사용하지 않는 플레이북 - “ gather_facts: false “
+[user@ansible-control 20231128]$ vim playbook-ansible_facts4.yaml
+ 
+작성해주고 실행해보면 에러가 뜬다. 
+TASK [Print hostname] ********************************************************************************************
+fatal: [ansible-node01]: FAILED! => {"msg": "The task includes an option with an undefined variable. The error was: &apos;dict object&apos; has no attribute &apos;hostname&apos;. &apos;dict object&apos; has no attribute &apos;hostname&apos;\n\nThe error appears to be in &apos;/home/user/work/20231128/playbook-ansible_facts4.yaml&apos;: line 7, column 5, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n  tasks:\n  - name: Print hostname\n    ^ here\n"}
+이는 gather_facts : false 이기 때문인데,  true로 하면 동작된다
+위 파일을 복사해서 facts5 yaml에서 수정해보자.
+[user@ansible-control 20231128]$ cp playbook-ansible_facts4.yaml playbook-ansible_facts5.yaml
+[user@ansible-control 20231128]$ vim playbook-ansible_facts5.yaml 
+---
+- name: Playbook ansible_facts 5
+  hosts: all
+  gather_facts: false
+
+  tasks:
+  - name: Write a file
+    copy: 
+      content: "hello ansible"
+      dest: /tmp/hello.txt
+      mode: ‘664’
+...
+로 수정하고 저장. 그리고 실행해본다.
+[user@ansible-control 20231128]$ ansible-playbook playbook-ansible_facts5.yaml 
+PLAY [Playbook ansible_facts 5] **********************************************************************************
+TASK [Write a file] **********************************************************************************************
+changed: [ansible-node03]
+changed: [ansible-node01]
+changed: [ansible-node02]
+PLAY RECAP *******************************************************************************************************
+ansible-node01             : ok=1    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=1    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node03             : ok=1    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+>> facts 변수를 쓰지 않는 플레이북이라면, task에서 facts를 안쓰도록 정의하면 더욱 빠르게 결과값을 얻을 수 있다는 것을 알게해주는 부분이다.
+>>팩트수집을 끄게되면 플레이북이 더 빠르게 된다. 그게 100개~200개가 다 생성되는데 부하가 걸린다는걸 생각해보면 당연한얘기. 하나의 호스트에서 팩트변수를 모으는데도 20page정도이니.
+*웬만하면 권한이나 모드값은 ‘ ‘ 로 묶어주도록 하자.
+오류가 발생한다면 지우고 다시 실행하자. 퍼미션이 꼬일수도 있다.
+[user@ansible-control 20231128]$ ansible all -m shell -a "rm -f /tmp/hello.txt" --become
+플레이북을 다시 실행해주고, 
+
+이제 조회를하면
+[user@ansible-control 20231128]$ ansible all -m shell -a "ls -l /tmp/hello.txt" --become
+ansible-node03 | CHANGED | rc=0 >>
+--w--wx--T 1 ansible ansible 13 11월 28 16:25 /tmp/hello.txt
+ansible-node02 | CHANGED | rc=0 >>
+--w--wx--T. 1 ansible ansible 13 Nov 28 16:25 /tmp/hello.txt
+ansible-node01 | CHANGED | rc=0 >>
+--w--wx--T. 1 ansible ansible 13 Nov 28 16:25 /tmp/hello.txt
+확인 및 조회가 가능하다. 
+
+ansible_facts 변수- 딕셔너리의 각 키는 특정 유형의 정보를 나타내며, 이를 통해 해당 정보에 접근할수 있음을 오늘 기억하자.
+
