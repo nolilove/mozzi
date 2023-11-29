@@ -1,0 +1,782 @@
+20231129 수요일 앤서블 메모 _ yaml_ 다양한 변수
+[user@ansible-control 20231129]$ ansible all -m command -a "poweroff" --become 
+
+지난시간엔 등록변수에 대해서 플레이북을 작성해봤다.
+등록변수- 모듈을 사용해서 ‘레지스터’라고 하는 구문으로 독립변수를 선언.
+오늘- Shell 모듈 / Jinja2 template 조건문, 반복문에 대해서 학습했다.
+
+# Ansible 변수
+실습폴더를 만든다.
+[user@ansible-control ~]$ cd work
+[user@ansible-control work]$ mkdir 20231129
+[user@ansible-control work]$ cd 20231129
+
+[user@ansible-control 20231129]$ cp ../20231128/ansible.cfg .
+[user@ansible-control 20231129]$ cp ../20231128/inventory .
+
+[user@ansible-control 20231129]$ vim playbook-registered_variable1.yaml
+ 
+[user@ansible-control 20231129]$ cat playbook-registerd_variable1.yaml 
+---
+- name: Playbook registerd variable 1
+  hosts: ansible-node01
+  gather_facts: true
+
+  tasks:
+  - name: Read a file
+    shell: "cat /etc/os-release"
+    register: result
+  - name: Print /etc/os-release
+    debug: 
+      msg: "{{ result.stdout_lines }}"
+...
+>>파일의 내용을 읽어서 출력하는 간단한 플레이북이다. (shell 모듈을 사용)
+**shell 모듈은 커맨드와 비슷한데, shell 환경 위에서 어떤 작업을 실행해주는것이 shell모듈이다.
+command 모듈과 기본적으로 유사하므로 명령어를 입력해주면 실행한다. 
+모듈이 실행되면 항상 changed를 보고해준다( 변경되었던/아니던 )
+-차이: shell환경 위에서 실행되는부분이기에 기존의 커맨드 모듈과 비교하면, 커맨드모듈은 실행결과에 대해서 redirection해서 저장하게끔하는것이 안되지만 shell에서는 작업에 redirection이나 | (파이프) 를 써도 결과를 내준다.
+
+[user@ansible-control 20231129]$ ansible-playbook playbook-registerd_variable1.yaml 
+ 
+>>스크린샷을보게되면 \ (백슬래시)가 들어가있는데, 여기서는 유도하는것이
+\“Rocky Linux\” 를 묶어주는 것으로 생각하면 된다. 표시만 그렇게 됨.
+
+ssh ansible@ansible-node01 / node02 / node03
+sudo mkdir -p /etc/ansible/facts.d/ 를 각각 노드에 해준다.
+[ansible@ansible-node0X ~]$ sudo vim /etc/ansible/facts.d/custom_fact1.fact
+# 노드01
+[ansible@ansible-node01 ~]$ cat /etc/ansible/facts.d/custom_fact1.fact
+[packages]
+web_package=httpd
+db_package=mariadb-server
+
+[users]
+user1=user01
+user2=ddung-e
+# 노드02 
+[ansible@ansible-node02 ~]$ cat /etc/ansible/facts.d/custom_fact1.fact
+[packages]
+web_package=httpd
+db_package=mariadb-server
+
+[users]
+user1=user01
+user2=spongebob
+# 노드03 
+ansible@ansible-node03:~$ cat /etc/ansible/facts.d/custom_fact1.fact
+[packages]
+web_package=httpd
+db_package=mariadb-server
+
+[users]
+user1=user01
+user2=jingjing-e
+이 상태에서 custom fact를 참조하는 playbook을 작성한다.
+[user@ansible-control 20231129] 로 다시 돌아와서 작성. 
+[user@ansible-control 20231129]$ vim playbook-ansible_custom_fact1.yaml 을 작성할건데 아래를 먼저 참조하자.
+
+[user@ansible-control 20231129]$ ansible ansible-node01 -m setup -a "filter=ansible_local"
+ansible-node01 | SUCCESS => {
+    "ansible_facts": {
+        "ansible_local": {
+            "custom_fact1": {
+                "packages": {
+                    "db_package": "mariadb-server",
+                    "web_package": "httpd"
+                },
+                "users": {
+                    "user1": "user01",
+                    "user2": "alice"
+                }
+            }
+        },
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false
+}
+[user@ansible-control 20231129]$
+
+[user@ansible-control 20231129]$ vim playbook-ansible_custom_fact1.yaml
+ 
+---
+- name: playbook custom fact 1
+  hosts: all
+  gather_facts: true
+  tasks:
+  - name: print package names
+    debug:
+      msg: "{{ ansible_facts['ansible_local']['custom_fact1']['packages']['web_package'] }} {{ ansible_facts['ansible_local']['custom_fact1']['package']['db_package'] }}"
+  - name: print user names
+    debug:
+      msg: "{{ ansible_facts['ansible_local']['custom_fact1']['users']['user1'] }} {{ ansible_facts['ansible_local']['custom_fact1']['users']['user2'] }}"
+...
+>>저장하고 실행
+[user@ansible-control 20231129]$ ansible-playbook playbook-ansible_custom_fact1.yaml
+TASK [Gathering Facts] ***************************************************************
+ok: [ansible-node01]
+ok: [ansible-node03]
+ok: [ansible-node02]
+TASK [print package names] ***********************************************************
+ok: [ansible-node01] => {
+    "msg": "httpd mariadb-server"
+}
+ok: [ansible-node02] => {
+    "msg": "httpd mariadb-server"
+}
+ok: [ansible-node03] => {
+    "msg": "httpd mariadb-server"
+}
+TASK [print user names] **************************************************************
+ok: [ansible-node01] => {
+    "msg": "user01 ddung-e"
+}
+ok: [ansible-node02] => {
+    "msg": "user01 spongebob"
+}
+ok: [ansible-node03] => {
+    "msg": "user01 jingjing-e"
+}
+커스텀 팩트 부분까지 확인했다, 결과값을 알아보자
+>>debug 모듈을 사용하여 사용자 정의 팩트에서 추출한 웹 패키지와 데이터베이스 패키지의 이름을 출력했고, 사용자 정의 팩트에서 추출한 두 개의 사용자(user1 및 user2)의 이름을 출력 하는 플레이북으로 팩트에서 웹과 데이터베이스 패키지의 이름, 두개의 사용자 이름을 출력해서 작업을 수행하는것을 보여줬다.
+
+
+# Jinja2 Template 진자2탬플릿
+ - Python의 Template Engine으로 파일을 Templating 할 수 있는 도구
+ - Ansible에서는 template 모듈을 사용하여 Jinja2 Template Engine을 활용한 Template File을 작성할 수 있음.
+
+https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_templating.html
+https://docs.ansible.com/ansible/latest/collections/ansible/builtin/template_module.html#ansible-collections-ansible-builtin-template-module
+에서 참조해서 진자2 탬플릿을 사용한다.
+
+# jinja 탬플릿 기본 사용방법
+-변수. 표현식 참조
+{{  EXPRESSION  }}
+
+-Jinja2 Template 주석 작성
+{# This is comment Line #}
+
+-제어문(조건문, 반복문)
+{% STATEMENT %}
+
+Ansible에서 Jinja2 Template Engine 실행
+1. Jinja2 Template File 작성 (TEMPLATE_FILE_NAME.j2)
+2. Ansible Playbook 작성 또는 Ad-Hoc 명령어로 template 모듈 실행
+
+#작성
+[user@ansible-control 20231129]$ vim basic1.j2
+[user@ansible-control 20231129]$ cat basic1.j2 
+jinja2 Template - basic1
+{# This is comment #}
+
+var1 : {{ var1 }}
+var2 : {{ var2 }}
+
+[user@ansible-control 20231129]$ vim playbook-jinja2_basic1.yaml
+[user@ansible-control 20231129]$ cat playbook-jinja2_basic1.yaml 
+ 
+---
+- name: playbook jinja2 basic 1
+  hosts: all
+  vars:
+    var1: "hellow jinja2 template"
+    var2: "3.14"
+
+tasks: 
+- name: Create a file
+    file:
+      path: /tmp/example_normal1.txt
+      state: touch
+  - name: write a file
+    lineinfile:
+      path: /tmp/example_normal1.txt
+      line: "static Content (using copy module)"
+  - name: Templating a file /tmp/example_templated1_basic1.txt
+    template:
+      src: basic1.j2
+      dest: /tmp/example_templated1_basic1.txt
+...
+>> 진자탬플릿을 활용하는 플레이북을 막 생성했다.
+에러뜨니 모듈을 바꿔봄(file을 추가했음)
+
+[user@ansible-control 20231129]$ ansible all -m command -a "cat /tmp/example_templated1_basic1.txt"
+를 이제 조회하면 잘 조회된다.
+ 
+[user@ansible-control 20231129]$ ansible all -m command -a "cat /tmp/example_normal1.txt"
+ 
+이제 또다른 베이직파일을 만들어본다
+
+[user@ansible-control 20231129]$ vim basic2.j2
+[user@ansible-control 20231129]$ cat basic2.j2 
+{# Jinja2 Template basic2 #}
+Node Name : {{ ansible_facts[&apos;hostname&apos;] }}
+
+Users :
+{{ ansible_local[&apos;custom_fact1&apos;][&apos;users&apos;][&apos;user1&apos;] }}
+{{ ansible_local[&apos;custom_fact1&apos;][&apos;users&apos;][&apos;user2&apos;] }}
+
+플레이북도 만든다.
+[user@ansible-control 20231129]$ vim playbook-jinja2_basic2.yaml 
+[user@ansible-control 20231129]$ cat playbook-jinja2_basic2.yaml
+---
+- name: playbook jinja template basic 2
+  hosts: all
+  tasks: 
+   - name: templating a file
+     template:
+       src: basic2.j2
+       dest: /tmp/example_templated2.txt
+...
+>>
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic2.yaml
+플레이북을 실행하고 조회해본다.
+
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example_templated2.txt" 
+ansible-node03 | CHANGED | rc=0 >>
+Node Name : ansible-node03
+
+Users :
+user01
+jingjing-e
+ansible-node02 | CHANGED | rc=0 >>
+Node Name : ansible-node02
+
+Users :
+user01
+spongebob
+ansible-node01 | CHANGED | rc=0 >>
+Node Name : ansible-node01
+
+Users :
+user01
+ddung-e
+>>각각의 노드의 이름과, custom fact의 변수 값을 참조해서 파일을 완성했다.
+# 제어문 사용하기_basic파일>playbook> shell 모듈로 확인
+(1)	조건문 IF 예제
+[user@ansible-control 20231129]$ vim playbook-jinja2_basic3.yaml
+---
+- name: Playbook Jinja2 Template basic 3
+  hosts: all
+  vars:
+    fruit: apple
+    count: 10
+  tasks:
+  - name: Templating a file
+    template:
+      src: basic3.j2
+      dest: /tmp/example_if1.txt
+...
+[user@ansible-control 20231129]$ vim basic3.j2
+이번에는 제어문을 써보도록 한다. ( {% %} ) 여러줄로 나눠서 쓴다.
+[user@ansible-control 20231129]$ cat basic3.j2 
+Jinja2 Template control example if 1
+
+fruit : {{ fruit }}
+count : {{ count }}
+
+{% if count > 0 %}
+  {{ fruit }} : {{ count }} EA
+{% endif %}
+이제 플레이북을 실행해본다.
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic3.yaml
+그리고 조회해본다.
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example_if1.txt"
+ansible-node03 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+fruit : apple
+count : 10
+  apple : 10 EA
+ansible-node01 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+fruit : apple
+count : 10
+  apple : 10 EA
+ansible-node02 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+fruit : apple
+count : 10
+  apple : 10 EA
+0보다 크도록 설정했던 베이직파일이다. 이번엔 0보다 작도록 설정해본다.
+[user@ansible-control 20231129]$ vim playbook-jinja2_basic3.yaml
+---
+- name: Playbook Jinja2 Template basic 3
+  hosts: all
+  vars:
+    fruit: apple
+    count: 0
+  tasks:
+  - name: Templating a file
+    template:
+      src: basic3.j2
+      dest: /tmp/example_if1.txt
+...
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic3.yaml
+로 플레이북을 실행하고, 앤서블 쉘 모듈을 사용해본다.
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example_if1.txt"
+ansible-node03 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+fruit : apple
+count : 0
+ansible-node01 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+
+fruit : apple
+count : 0
+ansible-node02 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+
+fruit : apple
+count : 0
+>>아까와는 다르게 사과의 갯수(xx EA)가 표시되지 않았다.
+# 베이직파일을 바꿔서, 다 떨어졌으면 다떨어졌다고 출력하고, -(음수 개)면 잘못되었다 출력하자.
+[user@ansible-control 20231129]$ cp basic3.j2 basic3_if-else.j2  로 복사해서 수정해본다.
+Jinja2 Template control example if 1
+
+fruit : {{ fruit }}
+count : {{ count }}
+
+{% if count < 0 %}
+  {{ fruit }} : {{ count }} EA
+{% else %}
+  bucket is empty man!
+{% endif %}
+[user@ansible-control 20231129]$ cp playbook-jinja2_basic3.yaml playbook-jinja2_basic3_if-else.yaml
+[user@ansible-control 20231129]$ vim playbook-jinja2_basic3_if-else.yaml 
+---
+- name: Playbook Jinja2 Template basic 3
+  hosts: all
+  vars:
+    fruit: apple
+    count: 0
+  tasks:
+  - name: Templating a file
+    template:
+      src: basic3_if-else.j2
+      dest: /tmp/example_if1.txt
+...
+플레이북실행
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic3_if-else.yaml
+이제 조회를해보면
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example_if1.txt"
+ansible-node03 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+
+fruit : apple
+count : 0
+
+  bucket is empty man!
+ansible-node02 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+
+fruit : apple
+count : 0
+
+  bucket is empty man!
+ansible-node01 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+
+fruit : apple
+count : 0
+
+  bucket is empty man!
+이라고 출력이 된다.
+플레이북에서 카운트값을 0에서 5로 바꿔본다
+# elif 구문을 추가해보자  (조건문 예제)
+[user@ansible-control 20231129]$ cp playbook-jinja2_basic3_if-else.yaml  playbook-jinja2_basic3_if-elif-else.yaml 
+[user@ansible-control 20231129]$ cp basic3_if-else.j2 basic3_if-elif-else.j2
+[user@ansible-control 20231129]$ vim basic3_if-elif-else.j2 
+
+베이직파일을 수정해보자.
+[user@ansible-control 20231129]$ cat basic3_if-elif-else.j2 
+Jinja2 Template control example if 1
+
+fruit : {{ fruit }}
+count : {{ count }}
+
+{% if count >= 10 %}
+  {{ fruit }} : {{ count }} EA
+{% elif count <=3 %}
+  less than 4 apples left!
+{% elif count ==3 %}
+  3 apples left~
+{% else %}
+  bucket is empty man!
+{% endif %}
+사과의 갯수가 10개보다 크거나같을때, 3개보다 작거나같을때, 3개일때 elif구문을 만들어놨다.
+플레이북을 수정해본다
+[user@ansible-control 20231129]$ cat playbook-jinja2_basic3_if-elif-else.yaml 
+---
+- name: Playbook Jinja2 Template basic 3 elif (if-else)
+  hosts: all
+  vars:
+    fruit: apple
+    count: 10
+    fruit: pineapple
+    count: 3
+  tasks:
+  - name: Templating a file
+    template:
+      src: basic3_if-elif-else.j2
+      dest: /tmp/example_if-elif-else1.txt
+...
+>>여러개의 변수를 포함하고싶으면, list변수로 묶어서 만들어야 한다. 저렇게 했더니 마지막 결과인 pineapple의 결과값만 나왔다.
+ansible-node02 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+fruit : pineapple
+count : 3
+>>이를 바꾸고싶으면 
+ fruit: 
+-	apple
+-	pineapple
+-	orange    		의 형태로 만들어야 함.
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example_if-elif-else1.txt"
+로 아무튼 사과를 3개로 설정하고 다시 조회해본다. 
+ansible-node03 | CHANGED | rc=0 >>
+Jinja2 Template control example if 1
+
+fruit : apple
+count : 3
+
+  less than 4 apples left!
+의 형태로 다시 조회가 성공적으로 됐다.
+참고로, 
+{% elif count <=3 %}
+  less than 4 apples left!
+{% elif count ==3 %}
+  3 apples left~
+이 부분은 <=3 부분만 출력되었다. ==3과 경합시에 <=3 부분이 우위를 점하는 듯 하다. 
+조건문 예제 실습끝
+
+
+(2)	반복문 예제  (플레이북파일>탬플릿파일>실행>조회)
+Jinja2 Template 반복문 동작방식, 기본구조
+{% for  VARIABLE1  in  LIST_VARIABLE %}
+STATEMENT
+STATEMENT
+{% endfor %}
+
+
+[user@ansible-control 20231129]$ vim playbook-jinja2_basic4_for1.yaml
+
+[user@ansible-control 20231129]$ cat playbook-jinja2_basic4_for1.yaml
+---
+- name: playbook jinja2 template basic 4 for in 1
+  hosts: all
+  vars: 
+    things:			# things 라는 변수를 만들었다. 
+    - glasses
+    - gloves
+    - sweat shirts
+    - keyboard
+    - iphone
+    - optical mouse
+
+  tasks:
+  - name: templating a file
+    template:			#template 모듈을 사용하는 task를 하나 만들었다.
+      src: basic4_for1.j2
+      dest: /tmp/example-for1.txt
+...
+이제 탬플릿파일을 작성한다. (베이직)
+[user@ansible-control 20231129]$ vim basic4_for1.j2
+[user@ansible-control 20231129]$ cat basic4_for1.j2
+jinja 2 template basic 4 control example for 1 
+Things:
+{{ things[0] }}
+{{ things[1] }}
+{{ things[2] }}
+{{ things[3] }}
+{{ things[4] }}
+{{ things[5] }}			<<things에 표시될것들을 선언한다.
+
+print list of things
+{% for thing in things %}    << thing은 다른것으로도 바꿀수 있다.
+- {{ thing }}                     다만{{ }}에 그 이름을넣어야함 (실제 출력될 내용임)
+{% endfor %}
+이제 플레이북을 실행해본다.
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic4_for1.yaml 
+이제 조회해본다.
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example-for1.txt"
+ansible-node03 | CHANGED | rc=0 >>
+jinja 2 template basic 4 control example for 1 
+
+Things:
+glasses
+gloves
+sweat shirts
+keyboard
+iphone
+optical mouse
+
+print list of things
+ - glasses
+ - gloves
+ - sweat shirts
+ - keyboard
+ - iphone
+ - optical mouse
+이런 형태로 잘 출력된다.
+
+하나더만든다    베이직>플레이북>
+[user@ansible-control 20231129]$ vim basic4_for2.j2 
+jinja 2 template basic 4 control example for 2
+------------
+{% for i in range(10) %}
+hello jinja2 template
+{% endfor %}
+>>얘는 뭐하는애냐면, 어떤 작업을 열번 반복하는 베이직파일이다. 
+[user@ansible-control 20231129]$ cp playbook-jinja2_basic4_for1.yaml playbook-jinja2_basic4_for2.yaml 
+복사를 좀 해주고 , 수정해본다 
+---
+- name: playbook jinja2 template basic 4 for in 2
+  hosts: all
+  
+  tasks:
+  - name: templating a file
+    template:
+      src: basic4_for2.j2
+      dest: /tmp/example-for2.txt
+...
+단순하게 만들었다. 
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic4_for2.yaml 
+실행해본다 
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example-for2.txt"
+로 조회해보면 
+ansible-node03 | CHANGED | rc=0 >>
+jinja 2 template basic 4 control example for 2
+------------
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+hello jinja2 template
+의 형태로 반복해서 출력되는 반복문 실습을 마쳤다. 
+
+이어서 새로 플레이북을 만든다
+[user@ansible-control 20231129]$ vim playbook-jinja2_basic4_for3.yaml
+---
+- name: Playbook jinja2 basic4 for 3
+  hosts: all
+  vars:
+    nodes_hostname:			#변수 hostname을 설정
+    - ansible-node01
+    - ansible-node02
+    - ansible-node03
+    nodes_ip:				#변수 ip를 설정
+    - 192.168.56.11
+    - 192.168.56.12
+    - 192.168.56.13
+
+  tasks:
+  - name: Create Ansible Managed Nodes List
+    template:
+      src: basic4_for3.j2
+      dest: /tmp/example-for3.txt
+...
+>>변수 2개를 선언했다.
+
+for문 베이직파일도 만든다
+[user@ansible-control 20231129]$ vim basic4_for3.j2
+jinja2 template basic example control for 3
+
+managed nodes list
+hostname:
+{% for host in nodes_hostname %}
+  - {{ host }}
+{% endfor %}
+
+IP addresses:
+{% for ip in nodes_ip %}
+  - {{ ip }}
+{% endfor %}
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic4_for3.yaml 
+플레이북을 실행해준다
+[user@ansible-control 20231129]$ ansible all -m shell -a "cat /tmp/example-for3.txt"
+쉘 모듈로 조회해본다.
+ansible-node03 | CHANGED | rc=0 >>
+jinja2 template basic example control for 3
+
+managed nodes list
+hostname:
+  - ansible-node01
+  - ansible-node02
+  - ansible-node03
+
+IP addresses:
+  - 192.168.56.11
+  - 192.168.56.12
+  - 192.168.56.13
+이렇게 조회된다.
+
+과제 전 징검다리 실습을 해본다.
+# ansible 변수 _ vars 변수와 name 변수에 대해서
+[user@ansible-control 20231129]$ vim playbook-variables1.yaml
+---
+- name: playbook variables 1
+  hosts: all
+  tasks:
+  - name: print variable inventory_ hostname 
+    debug:
+      msg: "{{ inventory_hostname }}"  		>>노드의 이름의 주소를 가리킴.
+  - name: print variable hostvars
+    debug:
+      msg: "{{ hostvars[inventory_hostname] }}"    >>각각 노드들마다 가지는 변수(인벤토리)
+  - name: print variable groups[‘all’]
+    debug:
+      msg: "{{ groups['rocky'] }}" 			>>’로키’ 그룹을 보는 변수 
+...
+>>debug 모듈을 사용해서 변수들을 불러내는 플레이북이다. 
+hostvars는 인벤토리 형태로 노드들의 목록으로 되어있다. 각각의 노드들이 호스트바스에 있고, 그 노드들의 변수들이 저장된다. 저장하고 실행해본다.
+TASK [print variable hostvars] 부분이 엄청나게 많은 결과값을 불러낸다. 
+ 
+
+실습과제를 해본다. 
+-각각의 호스트 노드를 ansible-control에서 ( /etc/hosts ) node01,node02,node03에 넣어주는 실습
+# Ansible
+192.168.56.10   ansible-control
+192.168.56.11   ansible-node01
+192.168.56.12   ansible-node02
+192.168.56.13   ansible-node03
+별도의 선언을 하지 않고, 탬플릿으로 만들어보는 실습이다. 
+탬플릿생성 > 플레이북생성 > 플레이북 실행> 조회
+jinja2 template 
+# Ansible
+192.168.56.10   ansible-control
+192.168.56.11   ansible-node01
+192.168.56.12   ansible-node02
+192.168.56.13   ansible-node03
+
+작업 1 : Templating /etc/hosts file
+ - Template File : hosts.j2
+    * Template File 작성시 반복문 사용
+ - Templated File : /etc/hosts
+
+작업 2 : Read new /etc/hosts file
+
+작업 3 : Show /etc/hosts file
+
+완성된 /etc/hosts 파일 내용
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+# Ansible nodes
+192.168.56.10   ansible-control
+192.168.56.11   ansible-node01
+192.168.56.12   ansible-node02
+192.168.56.13   ansible-node03
+
+# hosts.j2 작성(반복문)
+Jinja2 Template control example test
+
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+# Ansible nodes
+192.168.56.10   ansible-control   ansible-control.example.com
+{% for host in groups['all'] %}
+{{ hostvars[host]['ansible_enp0s8']['ipv4']['address'] }}   {{ hostvars[host]['ansible_hostname'] }} {{ hostvars[host]['ansible_fqdn'] }}
+{% endfor %}
+
+# playbook-jinja2_basic_for_test.yaml 작성
+---
+- name: playbook for test 1
+  hosts: all
+  become: yes
+  tasks:
+  - name: templating /etc/hosts file
+    template:
+      src: hosts.j2
+      dest: /etc/hosts
+  - name: read new /etc/hosts file
+    command: "cat /etc/hosts"
+    register: result
+  - name: show /etc/hosts file
+    debug:
+      msg: "{{ result.stdout_lines }}"
+...
+[user@ansible-control 20231129]$ ansible-playbook playbook-jinja2_basic_for_test1.yaml
+TASK [show /etc/hosts file] ****************************************************
+ok: [ansible-node01] => {
+    "msg": [
+        "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4",
+        "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6",
+        "",
+        "# Ansible nodes",
+        "192.168.56.10   ansible-control   ansible-control.example.com",
+        "192.168.56.11   ansible-node01 ansible-node01.example.com",
+        "192.168.56.12   ansible-node02 ansible-node02.example.com",
+        "192.168.56.13   ansible-node03 ansible-node03.example.com"
+]
+위 완성된 파일내용처럼 띄울 수 있다. 
+
+이어서 7장(‘앤서블로 시작하는 인프라 자동화’) 부분 약간 진행하도록 한다.
+# 제어문 (조건문, 반복문, handler, 예외처리 등)
+  - 플레이북 작성시 플레이북의 테스크의 실행 순서, 방식 등을 정의하는 구문
+
+# 조건문(when 구문)
+tasks:
+- name: TASK_NAME
+  MODULE:
+    field1: value1
+    field2: value2
+  when: CONDITION
+
+ 
+---
+- name: playbook - when 1
+  hosts: all
+  vars:
+    condition: 1				#변수 condition을 설정한다.
+  tasks:
+  - name: task1 - first task
+    debug:
+      msg: "first task is running"
+  - name: task2 - second task
+    debug:
+      msg: "second task is running"
+    when: condition == 1
+  - name: task3 - final task
+    debug:
+      msg: "final task is running"
+...
+로 작성한다.
+[user@ansible-control 20231129]$ ansible-playbook  playbook-when1.yaml 
+ 
+vars:
+    #condition: 1
+    condition: 2
+로 수정한다음 다시 실행을 해보면,, 
+TASK [task1 - first task] ******************************************************
+ok: [ansible-node01] => {
+    "msg": "first task is running"
+}
+ok: [ansible-node02] => {
+    "msg": "first task is running"
+}
+ok: [ansible-node03] => {
+    "msg": "first task is running"
+}
+TASK [task2 - second task] *****************************************************
+skipping: [ansible-node01]
+skipping: [ansible-node02]
+skipping: [ansible-node03]
+
+TASK [task3 - final task] ******************************************************
+ok: [ansible-node01] => {
+    "msg": "final task is running"
+}
+ok: [ansible-node02] => {
+    "msg": "final task is running"
+}
+ok: [ansible-node03] => {
+    "msg": "final task is running"
+}
+>>condition 변수가 맞지 않는 task2는 skipping: 이 뜨면서 넘어가버린다.
+조건에 맞는 true(참)일 경우 실행하고, 맞지 않는 false(거짓)일경우 task를 실행하지 않는다.
+
+
+
