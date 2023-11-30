@@ -1,0 +1,756 @@
+15주차 목요일 메모(앤서블_제어문2)
+[user@ansible-control 20231129]$ ansible all -m command -a "poweroff" --become 
+[user@ansible-control 20231129]$ cp ansible.cfg /home/user/work/20231130
+[user@ansible-control 20231129]$ cp inventory /home/user/work/20231130
+물밑작업을 꼭 해주자.
+***ansible_fact 출력하기= 
+---
+- name: Show ansible_facts
+  hosts: your_target_host( ansible-node01 ... or all )
+  gather_facts: true
+  tasks:
+    - name: Show all ansible_facts
+      debug:
+        var: ansible_facts
+...   
+-ansible_facts 조금이라도 쉽게 찾기>>찾고자하는 노드를 하나 지정하고, 
+[user@ansible-control 20231129]$ ansible ansible-node01 -m setup -a "filter=ansible_local"
+명령어에서 검색해서 보면 된다.
+플레이북을 만들어서 확인하기!
+
+지난시간엔 Shell 모듈 / Jinja2 template 조건문, 반복문에 대해서 학습했다.
+오늘은 이어서 조건문의 다양한 사용 ansible_fact 변수를 이용해서 작성/ 반복문 사용하기 (with_, loop)  / 우분투에서 웹 서비스하기 / 핸들러 에 대해서 학습했다.
+
+제어문
+  - 조건문
+  - 반복문
+  - 핸들러
+- 예외처리
+
+조건문(when)
+  - 조건식의 결과에 따라 작업(task), 코드 블럭 등의 실행 여부를 결정하는 구문
+tasks:
+- name: TASK_NAME
+  MODULE:
+    field1: value1
+    field2: value2
+  when: CONDITION
+
+[user@ansible-control 20231130]$ vim playbook-when1.yaml
+---
+- name: Playbook when 1
+  hosts: all
+  vars:
+    num1: 5
+    num2: 3
+
+  tasks:
+  - name: task1
+    debug:
+      msg: "task1 is running..."
+    when: num1 > num2
+  - name: task2
+    debug:
+      msg: "task2 is running..."
+    when: num1 < num2
+  - name: task3
+    debug:
+      msg: "task3 is running..."
+    when: num1
+  - name: task4
+    debug:
+      msg: "task4 is running..."
+...
+
+# 연산자 정리
+연산자 기호	연산자 키워드	설명
+>	gt	크다
+>=	ge	크거나 같다
+<	lt	작다
+<=	le	작거나 같다
+=, ==	eq	같다
+!=, <>	ne	같지 않다
+	VARIABLE is defined	VARIABLE 변수가 정의되어있으면 true 그렇지 않은 경우 false
+	VARIABLE is not defined	VARIABLE 변수가 정의되어있으면 false 그렇지 않은 경우 true
+	CONDITION	VARIABLE 변수가 true이면 true 그렇지 않은 경우 false
+	not CONDITION	VARIABLE 변수가 true이면 false 그렇지 않은 경우 true
+	CONDITION1 and CONDITION2	모든 조건식이 true인 경우 true 그렇지 않은 경우는 false (논리곱 연산)
+	CONDITION1 or CONDITION2	조건식이 하나라도 true인 경우 true 그렇지 않은 경우는 false (논리합 연산)
+
+# 조건문 사용하기
+
+연산자가 들어간 플레이북을 생성한다.
+ [user@ansible-control 20231130]$ vim playbook-when2.yaml
+[user@ansible-control 20231130]$ cat playbook-when2.yaml 
+---
+- name: playbook when2
+  hosts: all
+  vars:
+    var1: true
+    var2: true
+
+  tasks:
+  - name: task1 - all conditions must be true.
+    debug:
+      msg: "task1 is running..."
+    when: var1 and var2
+  - name: task2 - at least one condition must be true.
+    debug:
+      msg: "task2 is running..."
+    when: var1 or var2
+...
+이렇게 저장하고 실행해본다.
+둘다 잘 실행된다. 
+\
+TASK [task1 - all conditions must be true.] ****************************************
+ok: [ansible-node01] => {
+    "msg": "task1 is running..."
+}
+TASK [task2 - at least one condition must be true.] ********************************
+ok: [ansible-node01] => {
+    "msg": "task2 is running..."
+}
+이제 yaml파일에서 var 조건을 바꿔본다.
+ 
+var조건에서 true 하나를 false로 바꾸고, 실행하면
+
+TASK [task1 - all conditions must be true.] ****************************************
+skipping: [ansible-node01] 
+TASK [task2 - at least one condition must be true.] ********************************
+ok: [ansible-node01] => {
+    "msg": "task2 is running..."
+}
+>> 모든조건을 만족해야하는 task1은 skipping 되었다.
+
+# tast1-1 리스트형으로 적은 조건 확인
+  
+TASK [task1 - all conditions must be true.] ****************************************
+skipping: [ansible-node01] 
+TASK [task1-1 - all conditions must be true.] **************************************
+skipping: [ansible-node01] 
+TASK [task2 - at least one condition must be true.] ********************************
+ok: [ansible-node01] => {
+    "msg": "task2 is running..."
+}
+>>대시(-) 를 해도 결과값은 똑같이 나온다.
+
+
+# 조건문 - ansible_fact 변수를 이용해서 작성하기**
+[user@ansible-control 20231130]$ vim playbook-when3.yaml
+ 
+- name: Playbook when3
+  hosts: all
+  vars:
+    var1: true
+    var2: true
+  tasks:
+  - name: Check if OS version is Rocky Linux 9
+    debug:
+      msg: " It is Rocky Linux 9 "
+    when: ansible_facts[&apos;distribution&apos;] == "Rocky" and ansible_facts[&apos;distribution_major_version&apos;] == "9"
+  - name: Check if OS version is Rocky Linux 9
+    debug:
+      msg: "task1-1 is running..."
+    when:
+    - ansible_facts[&apos;distribution&apos;] == "Rocky"
+    - ansible_facts[&apos;distribution_major_version&apos;] == "9"
+  - name: Check if Linux distribution is Debian or Ubuntu
+    debug:
+      msg: "task1-1 is running..."
+    when:
+    - ansible_facts[&apos;distribution&apos;] == "Debian" or ansible_facts[&apos;distribution&apos;] == "Ubuntu"
+...
+으로 작성후 실행
+
+TASK [Check if OS version is Rocky Linux 9] ****************************************
+ok: [ansible-node01] => {
+    "msg": " It is Rocky Linux 9 "
+}
+ok: [ansible-node02] => {
+    "msg": " It is Rocky Linux 9 "
+}
+skipping: [ansible-node03]
+TASK [Check if OS version is Rocky Linux 9] ****************************************
+ok: [ansible-node01] => {
+    "msg": "task1-1 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "task1-1 is running..."
+}
+skipping: [ansible-node03]
+TASK [Check if Linux distribution is Debian or Ubuntu] *****************************
+skipping: [ansible-node01]
+skipping: [ansible-node02]
+ok: [ansible-node03] => {
+    "msg": "task1-1 is running..."
+}
+조건에 맞게 잘 나온다.
+
+# 반복문 사용하기 (with_, loop)
+특정 작업을 반복해서 실행하고자 할 때 사용하는 구문
+# 반복문 사용법1: 반복문에 값을 직접 전달하기
+tasks:
+- name: TASK_NAME
+  MODULE:
+    field1: value1
+    field2: value2
+  loop:
+  - VALUE1
+  - VALUE2
+
+ # 반복문 사용법: 반복문에 변수 전달(facts)하기
+tasks:
+- name: TASK_NAME
+  MODULE:
+    field1: value1
+    field2: value2
+  loop:
+    "{{ LIST_VARIABLE }}"
+
+# 반복문을 사용하지 않는 플레이북
+[user@ansible-control 20231130]$ vim playbook-non-loop.yaml
+---
+- name: Playbook non-loop example
+hosts: all
+
+  tasks:
+  - name: task1
+    debug:
+      msg: "task1 is running..."
+  - name: task2
+    debug:
+      msg: "task2 is running..."
+  - name: task3
+    debug:
+      msg: "task3 is running..."
+...
+~~~위의 플레이북이 있다. 
+
+# 반복문을 사용하는 플레이북1 작성
+[user@ansible-control 20231130]$ vim playbook-loop1.yaml
+---
+- name: Playbook non-loop example
+  hosts: all
+
+  tasks:
+  - name: tasks
+    debug:
+      msg: "{{ item }} is running..."
+    loop:
+    - task1
+    - task2
+    - task3
+...
+>>반복문을 사용하는 플레이북은 반복문을 사용하지 않는 플레이북에 비해서 작성이 더욱 간결하게 이루어 질 수 있다. 실제 작업이 실행되는 부분은 반복문에 전달해준 값의 갯수에 따라서 횟수가 지정이되며, 실행된다. 하나의 노드에 대해서 작업(task)가 3번 반복된다.
+차이점이라고 한다면 tasks로 하나로 묶여서 실행됨.
+ 
+하지만, 이를 적용하기 위해서는 규칙성이 있는 작업이어야함을 유의하자.
+
+# 반복문 작성2
+[user@ansible-control 20231130]$ vim playbook-loop2.yaml 
+---
+- name: playbook loop 2
+  hosts: all
+  vars:
+    list_var1:
+    - task1
+    - task2
+    - task3
+  tasks:
+  - name: tasks
+    debug:
+      msg: "{{ item }} is running..! "
+    loop:
+      "{{ list_var1 }}"
+...
+when 이라는 구문에 list_var1이라는 변수를 주었다. 변수를 줄때는 “{{ }}” 로 변수를 전달해준다. 
+현재 ‘item’ 변수가 사용되었는데, 이는 반복문에서 사용되는 변수 값이 저장되는 변수이다.
+>>어떤 값이 있을때, 처음반복문이 실행되면 값이 item이라는 곳에 들어간다. 그 다음 실행되는 task의 값이 다시 item으로 들어가며, 그다음 task의 위치로 가서 값이 다시 item에 저장된다. 
+ 
+
+# 반복문 작성3 (dictionary data로의 접근)
+[user@ansible-control 20231130]$ vim playbook-loop3_dict1.yaml
+---
+- name: playbook loop 3 dict 1
+  hosts: all
+
+  tasks:
+  - name: dictionary data loop example
+    debug:
+      msg: "ID : {{ item.id }}, Name : {{ item.name }}"
+    loop:
+    - { id: 1, name: "zzang-gu" }
+    - { id: 2, name: "maeng-gu" }
+    - { id: 3, name: "cheol-su" }
+...
+실행을 해본다.
+[user@ansible-control 20231130]$ ansible-playbook playbook-loop3_dict1.yaml 
+TASK [dictionary data loop example] ************************************************
+ok: [ansible-node01] => (item={'id': 1, 'name': 'zzang-gu'}) => {
+    "msg": "ID : 1, Name : zzang-gu"
+}
+ok: [ansible-node01] => (item={'id': 2, 'name': 'maeng-gu'}) => {
+    "msg": "ID : 2, Name : maeng-gu"
+}
+ok: [ansible-node01] => (item={'id': 3, 'name': 'cheol-su'}) => {
+    "msg": "ID : 3, Name : cheol-su"
+}
+
+# 중첩 반복문을 이용하는 플레이북 생성하기 (( with_ 구문 ))
+[user@ansible-control 20231130]$ vim playbook-loop4_nested_loop1.yaml
+---
+- name: Playbook loop 4 nested loop 1
+  hosts: all
+  vars:
+    computer_names:
+    - desktop01
+    - desktop02
+    - laptop01
+    users:
+    - alice
+    - bob
+  tasks:
+  - name: nested loop example using two list variables
+    debug:
+      msg: "computer_name : {{ item[0] }}, user : {{ item[1] }}"
+    with_nested:
+    - "{{ computer_names }}"
+    - "{{ users }}"
+...
+실행한다
+TASK [nested loop example using two list variables] ********************************
+ok: [ansible-node01] => (item=['desktop01', 'alice']) => {
+    "msg": "computer_name : desktop01, user : alice"
+}
+ok: [ansible-node01] => (item=['desktop01', 'bob']) => {
+    "msg": "computer_name : desktop01, user : bob"
+}
+ok: [ansible-node01] => (item=['desktop02', 'alice']) => {
+    "msg": "computer_name : desktop02, user : alice"
+}
+ok: [ansible-node01] => (item=['desktop02', 'bob']) => {
+    "msg": "computer_name : desktop02, user : bob"
+}
+ok: [ansible-node02] => (item=['desktop01', 'alice']) => {
+    "msg": "computer_name : desktop01, user : alice"
+}
+ok: [ansible-node02] => (item=['desktop01', 'bob']) => {
+    "msg": "computer_name : desktop01, user : bob"
+}
+>>한 호스트에서 6번 하는 반복 태스크문이 생성되었다. 총 18개씩.
+간혹가다 순서가 왔다갔다하는데, 이는 처리하는시간이 각각 다르기때문
+
+방금의 플레이북을 복사해서 수정해본다.
+# 루프 구문을 넣어서 리스트 변수의 경우의 수를 만들기 ( loop 구문)
+[user@ansible-control 20231130]$ cp playbook-loop4_nested_loop1.yaml playbook-loop4_nested_loop2.yaml 
+---
+- name: Playbook loop 4 nested loop 1
+  hosts: all
+  vars:
+    computer_names:
+    - desktop01
+    - desktop02
+    - laptop01
+    users:
+    - alice
+    - bob
+  tasks:
+  - name: nested loop example using two list variables
+    debug:
+      msg: "computer_name : {{ item[0] }}, user : {{ item[1] }}"
+    loop:
+      "{{ computer_names | product(users) | list }}"
+...
+>>리스트 변수의 형태로 만들어라 라는 의미의 루프구문을 with_ 구문대신 사용하였다.
+[user@ansible-control 20231130]$ ansible-playbook playbook-loop4_nested_loop2.yaml 
+TASK [nested loop example using two list variables] ********************************
+ok: [ansible-node01] => (item=['desktop01', 'alice']) => {
+    "msg": "computer_name : desktop01, user : alice"
+}
+ok: [ansible-node01] => (item=['desktop01', 'bob']) => 
+    "msg": "computer_name : desktop01, user : bob"
+}
+ok: [ansible-node01] => (item=['desktop02', 'alice']) => {
+    "msg": "computer_name : desktop02, user : alice"
+}
+ok: [ansible-node01] => (item=['desktop02', 'bob']) => {
+    "msg": "computer_name : desktop02, user : bob"
+}
+>> 이것도 순서대로 나오지는않음을 유의하자
+
+# 앤서블로 간단하게 서비스를 구현하는 playbook 생성하기
+[user@ansible-control 20231130]$ vim playbook-setup_web_service1.yaml
+>service 모듈을 사용했다. 이 모듈은 서비스를 다루는 모듈이다. 방화벽을 허용하는 firewalld모듈도 사용한다. 웹을 구축하면 페이지가 있어야 하므로, copy모듈로 작성한다.
+---
+- name: Playbook setup web service 1
+  hosts: rocky
+  become: true
+
+  tasks:
+  - name: Install apache web package latest version
+    yum:
+      name: httpd
+      state: latest
+  - name: Ensure httpd service is started
+    service:
+      name: httpd
+      state: started
+  - name: Ensure httpd service is started (Permanent)
+    service:
+      name: httpd
+      enabled: true
+  - name: Allow web service (Runtime Configuration)
+    firewalld:
+      service: http
+      state: enabled
+  - name: Allow web service (Permanent Configuration)
+    firewalld:
+      service: http
+      state: enabled
+      permanent: true
+  - name: Deploy a web content
+    copy:
+      content: "Welcome to webserver (ansible works)"
+      dest: /var/www/html/index.html
+...
+실행해본다 [user@ansible-control 20231130]$ ansible-playbook playbook-setup_web_service1.yaml
+# 이제 웹을 확인해보자
+[user@ansible-control 20231130]$ curl http://ansible-node01
+Welcome to webserver (ansible works)[user@ansible-control 20231130]$ 
+[user@ansible-control 20231130]$ curl http://ansible-node02
+Welcome to webserver (ansible works)[user@ansible-control 20231130]$ 
+>>각각 두 노드에서 서비스하는 웹서버가 생성되었다.
+
+
+# Ubuntu  (node03) 
+APT 
+  - Debian 계열의 리눅스 배포판에서 사용되는 고수준의 패키지 관리자
+ - APT 도구를 사용하려면 네트워크 상의 Repository에 접속이 가능해야함. (일반적으로 인터넷, DNS 서버에 질의가 가능한 상태가 갖춰져야 함.)
+  - APT는 패키지를 설치하기 전에 Reository 정보를 받아오는 작업이 선행되어야 함.
+  - 리눅스 설치 직후에는 패키지 정보가 없으므로 반드시 "apt-get update" 명령어를 먼저 실행해야 함.
+  - Debian 계열의 리눅스 배포판에서는 deb 패키지를 관리하는 저수준의 패키지 관리 명령어 dpkg가 있음.
+
+>>이전까지 실습하던 RHEL 계열 리눅스 ansible-control에서 ssh ansible@ansible-node03으로 호스트 접속한다.
+ansible@ansible-node03:~$ sudo -i		로 루트사용자로 이동한다.
+root@ansible-node03:~# 
+ 
+root@ansible-node03:~# systemctl status ufw.service 를 확인해보면, 기본적으로 실행은 되고있으나 방화벽은 꺼져있음을 알 수 있다.
+
+# 방화벽 다루는 명령어 (ubuntu) : ufw
+우선 해줄것 root@ansible-node03:~# ufw enable
+Command may disrupt existing ssh connections. Proceed with operation (y|n)? n
+Aborted
+>ssh에 대한 커넥션이 허용되지 않은 경우다. 허용해준다.
+root@ansible-node03:~# ufw allow ssh
+Rules updated
+Rules updated (v6)
+이제 방화벽을 켜본다.
+
+root@ansible-node03:~# ufw enable
+Command may disrupt existing ssh connections. Proceed with operation (y|n)? y
+Firewall is active and enabled on system startup
+ 
+>방화벽을 실행하는 명령어이다. 성공적으로 실행되고있다.
+
+root@ansible-node03:~# ufw disable
+Firewall stopped and disabled on system startup
+ 
+>방화벽을 끌 수 있는 명령어이다.
+
+# 방화벽에서 특정 포트 허용/삭제  ( ufw allow -- / ufw delete --)
+root@ansible-node03:~# ufw allow ‘PORT_NUMBER’ 
+22번포트를 허용하고 싶다면 ufw allow 22 / tcp,udp를 따로 지정하지 않을경우 tcp가 default값.
+-특정포트를 지우고 싶다면 ufw delete 22 를 하면 된다.
+
+# 방화벽에서 거부하기 ( ufw deny -- ) , 방화벽 룰 삭제( ufw delete allow or deny --)
+-80번 서비스(포트)를 방화벽에서 거부하고 싶다면 ufw deny 80 을 하면 된다. 
+방화벽 룰 삭제는 (ufw delete allow|deny  -- )
+
+# ubuntu 실행 처음부터 실습
+*처음 실행해야하는 업데이트 - root@ansible-node03:~# apt-get update
+패키지 설치 = root@ansible-node03:~# apt-get install PACKAGE
+패키지 업그레이드 = root@ansible-node03:~# apt-get upgrade PACKAGE
+패키지 제거 = root@ansible-node03:~# apt-get remove PACKAGE
+
+#아파치 설치(웹서버) 
+root@ansible-node03:~# apt-get install apache2
+root@ansible-node03:~# systemctl status apache2
+ 
+root@ansible-node03:~# systemctl start apache2
+root@ansible-node03:~# ufw enable 
+root@ansible-node03:~# ufw allow 80/tcp
+Rule added
+Rule added (v6) 
+root@ansible-node03:~# ls -ld /etc/apache2/
+drwxr-xr-x 8 root root 4096 11월 30 14:45 /etc/apache2/
+root@ansible-node03:~# ls -l /etc/apache2/
+total 80
+-rw-r--r-- 1 root root  7224 10월 26 22:44 apache2.conf
+drwxr-xr-x 2 root root  4096 11월 30 14:45 conf-available   #아파치웹서버 설정파일 디렉터리
+drwxr-xr-x 2 root root  4096 11월 30 14:45 conf-enabled
+-rw-r--r-- 1 root root  1782  5월  4  2023 envvars
+-rw-r--r-- 1 root root 31063  5월  4  2023 magic
+drwxr-xr-x 2 root root 12288 11월 30 14:45 mods-available   #모듈들이 있는 디렉터리
+drwxr-xr-x 2 root root  4096 11월 30 14:45 mods-enabled
+-rw-r--r-- 1 root root   320  5월  4  2023 ports.conf
+drwxr-xr-x 2 root root  4096 11월 30 14:45 sites-available   #웹사이트의 설정들 디렉터리
+drwxr-xr-x 2 root root  4096 11월 30 14:45 sites-enabled
+
+root@ansible-node03:~# cd /etc/apache2/		폴더로 이동
+root@ansible-node03:/etc/apache2# ls -l sites-enabled/	여기를 확인해보면 
+lrwxrwxrwx 1 root root 35 11월 30 14:45 000-default.conf -> ../sites-available/000-default.conf
+
+디폴트 웹사이트 설정을 열어본다. 
+root@ansible-node03:/etc/apache2# vim sites-available/000-default.conf 
+ 
+DocumentRoot /var/www/html 에 기본적으로 위치하며, 여기에 index.html을 생성하면 된다.
+
+root@ansible-node03:/etc/apache2# apt-get install curl -y
+root@ansible-node03:/etc/apache2# curl http://192.168.56.13 으로 미리 조회해보고,
+192.168.56.13 웹으로 들어가보면 아파치웹 기본서버가 등장한다.
+ 
+
+# 파일들을 포함해서 완전삭제하고싶을때  apt-get purge =/ remove와는 차이가 있음.
+root@ansible-node03:~# apt-get purge apache2
+
+# Ubuntu에서 웹 서비스 구축 플레이북 작성하기
+다시 플레이북 실습으로 위 과정을 실행하는 플레이북을 작성해본다.
+[user@ansible-control 20231130]$ cat playbook-setup_web_service1_ubuntu.yaml
+---
+- name: playbook setup web service 1 for ubuntu
+  hosts: ubuntu
+  become: true
+
+  tasks:
+  - name: Update apt package manager cache 
+    apt:
+      update_cache: true
+  - name: Ensure apache2 web package is installed latest version
+    apt:
+      name: apache2
+      state: latest
+  - name: Ensure apache2 serivce is started
+    service:
+      name: apache2
+      state: started
+  - name: Ensure apache2 service is started (permanent)
+    service:
+      name: apache2
+      enabled: true
+  - name: Allow web service as ubuntu
+    ufw:
+      rule: allow
+      to_port: "80" # port
+      proto: tcp
+  - name: Deploying web content as apache2
+    copy:
+      content: "Welcome to webserver (ansible Ubuntu)"
+      dest: /var/www/html/index.html
+...
+>apt 모듈로 apt 패키지의 정보 캐시를 받아와야 한다. 따라서 update_cache 구문도 추가해준다.
+
+[user@ansible-control 20231130]$ ansible-playbook playbook-setup_web_service1_ubuntu.yaml
+PLAY RECAP *************************************************************************
+ansible-node03             : ok=7    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+   웹에 들어가서 확인해보면(index.html 확인)
+>>우분투에서 웹 서비스가 잘 실행되었다.
+
+# 핸들러 (Handler) 란
+ -  작업이 실행된 후 해당 작업으로 시스템에 변경(changed)이 발생한 경우 별도의 작업을 호출해서 처리하는 것
+  - 작업이 실행된 후 시스템에 변경이 발생한 경우 핸들러로 통지한다(notify 구문 사용)
+     (시스템에 변경이 발생하지 않은 경우에는 통지(notify)가 되지 않음.)
+- 핸들러의 작업은 플레이북의 모든 테스크가 실행된 후 실행됨.
+  - 통지를 동일한 핸들러에서 여러번 받는 경우에도 1회만 실행됨. 
+  - 정적 포함 파일, 동적 포함 파일 내부에 정의된 핸들러에는 통지(notify)를 전달할 수 없음.
+
+[user@ansible-control 20231130]$ vim playbook-handler1.yaml
+[user@ansible-control 20231130]$ cat playbook-handler1.yaml 
+---
+- name: playbook handler 1
+  hosts: all
+  tasks: 
+  - name: "task1: Create a file"
+    copy:
+      content: "Hellow Ansible"
+      dest: /tmp/hello.txt
+    notify: backup a file
+  - name: "task2"
+    debug:
+      msg: "task2ing.."
+  - name: "task3"
+    debug:
+      msg: "task3ing.."
+  handlers:                   <<tasks 와 동일계층이다. 주의할것.
+  - name: backup a file
+    copy:
+      src: /tmp/hello.txt
+      dest: /tmp/hello.txt.bak
+      remote_src: true
+...
+>>핸들러가 있는 예제를 작성했다.
+이 예제는 3개의 태스크가 있고, 첫 태스크는 파일을 만들고(copy모듈), 핸들러의 작업은 플레이북의 모든 태스크가 실행후 발동된다. remote_src: 는 기본값이 false인데, true로 하면 원본파일이 해당 관리 노드에 있고 다른 경로로 복사를 하게된다.
+ 
+>> txt는 모든 노드에서, 핸들러를통해 node03에서만 bak을 만들었다.
+
+핸들러를 하나 더 만들어본다.
+[user@ansible-control 20231130]$ vim playbook-handler2_multi.yaml
+[user@ansible-control 20231130]$ cat playbook-handler2_multi.yaml 
+---
+- name: Playbook handler2 multi handler
+  hosts: all
+
+  tasks:
+  - name: Create a file
+    copy:
+      content: "Write a file"
+      dest: /tmp/hello2.txt
+    notify:
+    - handler1
+    - handler2
+  - name: task2
+    debug:
+      msg: "task2 is running..."
+  - name: task3
+    debug:
+      msg: "task3 is running..."
+  handlers:
+  - name: handler1
+    debug:
+      msg: "handler1 is running..."
+  - name: handler2
+    debug:
+      msg: "handler2 is running..."
+  - name: handler3
+    debug:
+      msg: "handler3 is running..."
+...
+>>
+TASK [Create a file] ***************************************************************
+changed: [ansible-node03]
+changed: [ansible-node01]
+changed: [ansible-node02]
+ 
+create a file에서 보고를 받았고, 나머지 태스크와 핸들러들이 실행되었다. 핸들러3는 통지를 받지 않아서 실행되지 않은것까지 확인할 수 있다.
+
+# 블록( Block )
+  - 하나 이상의 작업을 논리적으로 묶은 하나의 실행단위
+  - 작업에 대한 예외 처리를 블록 내에서 처리할 수 있음
+
+tasks:
+- name: BLOCK_NAME
+  block:
+  - name: TASK1_NAME
+    MODULE:
+      field1: value
+      field1: value
+  - name: TASK2_NAME
+    MODULE:
+      field1: value
+      field1: value
+
+- name: TASK3_NAME
+  MODULE:
+    field1: value
+    field1: value
+>> *task3은 블록에 속해있는 task가 아니다. 
+
+#실습
+[user@ansible-control 20231130]$ vim playbook-block1.yaml
+[user@ansible-control 20231130]$ cat playbook-block1.yaml 
+
+---
+- name: playbook block 1
+  hosts: rocky
+
+  tasks:
+  - name: "[block] Install two packages."
+    block:
+    - name: "task1 : Install nfs-utils"
+      yum:
+        name: nfs-utils
+        state: present
+      become: true
+    - name: "task2 : Install cifs-utils"
+      yum:
+        name: cifs-utils
+        state: present
+      become: true
+  - name: "task3 : Copy remote file to ansible control node"
+    fetch:
+      src: /etc/hostname
+      dest: /home/ansible/{{ inventory_hostname }}-hostname.txt
+...
+ 
+>>블록으로 묶은 태스크1,2와 따로 태스크3이 존재한다. rocky그룹의 호스트들만이 해당되며 task들이 정의되고 있다. 
+패키지설치를위한 become: true 구문을 주었고 저기서만 관리자 권한이 발동된다.
+또한 이전에 관리노드의 파일들을 제어노드로 가져오고싶은것으로, fetch라는 모듈을 통해서 가져오게 된다.(fetch files from remote nodes_local to control node) 여기서 src(원 위치), dest(원하는 위치)구문만 정해주면 된다. 각각의 노드들마다 파일이름이 다르도록(변수 inventory_hostname) 노드이름을 붙여주게 설정했다. 
+
+TASK [task3 : Copy remote file to ansible control node] ****************************
+fatal: [ansible-node02]: FAILED! => {"msg": "Unable to create local directories(/home/ansible/ansible-node02-hostname.txt/ansible-node02/etc): [Errno 13] Permission denied: b&apos;/home/ansible/ansible-node02-hostname.txt&apos;"}
+fatal: [ansible-node01]: FAILED! => {"msg": "Unable to create local directories(/home/ansible/ansible-node01-hostname.txt/ansible-node01/etc): [Errno 13] Permission denied: b&apos;/home/ansible/ansible-node01-hostname.txt&apos;"}
+노드 3에서 오류가 떴다. 수정해본다
+ 
+flat 속성을 지정해주고 다시 시작한다.
+이래도 오류가 떴다. /home/user로 변경하면 잘 실행된다. 
+ 
+TASK [task3 : Copy remote file to ansible control node] ****************************
+changed: [ansible-node02]
+changed: [ansible-node01]
+
+PLAY RECAP *************************************************************************
+ansible-node01             : ok=4    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+ansible-node02             : ok=4    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+/home/user/{{ inventory_hostname }}-hostname.txt 를 조회해서 잘 있는지 확인해본다.
+[user@ansible-control 20231130]$ ls -l ~
+total 8
+-rw-r--r--. 1 user user  27 Nov 30 17:05 ansible-node01-hostname.txt
+-rw-r--r--. 1 user user  27 Nov 30 17:05 ansible-node02-hostname.txt
+잘 조회되었고, 내용도 한번 보도록 한다
+[user@ansible-control 20231130]$ cat ~/ansible-node01-hostname.txt 
+ansible-node01.example.com
+[user@ansible-control 20231130]$ cat ~/ansible-node02-hostname.txt 
+ansible-node02.example.com
+
+# 다시 복사해서 수정해본다. (fetch모듈때문)
+[user@ansible-control 20231130]$ cp playbook-block1.yaml playbook-block1-1.yaml 
+---
+- name: playbook block 1-1 without fetch
+  hosts: rocky
+
+  tasks:
+  - name: "[block] Install two packages."
+    block:
+    - name: "task1 : Install nfs-utils"
+      yum:
+        name: nfs-utils
+        state: present
+      become: true
+    - name: "task2 : Install cifs-utils"
+      yum:
+        name: cifs-utils
+        state: present
+      become: true
+  - name: "task3 : Copy remote file to ansible control node without flat"
+    fetch:
+      src: /etc/hostname
+      dest: /home/user/hostnames_fetch/
+...
+TASK [task3 : Copy remote file to ansible control node without flat] ***************
+changed: [ansible-node02]
+changed: [ansible-node01]
+잘 실행됐다.
+ 
+[user@ansible-control 20231130]$ tree ~/hostnames_fetch/  조회해본다.
+/home/user/hostnames_fetch/
+├── ansible-node01
+│   └── etc
+│       └── hostname
+└── ansible-node02
+    └── etc
+        └── hostname
+flat이라는 속성은 디폴트가 false인데, true라고 하게되면 별도로 파일이름을 지정하게되면 원본파일이 hostname이면 경로에 똑같이 지정된다. true이면 파일이름을 신경쓰지 않아도 node01,node02 디렉터리가 만들어지고 각각 노드에서 어느 경로에 있는건지 만들어진다. 
+
+
+
+
