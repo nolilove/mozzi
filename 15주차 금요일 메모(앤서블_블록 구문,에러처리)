@@ -1,0 +1,945 @@
+제어문
+  - 조건문
+  - 반복문
+  - 핸들러
+  - 예외처리
+
+조건문(when)
+  - 조건식의 결과에 따라 작업(task), 코드 블럭 등의 실행 여부를 결정하는 구문
+
+반복문(with_, loop)
+  특정 작업을 반복해서 실행하고자 할 때 사용하는 구문
+  반복문에서 각 반복 회차에 반복문에서 사용되는 변수 값이 저장되는 변수는 item 변수임.
+
+핸들러(Handler)
+ -  작업이 실행된 후 해당 작업으로 시스템에 변경(changed)이 발생한 경우 별도의 작업을 호출해서 처리하는 것
+  - 작업이 실행된 후 시스템에 변경이 발생한 경우 핸들러로 해당 핸들러로 통지(notify)됨.
+     (시스템에 변경이 발생하지 않은 경우에는 통지(notify)가 되지 않음.)
+  - 핸들러의 작업은 플레이북의 모든 테스크가 실행된 후 실행됨.
+  - 통지를 동일한 핸들러에서 여러번 받는 경우에도 1회만 실행됨. 
+  - 정적 포함 파일, 동적 포함 파일 내부에 정의된 핸들러에는 통지(notify)를 전달할 수 없음.
+
+
+[user@ansible-control 20231201]$ vim ansible.cfg
+[defaults]
+inventory = inventory
+remote_user = ansible
+
+
+[user@ansible-control 20231201]$ vim inventory
+[rocky]
+ansible-node01
+ansible-node02
+
+[ubuntu]
+ansible-node03
+
+
+
+
+[user@ansible-control 20231201]$ vim playbook-handler1.yaml
+---
+- name: Playbook handler 1 (Configure web service)
+  hosts: rocky
+  become: true
+
+  tasks:
+  - name: Add Listen Port 8080
+    lineinfile:
+      path: /etc/httpd/conf/httpd.conf
+      line: "Listen 8080"
+      insertafter: "^Listen 80"
+    notify:
+    - Restart httpd service
+  - name: allow web service TCP/8080 Port (Runtime Configuration)
+    firewalld:
+      port: 8080/tcp
+      state: enabled
+  - name: allow web service TCP/8080 Port (Permanent Configuration)
+    firewalld:
+      port: 8080/tcp
+      state: enabled
+      permanent: true
+  handlers:
+  - name: Restart httpd service
+    service:
+      name: httpd
+      state: restarted
+...
+
+
+
+
+블록(Block)
+  - 하나 이상의 작업을 논리적으로 묶은 하나의 실행단위
+  - 작업에 대한 예외 처리를 블록 내에서 처리할 수 있음
+
+블록 구문 섹션
+  block : 논리적으로 묶을 작업을 정의하는 섹션
+  rescue: block 섹션의 작업 실행 중 에러 발생시 에러를 처리 하기 위한 작업이 정의되는 섹션
+  always: block 섹션이 실행된 후 맨 마지막에 실행될 작업이 정의되는 섹션
+               block의 성공/실패 여부와 상관 없이 항상 실행됨.
+               일반적으로 block 섹션 작업에 대한 마무리 작업이 정의됨
+
+블록 구문의 형태
+  block
+  block-rescue
+  block-always
+  block-rescue-always
+
+
+[user@ansible-control 20231201]$ vim playbook-block1.yaml
+---
+- name: Playbook block 1
+  hosts: all
+
+  tasks:
+  - name: task1
+    debug:
+      msg: "task1 is running..."
+  - name: "Block 1"
+    block:
+    - name: "  block1-1 Create a file"
+      copy:
+        content: "block 1-1 task write a file"
+        dest: /tmp/block_task1.txt
+    - name: "  block1-2 Get some files"
+      fetch:
+        src: /etc/ansible/facts.d/custom_fact1.fact
+        dest: /home/user/collect_system_variables/
+  - name: task3
+    debug:
+      msg: "task3 is running..."
+...
+
+
+
+[user@ansible-control 20231201]$ vim playbook-block2.yaml
+---
+- name: Playbook block 2 - block-rescue
+  hosts: all
+
+  tasks:
+  - name: task1
+    debug:
+      msg: "task1 is running..."
+  - name: block-rescue example
+    block:
+    - name: Normal Task
+      debug:
+        msg: "I execute normally."
+    - name: Abnormal Task
+      command: "ls -l /etc/non-exists-file"
+    - name: Never Print This
+      debug:
+        msg: "I never execute..."
+    rescue:
+    - name: Print When Errors Occurred
+      debug:
+        msg: "I caught some errors."
+  - name: final task
+    debug:
+      msg: "final task is running..."
+...
+
+
+
+[user@ansible-control 20231201]$ vim playbook-block3.yaml
+---
+- name: Playbook block 3 - block-always
+  hosts: all
+
+  tasks:
+  - name: task1
+    debug:
+      msg: "task1 is running..."
+  - name: block-always example
+    block:
+    - name: Normal Task
+      debug:
+        msg: "I execute normally."
+    - name: Abnormal Task
+      command: "ls -l /etc/non-exists-file"
+    - name: Never Print This
+      debug:
+        msg: "I never execute..."
+    always:
+    - name: Always do something
+      debug:
+        msg: "I always executed..."
+  - name: final task
+    debug:
+      msg: "final task is running..."
+...
+
+
+
+[user@ansible-control 20231201]$ vim playbook-block4.yaml
+---
+- name: Playbook block 4 - block-rescue-always
+  hosts: all
+
+  tasks:
+  - name: task1
+    debug:
+      msg: "task1 is running..."
+  - name: block-always example
+    block:
+    - name: Normal Task
+      debug:
+        msg: "I execute normally."
+    - name: Abnormal Task
+      command: "ls -l /etc/non-exists-file"
+    - name: Never Print This
+      debug:
+        msg: "I never execute..."
+    rescue:
+    - name: Print When Errors Occurred
+      debug:
+        msg: "I caught some errors."
+    always:
+    - name: Always do something
+      debug:
+        msg: "I always executed..."
+  - name: final task
+    debug:
+      msg: "final task is running..."
+...
+
+
+
+
+
+[user@ansible-control 20231201]$ vim playbook-block4-1.yaml
+---
+- name: Playbook block 4-1 - block-rescue-always 2
+  hosts: all
+
+  tasks:
+  - name: task1
+    debug:
+      msg: "task1 is running..."
+  - name: block-always example
+    block:
+    - name: Normal Task
+      debug:
+        msg: "I execute normally."
+    - name: Normal Task 2
+      command: "cat /etc/hostname"
+    - name: Normal Task 3
+      debug:
+        msg: "I execute normally"
+    rescue:
+    - name: Print When Errors Occurred
+      debug:
+        msg: "I caught some errors."
+    always:
+    - name: Always do something
+      debug:
+        msg: "I always executed..."
+  - name: final task
+    debug:
+      msg: "final task is running..."
+...
+
+
+
+작업 에러 처리
+
+
+Ansible에서 에러를 판단하는 기준
+  - 모듈의 실행이 실패(failed)한 경우
+  - command, shell 모듈 등으로 명령어 실행시 Exit Code(Return Code)가 0이 아닌 값을 반환하는 경우
+
+ignore_errors
+  - 실행된 작업에서 에러 발생시 에러를 무시 (true/false)
+
+force_handlers
+  - 핸들러를 강제로 실행(true/false)
+
+failed_when
+  - 작업이 실패하는 조건을 사용자 정의하는 구문
+tasks:
+- name: TASK_NAME
+  MODULE:
+    field1: value1
+    field2: value2
+  failed_when:  FAIL_CONDITION
+
+
+changed_when
+  - 시스템에 변경이 일어나는 조건을 사용자 정의하는 구문
+tasks:
+- name: TASK_NAME
+  MODULE:
+    field1: value1
+    field2: value2
+  changed_when:  CHANGE_CONDITION
+
+
+
+
+[user@ansible-control 20231201]$ vim playbook-failed1.yaml
+---
+- name: Playbook failed 1
+  hosts: all
+
+  tasks:
+  - name: "task1: Ensure /tmp/ansible_test01.txt does not exists"
+    shell: "ls -l /tmp/ansible_test01.txt"
+  - name: "task2: Create a file /tmp/ansible_test01.txt"
+    copy:
+      content: "{{ ansible_facts['hostname'] }} test file"
+      dest: /tmp/ansible_test01.txt
+  - name: "task3: Read a file /tmp/ansible_test01.txt"
+    shell: "cat /tmp/ansible_test01.txt"
+    register: test01_data
+  - name: "task4: Print a file /tmp/ansible_test01.txt"
+    debug:
+      msg: "{{ test01_data.stdout_lines }}"
+...
+
+
+Task1 작업의 실패로 더이상 실행되지 않음
+
+
+Play 수준에서 에러 무시 후 플레이북 실행
+[user@ansible-control 20231201]$ vim playbook-ignore_errors1.yaml
+---
+- name: Playbook ignore_errors 1
+  hosts: all
+  ignore_errors: true
+
+  tasks:
+  - name: "task1: Ensure /tmp/ansible_test01.txt does not exists"
+    shell: "ls -l /tmp/ansible_test01.txt"
+  - name: "task2: Create a file /tmp/ansible_test01.txt"
+    copy:
+      content: "{{ ansible_facts['hostname'] }} test file"
+      dest: /tmp/ansible_test01.txt
+  - name: "task3: Read a file /tmp/ansible_test01.txt"
+    shell: "cat /tmp/ansible_test01.txt"
+    register: test01_data
+  - name: "task4: Print a file /tmp/ansible_test01.txt"
+    debug:
+      msg: "{{ test01_data.stdout_lines }}"
+...
+
+
+특정 task에 대해서 에러가 발생하는 경우 에러를 무시하고 실행
+[user@ansible-control 20231201]$ vim playbook-ignore_errors2.yaml
+---
+- name: Playbook ignore_errors 2
+  hosts: all
+
+  tasks:
+  - name: "task1: Ensure /tmp/ansible_test01.txt does not exists"
+    shell: "ls -l /tmp/ansible_test01.txt"
+    ignore_errors: true
+  - name: "task2: Create a file /tmp/ansible_test01.txt"
+    copy:
+      content: "{{ ansible_facts['hostname'] }} test file"
+      dest: /tmp/ansible_test01.txt
+  - name: "task3: Read a file /tmp/ansible_test01.txt"
+    shell: "cat /tmp/ansible_test01.txt"
+    register: test01_data
+  - name: "task4: Print a file /tmp/ansible_test01.txt"
+    debug:
+      msg: "{{ test01_data.stdout_lines }}"
+...
+
+
+Ad-Hoc 명령어로 각 관리노드의 파일 삭제
+[user@ansible-control 20231201]$ ansible all -m file -a "path=/tmp/ansible_test01.txt
+[user@ansible-control 20231201]$ ansible-playbook playbook-ignore_errors2.yaml
+
+
+Ad-Hoc 명령어로 각 관리노드의 파일 삭제
+[user@ansible-control 20231201]$ ansible all -m file -a "path=/tmp/ansible_test01.txt
+
+
+[user@ansible-control 20231201]$ vim playbook-failed_when2.yaml
+---
+- name: Playbook failed_when 2
+  hosts: all
+
+  tasks:
+  - name: "task1: Ensure /tmp/ansible_test01.txt does not exists"
+    shell: "ls -l /tmp/ansible_test01.txt"
+    register: file_state
+    #ignore_errors: true
+    #failed_when: file_state.failed == false
+    failed_when: ("No such file" not in file_state.stderr)
+  - name: Print Registered Variable
+    debug:
+      var: file_state
+  - name: "task2: Create a file /tmp/ansible_test01.txt"
+    copy:
+      content: "{{ ansible_facts['hostname'] }} test file"
+      dest: /tmp/ansible_test01.txt
+  - name: "task3: Read a file /tmp/ansible_test01.txt"
+    shell: "cat /tmp/ansible_test01.txt"
+    register: test01_data
+  - name: "task4: Print a file /tmp/ansible_test01.txt"
+    debug:
+      msg: "{{ test01_data.stdout_lines }}"
+...
+
+
+
+
+
+[user@ansible-control 20231201]$ vim playbook-force_handlers1.yaml
+---
+- name: Playbook force_handlers 1
+  hosts: all
+
+  tasks:
+  - name: Read /etc/hostname
+    command: "cat /etc/hostname"
+    notify:
+    - "back up a file /etc/hostname"
+  - name: Failed Task
+    command: "ls -l /etc/non-exist-file"
+  - name: Never Print This
+    debug:
+      msg: "I never execute..."
+  handlers:
+  - name: "back up a file /etc/hostname"
+    copy:
+      src: "/etc/hostname"
+      dest: "/tmp/hostname.bak.1"
+...
+
+
+
+[user@ansible-control 20231201]$ vim playbook-force_handlers1-1.yaml
+---
+- name: Playbook force_handlers 1-1
+  hosts: all
+  force_handlers: true
+
+  tasks:
+  - name: Read /etc/hostname
+    command: "cat /etc/hostname"
+    notify:
+    - "back up a file /etc/hostname"
+  - name: Failed Task
+    command: "ls -l /etc/non-exist-file"
+  - name: Never Print This
+    debug:
+      msg: "I never execute..."
+  handlers:
+  - name: "back up a file /etc/hostname"
+    copy:
+      src: "/etc/hostname"
+      dest: "/tmp/hostname.bak.1"
+      remote_src: true
+...
+
+
+
+ansible.cfg 구성 파일에서 force_handlers 설정하는 경우
+[user@ansible-control 20231201]$ vim ansible.cfg
+[defaults]
+inventory = inventory
+remote_user = ansible
+force_handlers = true
+
+  - 모든 플레이북 실행시 적용
+
+
+[user@ansible-control 20231201]$ vim playbook-failed_when1.yaml
+---
+- name: Playbook failed_when 1
+  hosts: all
+
+  tasks:
+  - name: "task1: Ensure /tmp/ansible_test01.txt does not exists"
+    shell: "ls -l /tmp/ansible_test01.txt"
+    register: file_state
+    failed_when: file_state.rc == 0
+  - name: "task2: Create a file /tmp/ansible_test01.txt"
+    copy:
+      content: "{{ ansible_facts['hostname'] }} test file"
+      dest: /tmp/ansible_test01.txt
+  - name: "task3: Read a file /tmp/ansible_test01.txt"
+    shell: "cat /tmp/ansible_test01.txt"
+    register: test01_data
+  - name: "task4: Print a file /tmp/ansible_test01.txt"
+    debug:
+      msg: "{{ test01_data.stdout_lines }}"
+...
+
+
+파일이 존재한 상태에서 실행 -> task1 실패
+파일을 지운 상태에서 실행 -> task1 성공
+
+Ad-Hoc 명령어로 각 관리노드의 파일 삭제
+[user@ansible-control 20231201]$ ansible all -m file -a "path=/tmp/ansible_test01.txt state=absent"
+
+
+changed_when 실습
+
+시스템에 변경이 없는 작업에 대해 changed를 보고하지 않도록 플레이북 작성
+[user@ansible-control 20231201]$ vim playbook-changed_when1.yaml
+---
+- name: Playbook changed_when 1
+  hosts: all
+
+  tasks:
+  - name: Read a file /etc/hosts
+    command: "cat /etc/hosts"
+    changed_when: false
+...
+
+
+[user@ansible-control 20231201]$ ansible-playbook playbook-changed_when1.yaml
+
+PLAY [Playbook changed_when 1] *****************************************************
+TASK [Gathering Facts] *************************************************************
+ok: [ansible-node01]
+ok: [ansible-node02]
+ok: [ansible-node03]
+
+TASK [Read a file /etc/hosts] ******************************************************
+ok: [ansible-node03]
+ok: [ansible-node02]
+ok: [ansible-node01]
+
+PLAY RECAP *************************************************************************
+ansible-node01             : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node02             : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node03             : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+
+[user@ansible-control 20231201]$ vim playbook-changed_when2.yaml
+---
+- name: Playbook changed_when 2
+  hosts: all
+
+  tasks:
+  - name: Modify a file
+    shell: "echo NEW CONTENT > /tmp/example01.txt"
+  - name: Read a file /tmp/example01.txt and Check File was modified
+    shell: "cat /tmp/example01.txt"
+    register: file_content
+    changed_when: ("NEW CONTENT" in file_content.stdout)
+...
+
+
+
+
+
+import
+ - Ansible에서 정적으로 내용을 추가하는 방법
+
+include
+ - Ansible에서 동적으로 내용을 추가하는 방법
+
+
+import_tasks 
+include_tasks 
+
+import_tasks, include_tasks 실습을 위한 디렉터리 생성
+[user@ansible-control 20231201]$ pwd
+/home/user/work/20231201
+[user@ansible-control 20231201]$ mkdir tasks
+
+
+import_tasks 
+[user@ansible-control 20231201]$ vim tasks/import_tasks1.yaml
+- name: "  import_task1"
+  debug:
+    msg: "import_task1 is running..."
+- name: "  import_task2"
+  debug:
+    msg: "import_task2 is running..."
+- name: "  import_task3"
+  debug:
+    msg: "import_task3 is running..."
+
+
+[user@ansible-control 20231201]$ vim playbook-import_tasks1.yaml
+---
+- name: Playbook import_tasks 1
+  hosts: all
+
+  tasks:
+  - name: "task1 : Playbook task"
+    debug:
+      msg: "task1 is running..."
+  - name: "import tasks import_tasks1.yaml"
+    import_tasks: tasks/import_tasks1.yaml
+  - name: "final task : Playbook task"
+    debug:
+      msg: "final task is running..."
+...
+
+
+
+
+[user@ansible-control 20231201]$ ansible-playbook playbook-import_tasks1.yaml
+
+PLAY [Playbook import_tasks 1] *****************************************************
+TASK [Gathering Facts] *************************************************************
+ok: [ansible-node02]
+ok: [ansible-node01]
+ok: [ansible-node03]
+
+TASK [task1 : Playbook task] *******************************************************
+ok: [ansible-node01] => {
+    "msg": "task1 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "task1 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "task1 is running..."
+}
+
+TASK [import_task1] ****************************************************************
+ok: [ansible-node01] => {
+    "msg": "import_task1 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "import_task1 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "import_task1 is running..."
+}
+
+TASK [import_task2] ****************************************************************
+ok: [ansible-node01] => {
+    "msg": "import_task2 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "import_task2 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "import_task2 is running..."
+}
+
+TASK [import_task3] ****************************************************************
+ok: [ansible-node01] => {
+    "msg": "import_task3 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "import_task3 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "import_task3 is running..."
+}
+
+TASK [final task : Playbook task] **************************************************
+ok: [ansible-node01] => {
+    "msg": "final task is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "final task is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "final task is running..."
+}
+
+PLAY RECAP *************************************************************************
+ansible-node01             : ok=6    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node02             : ok=6    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node03             : ok=6    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+
+
+include_tasks 
+[user@ansible-control 20231201]$ vim tasks/include_tasks.yaml
+- name: "  [include_task1]"
+  debug:
+    msg: "include_task1 is running..."
+- name: "  [include_task2]"
+  debug:
+    msg: "include_task2 is running..."
+- name: "  [include_task3]"
+  debug:
+    msg: "include_task3 is running..."
+
+
+[user@ansible-control 20231201]$ vim playbook-include_tasks1.yaml
+---
+- name: Playbook include_tasks 1
+  hosts: all
+
+  tasks:
+  - name: "task1 : Playbook task"
+    debug:
+      msg: "task1 is running..."
+  - name: include_tasks tasks/include_tasks1.yaml
+    include_tasks: tasks/include_tasks1.yaml
+  - name: "final task : Playbook task"
+    debug:
+      msg: "final task is running..."
+...
+
+
+
+
+
+[user@ansible-control 20231201]$ ansible-playbook playbook-include_tasks1.yaml
+
+PLAY [Playbook include_tasks 1] ****************************************************
+TASK [Gathering Facts] *************************************************************
+ok: [ansible-node03]
+ok: [ansible-node01]
+ok: [ansible-node02]
+
+TASK [task1 : Playbook task] *******************************************************
+ok: [ansible-node01] => {
+    "msg": "task1 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "task1 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "task1 is running..."
+}
+
+TASK [include_tasks tasks/include_tasks1.yaml] *************************************
+included: /home/user/work/20231201/tasks/include_tasks1.yaml for ansible-node01, ansible-node02, ansible-node03
+
+TASK [[include_task1]] *************************************************************
+ok: [ansible-node01] => {
+    "msg": "include_task1 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "include_task1 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "include_task1 is running..."
+}
+
+TASK [[include_task2]] *************************************************************
+ok: [ansible-node01] => {
+    "msg": "include_task2 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "include_task2 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "include_task2 is running..."
+}
+
+TASK [[include_task3]] *************************************************************
+ok: [ansible-node01] => {
+    "msg": "include_task3 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "include_task3 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "include_task3 is running..."
+}
+
+TASK [final task : Playbook task] **************************************************
+ok: [ansible-node01] => {
+    "msg": "final task is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "final task is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "final task is running..."
+}
+
+PLAY RECAP *************************************************************************
+ansible-node01             : ok=7    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node02             : ok=7    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node03             : ok=7    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+
+Ansible Role (Ch08., p.139)
+ - Ansible Play를 실행하는데 필요한 여러 파일을 하나의 구조화 된 패키지로 묶어 배포하는 단위
+ - IDE 개발 도구에서 프로그램 개발시 생성하는 프로젝트 개념과 유사함.
+
+Ansible Role 디렉터리 구조(p.140)
+
+Ansible Galaxy
+
+
+Ansible Role 관리 명령어
+$ ansible-galaxy role 
+
+Ansible Role 디렉터리 생성
+[user@ansible-control 20231201]$ mkdir roles
+
+개별 Ansible Role 디렉터리 수동 생성(실습)
+[user@ansible-control 20231201]$ mkdir roles/example_role01
+[user@ansible-control 20231201]$ mkdir roles/example_role01/{defaults,files,handlers,meta,tasks,templates,tests,vars}
+[user@ansible-control 20231201]$ tree -p roles/example_role01/
+roles/example_role01/
+├── [drwxr-xr-x]  defaults
+├── [drwxr-xr-x]  files
+├── [drwxr-xr-x]  handlers
+├── [drwxr-xr-x]  meta
+├── [drwxr-xr-x]  tasks
+├── [drwxr-xr-x]  templates
+├── [drwxr-xr-x]  tests
+└── [drwxr-xr-x]  vars
+
+8 directories, 0 files
+
+Ansible Role "example_role01" 변수 파일 작성
+[user@ansible-control 20231201]$ vim roles/example_role01/vars/main.yaml
+var1: 1234
+var2: "Hello Ansible Role"
+var3: "example_role01 role"
+
+
+Ansible Role "example_role01" 작업(tasks) 파일 작성
+[user@ansible-control 20231201]$ vim roles/example_role01/tasks/main.yaml
+- name: "_Role_task1"
+  debug:
+    msg: "var1: {{ var1 }}"
+  changed_when: true
+  notify: "_Role_handler1"
+- name: "_Role_task2"
+  debug:
+    msg: "var2: {{ var2 }}"
+- name: "_Role_task3"
+  debug:
+    msg: "var3: {{ var3 }}"
+
+
+Ansible Role "example_role01" 핸들러(handlers) 파일 작성
+[user@ansible-control 20231201]$ vim roles/example_role01/handlers/main.yaml
+- name: _Role_handler1
+  debug:
+    msg: "Ansible Role example_role01 handler1 is running..."
+
+
+
+
+Ansible Role "example_role01"을 사용하는 플레이북 작성
+[user@ansible-control 20231201]$ vim playbook-using_a_ansible_role1.yaml
+---
+- name: Playbook using an ansible role - example_role01
+  hosts: all
+  roles:
+  - role: example_role01
+
+  tasks:
+  - name: "[Playbook_task1]"
+    debug:
+      msg: "Playbook task1 is running..."
+    changed_when: true
+    notify: "[Playbook_handler1]"
+  - name: "[Playbook_task2]"
+    debug:
+      msg: "Playbook task2 is running..."
+  handlers:
+  - name: "[Playbook_handler1]"
+    debug:
+      msg: "Playbook Handler1 is running..."
+...
+
+
+
+[user@ansible-control 20231201]$ ansible-playbook playbook-using_a_ansible_role1.yaml
+
+PLAY [Playbook using an ansible role - example_role01] ******************************
+TASK [Gathering Facts] **************************************************************
+ok: [ansible-node02]
+ok: [ansible-node01]
+ok: [ansible-node03]
+
+TASK [example_role01 : _Role_task1] *************************************************
+changed: [ansible-node01] => {
+    "msg": "var1: 1234"
+}
+changed: [ansible-node02] => {
+    "msg": "var1: 1234"
+}
+changed: [ansible-node03] => {
+    "msg": "var1: 1234"
+}
+
+TASK [example_role01 : _Role_task2] *************************************************
+ok: [ansible-node01] => {
+    "msg": "var2: Hello Ansible Role"
+}
+ok: [ansible-node02] => {
+    "msg": "var2: Hello Ansible Role"
+}
+ok: [ansible-node03] => {
+    "msg": "var2: Hello Ansible Role"
+}
+
+TASK [example_role01 : _Role_task3] *************************************************
+ok: [ansible-node01] => {
+    "msg": "var3: example_role01 role"
+}
+ok: [ansible-node02] => {
+    "msg": "var3: example_role01 role"
+}
+ok: [ansible-node03] => {
+    "msg": "var3: example_role01 role"
+}
+
+TASK [[Playbook_task1]] *************************************************************
+changed: [ansible-node01] => {
+    "msg": "Playbook task1 is running..."
+}
+changed: [ansible-node02] => {
+    "msg": "Playbook task1 is running..."
+}
+changed: [ansible-node03] => {
+    "msg": "Playbook task1 is running..."
+}
+
+TASK [[Playbook_task2]] *************************************************************
+ok: [ansible-node01] => {
+    "msg": "Playbook task2 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "Playbook task2 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "Playbook task2 is running..."
+}
+
+RUNNING HANDLER [example_role01 : _Role_handler1] ***********************************
+ok: [ansible-node01] => {
+    "msg": "Ansible Role example_role01 handler1 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "Ansible Role example_role01 handler1 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "Ansible Role example_role01 handler1 is running..."
+}
+
+RUNNING HANDLER [[Playbook_handler1]] ***********************************************
+ok: [ansible-node01] => {
+    "msg": "Playbook Handler1 is running..."
+}
+ok: [ansible-node02] => {
+    "msg": "Playbook Handler1 is running..."
+}
+ok: [ansible-node03] => {
+    "msg": "Playbook Handler1 is running..."
+}
+
+PLAY RECAP **************************************************************************
+ansible-node01             : ok=8    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node02             : ok=8    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+ansible-node03             : ok=8    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+Ansible Role을 사용하는 Playbook의 실행 순서
+ 1. Ansible Role의 tasks
+ 2. Ansible Playbook의 tasks
+ 3. Ansible Role의 handlers
+ 4. Ansible Playbook의 handlers
+
+Ansible Role을 이용한 플레이북 개발 실습 (p.142) my-role
+
+$ ansible-galaxy role init --init-path  ROLES_DIR  ROLE_NAME
+$ ansible-galaxy role init --init-path roles my-role
+
+
