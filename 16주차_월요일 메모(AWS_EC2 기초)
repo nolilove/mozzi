@@ -1,0 +1,132 @@
+16주차 월요일 메모 (AWS_EC2기초)
+
+# AWS 아마존 웹 서비스
+온프레미스(on-premise)의 개념
+클라우드(Cloud)의 개념
+
+"Cloud"와 "On-premise"는 정보 기술(IT) 환경에서 자주 사용되는 용어로, 각각 클라우드 컴퓨팅과 온프레미스(On-premise) 환경을 나타낸다.
+# "온프레미스"는 사업체나 조직이 자체적으로 소유하고 운영하는 IT 인프라를 나타냅니다. "On-premise"는 "on-site" 또는 "on-prem"이라고도 한다.
+# "클라우드"라는 용어는 컴퓨터 네트워크 다이어그램에서 일반적으로 구름 모양으로 표시되는데, 이로부터 유래. 클라우드 컴퓨팅은 인터넷을 통해 서버, 스토리지, 데이터베이스, 네트워크, 소프트웨어, 분석 및 기타 IT 자원에 대한 접근을 제공하는 모델이다.
+
+# 클라우드 서비스 운영 방식
+
+공용 클라우드(Public Cloud) 
+  - 클라우드 서비스를 누구나 이용할 수 있도록 운영하는 방식
+  - 원하는 때에 필요한 만큼 클라우드 컴퓨팅 서비스를 제공받을 수 있음
+- 여러 사용자들이 클라우드 인프라를 공유하여 사용함.
+CSP: 공용클라우드의 주요 서비스 제공자(Cloud Service Provider) : Amazon AWS, Microsoft Azure, Google GCP 등 
+
+프라이빗 클라우드(Private Cloud)
+ - 클라우드 서비스를 조직 내에서 구축하고 운영하는 방식
+ - 관련 법령 또는 규정상 외부에 데이터를 둘 수 없는 경우, 서비스를 자체적으로 구축하여 운영함
+
+하이브리드 클라우드(Hybrid Cloud)
+ - 공개적인 서비스의 경우 퍼블릭 클라우드에서, 민감한 데이터가 있는 서비스의 경우 프라이빗 클라우드에서 운영하는 방식
+ - 퍼블릭 클라우드와 프라이빗 클라우드를 적절히 혼용하여 사용하는 방식
+
+멀티 클라우드(Multi Cloud)
+ - 두개 이상의 클라우드 서비스 제공자의 클라우드 서비스를 서로 연동하여 사용하는 클라우드 서비스 운영 방식
+
+# MSP (Managed Service Provider)와 CSP (Cloud Service Provider)
+MSP는 기업이나 조직에 대해 IT 서비스를 제공하고 관리하는 서비스 제공자이다. 이들은 전반적인 IT 인프라 및 서비스를 모니터링, 유지보수, 관리하며 고객이 비즈니스에 집중할 수 있도록 지원한다. 국내의 경우 메가존, 베스핀글로벌, 클루커스, 클라우드메이트 등이 있다.
+
+CSP는 클라우드 컴퓨팅 서비스를 제공하는 조직을 나타냅니다. IaaS, PaaS, SaaS 및 다양한 클라우드 서비스를 포함합니다. Amazon Web Services (AWS), Microsoft Azure, Google Cloud Platform (GCP), IBM Cloud.
+
+# <클라우드서비스의 유형> 
+IaaS (Infrastructure as a Service): 클라우드 서비스를 인프라수준에서 제공
+PaaS (Platform as a Service): 플랫폼수준의 서비스 제공, 개발환경&운영환경을 제공받음 
+SaaS (Software a s a Service): 소프트웨어 그 자체의 서비스를 제공받음. 인프라구축의 부담을 줄이고, 운영 개발환경을 바로 이용가능하다.
+등의 비즈니스모델이 있다.
+
+시스템 기반
+ - 애플리케이션/서비스를 사용자가 1년 365일 24시간 이용할 수 있는 환경을 제공하는 기술 요소
+
+기능 요건
+ - 시스템의 기능으로 요구되는 조건
+ - 시스템이나 소프트웨어로 무엇을 할 수 있는지를 정리한 것
+
+비기능 요건
+ - 시스템의 성능, 신뢰성, 확장성, 유지보수성, 보안 등
+
+시스템 기반의 주요 구성 요소
+ - 서버, 네트워크, 설비(UPS, 항온항습기, 공조 시스템, 배전 설비 등)
+
+Data Center
+  - 시스템 기반 환경을 제공하기 위해  시스템 기반의 각 구성요소를 제공하는 시설
+ 
+Data Center의 분류
+ - IDC(Internet Data Center)
+ - CDC(Cloud Data Center)
+
+사용 유형
+  - 서버 호스팅(Server Hosting) : 데이터 센터에서 서버 등의 장비를 임대하여 사용
+  - 코로케이션(Co-location) : 내 소유의 장비를 데이터 센터에 두고 사용하는 것
+
+
+# 리전과 가용영역AZ
+AWS(Amazon Web Services)에서 "리전(Region)"은 AWS 클라우드에서 서비스를 제공하는 지리적인 위치를 나타낸다.
+AWS(Amazon Web Services)에서 "AZ"는 Availability Zone(가용 영역)을 나타낸다.
+
+-가용 영역은 하나 이상의 데이터 센터로 구성되어 있으며, 이들 간에 낮은 지연 시간을 유지하면서 동시에 하나의 가용 영역이 문제가 발생해도 다른 가용 영역에서 서비스를 지속할 수 있도록 설계되어 있다.
+1.	고가용성 및 내결함성: 가용 영역 간에 서비스를 분산하여 장애나 문제가 발생해도 다른 가용 영역에서 서비스를 제공함으로써 고가용성과 내결함성을 강화합니다.
+2.	지역 간 고가용성: 서로 다른 지역(Region) 간에도 가용 영역이 분포하여 지역 간의 고가용성을 제공합니다.
+3.	가용 영역의 선택: 사용자는 서비스를 배포할 때 가용 영역을 선택할 수 있습니다. 서비스를 여러 가용 영역에 걸쳐 분산시킴으로써 안정성을 높일 수 있습니다.
+4.	데이터 센터 간 물리적 분리: 각 가용 영역은 서로 다른 데이터 센터에 위치하며, 화재, 홍수, 전력 고장 등과 같은 재해에 대비하여 물리적으로 분리됩니다.
+
+이처럼 크기순으로 나열하자면,  리전> AZ> DC(data center) 순으로 크다고 말할 수 있다.
+•	아시아 태평양 (서울)ap-northeast-2 리전은 각 2a, 2b, 2c, 2d라는 가용영역을 가진다.
+
+# 실습에 자주 사용할 인스턴스 유형
+•  t2.micro : 1 core / 1GB / 온디맨드 시간당 0.0144 USD
+•  t3.micro : 2 core / 1GB / 온디맨드 시간당 0.013 USD
+정도로,  인스턴스 유형에서 t2.micro는 프리티어에서 12개월동안 운용가능하다는 점이 괜찮으나 성능이 비교적 저열하며, t3.micro가 성능이 30%정도 더 나으며 온디맨드로 비용이 더 낮게,더 높게 나올 수 있다는 점을 참고하자.
+그리고 두 인스턴스 유형의 CPU 의 차이에 대해서 살펴보면
+t2 인스턴스 유형은 Skylake 6 세대 CPU 를 사용하고 있으며
+t3 인스턴스 유형은 Haswell 4 세대 CPU 를 사용하고 있다.
+
+# 인스턴스 키 페어
+키페어 유형으로 RSA와 ED25519가 존재한다.
+알고리즘 유형:
+-RSA: RSA는 비대칭 키 알고리즘으로 알려져 있습니다. 이는 공개 키와 개인 키를 사용하여 암호화 및 서명을 수행한다.
+-ED25519: ED25519은 Elliptic Curve Digital Signature Algorithm (EdDSA)의 한 종류로, 타원 곡선 암호화의 일종입니다. 이는 공개 키 기반의 디지털 서명을 생성하는 데 사용된다.
+
+보안 강도:
+-RSA: 안전한 키 길이를 유지하면서도 RSA는 여전히 안전한 알고리즘이지만, 긴 키를 사용하면 계산 비용이 증가합니다.
+-ED25519: 상대적으로 짧은 키 길이로도 충분한 안전성을 제공하므로, 계산 비용을 줄이면서도 높은 보안 강도를 제공합니다.
+
+>>보통은 rsa, .pem 형식의 키페어를 생성해서 사용하게된다.
+
+인스턴스가 생성됐으면 접속을 시도해본다.
+C:\Users\USER>ssh ec2-user@3.34.2.94
+The authenticity of host '3.34.2.94 (3.34.2.94)' can't be established.
+ED25519 key fingerprint is SHA256:N+/nyNeeY9YKPZBReT0e0kE4virMm7f+jkIRbB59OxM.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '3.34.2.94' (ED25519) to the list of known hosts.
+ec2-user@3.34.2.94: Permission denied (publickey,gssapi-keyex,gssapi-with-mic).
+안된다. 키기반 으로 접속해본다.
+C:\Users\USER>ssh ec2-user@3.34.2.94 -i my-all-machine-key-231204.pem
+홈폴더에 있는 경우, -i 옵션으로 탭탭만 해도 키가 선택된다.
+ 
+그러면 ec2에 잘 접속된 것을 볼 수 있다.
+간단하게 웹서비스를 실행해보자.
+sudo -i로 root에 진입, 
+# yum install httpd -y  로 웹을 설치한다.
+[root@ip-172-31-35-100 ~]# systemctl status httpd.service
+● httpd.service - The Apache HTTP Server
+   Loaded: loaded (/usr/lib/systemd/system/httpd.service; disabled; vendor preset: disabled)
+   Active: inactive (dead)
+     Docs: man:httpd.service(8)
+[root@ip-172-31-35-100 ~]# systemctl start httpd.service
+[root@ip-172-31-35-100 ~]# systemctl enable --now httpd.service
+Created symlink from /etc/systemd/system/multi-user.target.wants/httpd.service to /usr/lib/systemd/system/httpd.service.
+
+[root@ip-172-31-35-100 ~]# echo "Welcome to ec2 page" > /var/www/html/index.html
+[root@ip-172-31-35-100 ~]# curl 3.34.2.94
+Welcome to ec2 page
+웹브라우저에 접속하면 저 페이지가 뜬다.
+확인했으니 인스턴스를 종료해주자.
+ 
+
+
+
