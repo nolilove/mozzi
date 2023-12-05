@@ -1,0 +1,295 @@
+16주차 월요일 메모 (AWS_VPC)
+
+EC2 기초를 지난시간에 실습했다.
+이번시간에는 aws의 주요 서비스 / VPC            에 대해 알아본다.
+
+# AWS의 주요 서비스 (AWS 백서)
+1. 컴퓨팅 서비스
+인스턴스 (가상머신)	•	Amazon Elastic Compute Cloud (Amazon EC2) — 클라우드에서 안전하고 크기 조정이 가능한 컴퓨팅 파워 (가상 서버)
+•	Amazon EC2 스팟 인스턴스 — 최대 90% 할인된 가격으로 내결함성 워크로드를 실행합니다.
+•	Amazon EC2 Auto Scaling — 수요 변화에 맞춰 컴퓨팅 파워를 자동으로 추가 또는 제거합니다.
+•	Amazon Lightsail — 애플리케이션 asy-to-use 또는 웹 사이트 구축에 필요한 모든 것을 제공하는 클라우드 플랫폼
+•	AWS Batch— 규모에 상관없이 완전 관리형 일괄 처리
+
+컨테이너	•	Amazon Elastic Container Service (Amazon ECS) — 매우 안전하고 안정적이며 확장 가능한 컨테이너 실행 방법
+•	Amazon ECS Anywhere — 고객 관리형 인프라에서 컨테이너를 실행합니다.
+•	Amazon Elastic 컨테이너 레지스트리 (Amazon ECR) — 컨테이너 이미지를 쉽게 저장, 관리 및 배포할 수 있습니다.
+•	아마존 엘라스틱 쿠버네티스 서비스 (아마존 EKS) — 완전 관리형 쿠버네티스 서비스
+•	Amazon EKS Anywhere — 자체 인프라에서 쿠버네티스 클러스터를 생성하고 운영할 수 있습니다.
+•	AWS Fargate— 컨테이너용 서버리스 컴퓨팅
+•	AWS App Runner— 완전 관리형 서비스에서 컨테이너식 애플리케이션을 구축하고 실행합니다.
+서버리스	•	AWS Lambda— 서버를 신경 쓰지 않고 코드를 실행할 수 있습니다. 사용한 컴퓨팅 시간에 대해서만 비용을 지불하세요.
+엣지 및 하이브리드	•	AWS Outposts— 온프레미스에서 AWS 인프라 및 서비스를 실행하여 진정으로 일관된 하이브리드 경험을 제공합니다.
+•	AWS Snow Family— 거칠거나 연결이 끊긴 엣지 환경에서 데이터를 수집하고 처리합니다.
+•	AWS Wavelength— 5G 디바이스를 위한 초저지연 애플리케이션 제공
+•	VMware Cloud on AWS — 모든 vSphere 워크로드를 신속하게 확장하고 클라우드로 마이그레이션하기 위한 선호 서비스입니다.
+•	AWSLocal Zones — 지연 시간에 민감한 애플리케이션을 최종 사용자와 가까운 위치에서 실행
+비용 및 용량 관리	•	AWS Savings Plan — AWS 컴퓨팅 사용량을 최대 72% 까지 절감할 수 있는 유연한 요금 모델
+•	AWS Compute Optimizer— 워크로드에 맞는 최적의 AWS 컴퓨팅 리소스를 추천하여 비용을 절감하고 성능을 개선합니다.
+•	AWS Elastic Beanstalk— 웹 애플리케이션 및 asy-to-use 서비스의 배포 및 확장을 위한 E 서비스
+•	EC2 Image Builder — 안전한 리눅스 또는 윈도우 서버 이미지 구축 및 유지
+•	Elastic Load Balancing (ELB) — 들어오는 애플리케이션 트래픽을 여러 대상에 자동으로 분산합니다.
+
+2. 네트워킹 서비스
+•	Amazon API Gateway
+•	아마존 CloudFront
+•	Amazon Route 53 - 가용성, 확장성이 우수한 DNS서비스. 웹인터페이스 기반으로 Domain zone을 생성 및 관리
+•	Amazon VPC (Virtual Private Cloud) - 가상 사설 네트워크 인프라를 클라우드 내 생성
+•	AWS Direct Connect- 기존 온프레미스와 AWS를 연동하여 낮은 지연으로 데이터를 공유할 수 있는 서비스
+•	AWS Global Accelerator
+•	AWS Transit Gateway
+•	AWS VPN (Virtual Private Network)
+•	Elastic Load Balancing (ELB) - ALB, NLB, GLB, (CLB) 네개의 로드밸런서를 통칭하는 말이며, 내결함성을 높이는데 필요한 고가용성, 자동조정, 강력한 보안 기능을 갖춘 로드밸런서이다. 애플리케이션 트래픽을 Amazon EC2 인스턴스, 컨테이너 및 IP 주소와 같은 여러 대상에 자동으로 분산합니다. 단일 가용 영역 또는 여러 가용 영역에서 다양한 애플리케이션 트래픽 부하를 처리한다.
+
+3. 스토리지 서비스
+•	Amazon Elastic Block Store (EBS) - EC2 인스턴스와 함께 사용할 수 있는 영구 블록 스토리지 볼륨을 제공. AWS 클라우드 각 Amazon EBS 볼륨은 가용 영역 내에 자동으로 복제(최소3개)되므로 구성 요소 장애로부터 보호하고 높은 가용성과 내구성을 제공
+•	Amazon Elastic File System (EFS) - AWS 클라우드 서비스 및 온프레미스 리소스와 함께 사용할 수 있는 Linux 기반 워크로드, 애플리케이션을 중단하지 않고 필요에 따라 페타바이트까지 확장할 수 있도록 구축되었으며, 파일을 추가하고 제거함에 따라 자동으로 확장 및 축소되므로 애플리케이션이 필요할 때 필요한 스토리지를 확보
+•	Amazon 파일 캐시(aws File Cache) - 데이터 저장 위치에 관계없이 파일 데이터를 더 쉽게 처리할 수 있는 완전 관리형 고속 캐시. 온프레미스 파일 시스템이나 파일 시스템 또는 객체 저장소의 데이터를 위한 임시 고성능 스토리지 역할
+•	Amazon FSx for Lustre
+•	Amazon FSx for OpenZFS
+•	ONTAP용 아마존 NetApp FSx
+•	Amazon FSx for Windows File Server
+•	Amazon Simple Storage Service ( S3 ) - 업계 최고의 확장성, 데이터 가용성, 보안 및 성능을 제공하는 객체 스토리지 서비스. Amazon S3는 99.999999999% (119s) 의 내구성을 위해 설계되었으며, S3 스토리지 클래스는 까다로운 성능 요구 사항, 데이터 상주 요구 사항, 알 수 없거나 변화하는 액세스 패턴, 아카이브 스토리지 등 거의 모든 사용 사례에 적합
+•	AWS Backup - AWS Backup대규모 데이터 보호를 더욱 단순화하는 비용 효율적인 완전 관리형 정책 기반 서비스를 제공
+•	AWS Storage Gateway - 온프레미스 애플리케이션에서 AWS 클라우드 스토리지를 원활하게 사용할 수 있게 해주는 하이브리드 스토리지 서비스
+4. 데이터베이스 서비스
+•	AWS데이터베이스 서비스 비교(하단 표)
+•	Amazon Aurora
+•	Amazon DynamoDB
+•	아마존 ElastiCache
+•	Amazon Keyspaces(Apache Cassandra용)
+•	Amazon MemoryDB for Redis
+•	Amazon Neptune
+•	Amazon Relational Database Service
+•	Amazon RDS on VMware
+•	Amazon Quantum Ledger Database(Amazon QLDB)
+•	Amazon Timestream
+•	Amazon DocumentDB(MongoDB 호환)
+•	Amazon Lightsail 관리형 데이터베이스
+관계형	기존 애플리케이션, 전사적 자원 관리 (ERP), 고객 관계 관리 (CRM), 전자 상거래	•	Amazon Aurora — 완벽한 
+MySQL 및 PostgreSQL과 호환되므로 글로벌 규모에서 비교할 수 없는 고성능 및 가용성을 제공하도록 설계되었습니다.
+•	Amazon RDS — 클릭 
+몇 번으로 클라우드에서 관계형 데이터베이스를 설정, 운영 및 확장할 수 있습니다.
+•	Amazon Redshift — 규모에 맞는 빠르고 쉽고 안전한 클라우드 데이터 웨어하우징을 통해 통찰력을 확보하는 시간을 단축합니다.
+키-값	트래픽이 많은 웹 애플리케이션, 전자 상거래 시스템, 게임 애플리케이션	•	Amazon DynamoDB — 모든 규모에서 10밀리초 미만의 성능을 제공하는 빠르고 유연한 NoSQL 데이터베이스 서비스
+인 메모리	캐싱, 세션 관리, 게임 순위표, 지리공간 애플리케이션	•	Amazon ElastiCache — 인메모리 캐싱으로 마이크로초의 지연 시간을 줄이고 규모를 확장합니다.
+•	Redis용 Amazon MemoryDB — Redis와 호환되고 내구성이 뛰어난 인메모리 
+데이터베이스 서비스로 초고속 성능을 제공합니다.
+문서	콘텐츠 관리, 카탈로그, 사용자 프로필	•	Amazon DocumentDB (MongoDB 호환) — 완전관리형 문서 데이터베이스 서비스를 사용하여 JSON 워크로드를 손쉽게 확장할 수 있습니다.
+와이드 컬럼	장비 유지보수, 차량 관리, 경로 최적화를 위한 대규모 산업용 앱	•	Amazon Keyspaces — 확장 가능하고 가용성이 높으며 관리되는 Apache Cassandra—호환 데이터베이스 서비스입니다.
+그래프	사기 탐지, 소셜 네트워킹, 추천 엔진	•	Amazon Neptune — 고도로 연결된 데이터 세트를 사용하여 그래프 애플리케이션을 구축하고 실행합니다.
+시계열	사물 인터넷 (IoT) 애플리케이션 DevOps, 산업용 원격 측정	•	Amazon Timestream — 빠르고 확장 가능한 서버리스 시계열 데이터베이스
+원장	기록 시스템, 공급망, 등록, 은행 거래	•	Amazon 원장 데이터베이스 서비스 (QLDB) — 변경 불가능하고 암호로 검증 가능한 데이터 변경 로그를 유지 관리합니다.
+
+# 이번주 실습에서 써볼 서비스들
+-	EC2  //   S3  //  VPC  //  RDS  //  Route53  //  ELB  //  AutoScaling  
+-	CloudFront(CDN)  //   IAM   //   
+
+# AWS EC2 - 클라우드에서 가상머신을 제공하는 서비스
+ - 리전에 속하는 서비스
+ - 최초 가입 후 12개월의 Free Tier 기간 동안 t2.micro 월 750 시간 제공
+
+EC2 인스턴스 유형
+ - 범용 : 일반적인 용도에 사용할 수 있는 CPU, 메모리 및 네트워킹 성능 제공
+ - 컴퓨팅 최적화 : 고성능 프로세서 제공
+ - GPU : GPU가 제공되는 가상머신 인스턴스 유형
+ - 메모리 최적화 : 메모리에서 대규모 데이터 세트를 처리하는 애플리케이션에 적합한 가상머신 인스턴스 유형
+
+
+EC2 인스턴스 구매 옵션
+  - 온 디맨드(On-Demand) : 필요시 바로 생성하여 사용. 초 단위 과금
+  - 예약(Reserved) : 기간에 대한 약정을 통해 최대 75% 저렴한 비용으로 사용
+  - 스팟(Spot) : 경매 방식의 인스턴스로 입찰을 통해 인스턴스 할당
+  - 전용(Dedicated) : 고객 전용의 하드웨어에서 가상머신 인스턴스 서비스 제공
+
+# 실습  mozzi-ec2-al-host 1, 2
+1.aws linux AMI로 인스턴스를 생성하고, ssh ec2-user@퍼블릭 IPv4 주소/퍼블릭 IPv4 DNS 에 각각 ssh명령어로 접속> 성공 
+2.ubuntu server 22.04 AMI로 인스턴스를 생성하고, ssh ubuntu@ipv4주소(ipv4 DNS주소)로 접속> 성공
+두 인스턴스 사이(동일 보안그룹) 내부 Private IPv4 주소(172.31~)에 Ping을 날렸지만 응답이 없다> 둘이 같은 VPC에 있지 않기 때문에 접근이 안되는 것.
+3.보안그룹으로 들어간다. 인바운드 규칙 편집에서 모든 ICMP(ping) -ipv4 anywhere 을 추가해준다.
+4.이후 ping 명령어로 둘 사이 아이피로 각각 핑을 날리면 신호가 잘 간다. >성공
+
+
+# 보안그룹
+ - 각 EC2 인스턴스에 대해 허용할 프로토콜/서비스/포트 등을 지정하는 서비스
+ - 각 EC2 인스턴스 별로 보안그룹을 5개까지 지정해서 사용할 수 있음.
+ - 기본적으로 Allow만 가능하며 Deny를 설정할 수 없음.
+
+#실습 
+1.보안그룹탭으로 가서 보안그룹생성
+2.보안그룹명을 window-servers-mozzi-sg / vpc는 default를 쓴다.
+3.윈도우 호스트로 접근할 수 있도록 인바운드규칙 편집
+4.규칙추가- RDP 프로토콜 유형을 선택해주자. (TCP/3389가 기본세팅) - 내 아이피 설정
+5. mozzi-ec2-al-host 3(windows) 인스턴스를 추가-windows server 2022 base ami 선택
+t2.micro 인스턴스유형 / 키페어 설정(administrator 계정 passwd용)/ 기존 보안그룹 (2에서 만든) 선택 후 시작으로 생성.
+6. 연결- 인스턴스에 연결에 들어온 뒤 RDP 클라이언트 옵션으로 이동.  원격데스크톱파일 다운.
+암호 가져오기 메뉴 선택> 프라이빗 키 파일 업로드로 (my-all-machine-key~)업로드함 >암호해독 > 새로 생성된 window instance password를 복사해둔다
+Mi=nV6-Cv=HAQrCWZi.YRDADJ(xE8VuG
+7. 아까 받은 .rdp파일   로 클라이언트를 열고, 암호를 입력해서 접속한다
+8. 여기까지 왔다면 windows server가 실행되어 윈도우 인스턴스를 사용할 수 있다.
+ 
+
+-인스턴스 종료
+ 
+1.윈도우 인스턴스를 지운다. (인스턴스 삭제==인스턴스 종료)
+2.host1,host2는 끄기만 한다. (인스턴스 끄기==인스턴스 중지)
+
+# AWS VPC (Virtual Private Cloud) 
+네트워킹에 해당한다.
+  - 클라우드에서 인프라를 구축하기 위한 가상의 네트워크
+  - 다른 네트워크와 논리적으로 완전히 분리된 네트워크
+  - 필요한 경우 인터넷과 연결되기 위하여 인터넷 게이트웨이를 연결하여 사용할 수 있음
+  - 리전에 속하는 서비스로 하나의 리전 범위 내에서 동작
+
+*VPN ( virtual private network ) 
+  - 물리적으로 떨어진 대상 네트워크에 직접 연결된 것 처럼 가상으로 네트워크를 연결하는 서비스
+   - 외부 네트워크에서 조직의 네트워크로 접속하거나 물리적으로 떨어진 지사 간의 네트워크를 연결하는 등에 사용됨
+
+VPC 특징
+  - AWS 클라우드에서 독립적인 네트워크를 구성할 수 있음
+  - 기존의 네트워크와 VPN 등을 통해 연결할 수 있음.
+  - VPC 생성만으로는 비용이 발생하지 않지만 네트워크 송수신에 따른 비용이 발생할 수 있음
+
+서브넷 (Subnet)
+    - VPC 내부에서 용도에 따라 더 작은 네트워크를 구성한 것
+    - 하나의 가용 영역 내에서 생성될 수 있음
+    - 서브넷 생성시 서브넷의 IP 주소 대역을 지정하여야 하며 VPC의 IP Block을 분할하여 구성함.
+    - 서브넷의 IP 주소 대역 지정시 CIDR 표기법(Prefix 표기법)으로 표기함
+
+퍼블릭 서브넷과 프라이빗 서브넷
+   - 퍼블릭 서브넷(Public Subnet)
+     - 네트워크 트래픽이 게이트웨이로 라우팅 되는 서브넷
+     - 퍼블릭 서브넷의 인스턴스들은 필요한 경우 공인 IP 주소를 할당 받아 인터넷에 직접 연결
+   - 프라이빗 서브넷(Private Subnet)
+     - 네트워크 트래픽이 게이트웨이로 라우팅 되지 않는 서브넷
+   - 라우팅 테이블
+    - 목적지 네트워크로 가기 위한 경로를 지정하는 테이블
+
+vpc- 보안그룹과 Network ACL(NACL)
+보안그룹 - 기본적으로 Allow만 가능하며 Deny를 설정할 수 없음.
+ - 보안 그룹이 생성될 때 기본적으로 인바운드 정책은 비어있으며, 아웃바운드 정책은 모든 트래픽에 대해 허용하는 룰이 적용되어있음.
+
+ ANCL - 네트워크 수준에서 접근을 허용하거나 거부하는 정책을 지정하는 서비스
+  - 반환 트래픽에 대해 별도의 허용 설정이 필요함 (stateless)
+
+#실습
+1. VPC탭 > VPC생성으로 들어간다.
+생성할 리소스에 VPC만, VPC 등이 있는데 사용법이 좀 다르다.
+ 
+*VPC등- vpc뿐만 아니라, 서브넷, 라우팅테이블(rtb), 인터넷 게이트웨이(igw)가 같이 생성된다.
+2. VPC 등을 리소스로 선택하고, 이름태그(자동생성 체크)로 mozzi-vpc-01 를 입력한다.
+IPv4 CIDR블록을 172.16.0.0/24 (B클래스 사설IP)로 설정한다.
+*테넌시 라는 항목이 있는데, dedicated 와 같으며 나만이 사용가능한 전용이라고 생각하면됨(기본값) 
+3. 가용영역(AZ)설정이 중요한데, 2개이상의 가용영역을 설정할때 유의점은 Free tier 계정은 가용영역을 2a, 2c밖에 설정할 수 없으므로 2b,2d만 피해가게 설정한다. 
+일단 ap-northeast-2a만 선택.
+4. 퍼블릭서브넷&프라이빗서브넷 이 있다. 각 1개, 1개씩 설정해준다. 사용자지정을 유의하자.
+172.16.0.0/28 // 172.16.0.128/28 (왜 비트수가 다르냐면, 서브넷은 하위개념이기 때문)
+5. NAT 게이트웨이 설정란은 과금이 되는 영역이다. 또한 VPC엔드포인트도 과금이 되니 유의.
+1개의 AZ에서를 선택하자. 
+프라이빗 서브넷에 있는 인스턴스들이 클라우드서비스에 접근하기 위해서는 nat게이트웨이를 거쳐야하는데, 그 트래픽에 따라서 비용이 발생한다. 별도로 만들어둔 게이트웨이를 통해 nat를 안거쳐도 되는것이 VPC엔드포인트이다. 이건 없음으로 한다.
+*DNS옵션은 기본값인 활성화로 둔다.
+ 
+6. VPC워크플로가 모두 생성&활성화 되었으면 간단하게 테스트한다.  
+ 
+왼쪽 서브넷 탭으로 이동한다. 새로 생성된 mozzi-vpc-01-subnet-private와 public 총 두개를 볼 수 있다. 
+172.16.0.128 /28
+호스트는 32-28=4 4개이다.  256/4=64로, 0~63 64~128 129~192 193~256분반을 네트워크로 가짐.
+ 
+라우팅테이블은 기본 - 예로 체크된것이 default세팅이다. 이름이 있는 테이블은 각각 퍼블릭,프라이빗 라우팅을 위해서 생성된 rtb이다.
+NAT게이트웨이로 가면 하나의 nat게이트웨이가 생성되어있는데, 
+mozzi-vpc-01-nat-public1-ap-northeast-2a
+ 
+퍼블릭아이피와 프라이빗 아이피주소를 가지고있으며 네트워크카드(int)도 가지고있다.
+퍼블릭서브넷에 nat gateway가 있기때문에 이를통해 외부의 네트워크와 패킷을 주고받을 수 있는것임을 유의한다. 
+7. EC2 인스턴스 탭으로 이동해서, 새로운 VPC를 만들었으므로 새 인스턴스를 생성한다.
+mozzi-VPC-host1 (public)
+aws linux 2 AMI 선택
+네트워크설정을 유의한다. 편집> VPC를 mozzi-vpc-01-vpc를 선택하고 서브넷을 Public으로 선택.
+퍼블릭 ip자동할당을 활성화로 둔다. 여기서 활성화하지않으면 EIP(elastic ip)를 별도로 붙여야한다.
+보안그룹은 기존에 만들었던 보안그룹이 vpc가 다르므로, 목록에 없다. 
+따라서 별도의 보안그룹을 새로 생성한다 (좌측 보안그룹탭을 ctrl+클릭으로 새탭에서 열기)
+VPC-mozzi-sg 
+VPC는 default가 아닌 방금 만든 vpc로 선택한다. 그리고 생성(인바운드,아웃바운드 설정은 안함)
+8. 다시 생성창에서 기존보안그룹> 방금만든 vpc-mozzi-sg선택 후 인스턴스 시작.
+9. 이번엔 프라이빗 서브넷의 인스턴스를 생성한다.
+그전에 우선 보안그룹에서 하나를 더 생성한다.
+VPC-mozzi-sg2 (private)
+인바운드규칙- 
+SSH / 아까만든 172.16.0.0/24대역을 사용자지정하고, 
+ICMP-ipv4 / 172.16.0.0/24 대역을 설정하고 추가한다. (ping test용)
+ 
+프라이빗 서브넷을 위한 보안그룹을 생성했으며, 다시 인스턴스로 넘어간다.
+mozzi-VPC-host2 (private)
+네트워크설정 - VPC를 mozzi-vpc-01-vpc 선택
+서브넷을 mozzi-vpc-01-subnet-private 선택
+퍼블릭ip 자동할당 >> 비활성화
+보안그룹 - 기존 - 아까만든 vpc-mozzi-sg2를 선택
+
+10. 퍼블릭 인스턴스 ipv4 주소로 접근 13.209.10.95
+C:\Users\USER>ssh ec2-user@13.209.10.95 -i my-all-machine-key-231204.pem
+접근이 안된다. 이 이유는? 이전에서 인바운드규칙을 설정하지 않았기 때문이다.
+바로 보안그룹-인바운드규칙으로 가서 ssh / 퍼블릭이기에 anywhere ipv4 설정해준다.
+ 
+다시 접속을 시도하면 접속이 된다.
+11. 프라이빗 인스턴스 ipv4 주소로 접근 172.16.0.140
+PS C:\Users\USER> ssh ec2-user@172.16.0.140 -i .\my-all-machine-key-231204.pem
+접속이 안된다. 왜냐. B클래스 사설아이피이므로 접속이 안된다.
+따라서 아~까만들어놨던 NAT게이트웨이를 이제 사용할 때이다.
+(방법1)키파일을 저장해야 한다. 퍼블릭 서브넷에 접속후, 키파일(텍스트 형태)를 읽고 복사해서 붙여넣어서 저장해주면 된다.
+[ec2-user@ip-172-16-0-8 ~]$ vim my-all-machine-key-231204.pem
+[ec2-user@ip-172-16-0-8 ~]$ chmod 400 my-all-machine-key-231204.pem (내용 복사붙여넣기)
+[ec2-user@ip-172-16-0-8 ~]$ ll
+total 4
+-r-------- 1 ec2-user ec2-user 1679 Dec  5 07:55 my-all-machine-key-231204.pem
+이렇게 설정후에 접속을 시도한다.
+[ec2-user@ip-172-16-0-8 ~]$ ssh ec2-user@172.16.0.140 -i my-all-machine-key-231204.pem
+The authenticity of host '172.16.0.140 (172.16.0.140)' can't be established.
+ECDSA key fingerprint is SHA256:nf36HT2OkYTlzUziHJhqr2R9cWVeZhd1l2X179PaSpM.
+ECDSA key fingerprint is MD5:89:5e:60:bb:2a:0b:eb:9b:ff:e6:e3:10:8f:91:64:80.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '172.16.0.140' (ECDSA) to the list of known hosts.
+   ,     #_
+   ~\_  ####_        Amazon Linux 2
+  ~~  \_#####\
+  ~~     \###|       AL2 End of Life is 2025-06-30.
+  ~~       \#/ ___
+   ~~       V~' '->
+    ~~~         /    A newer version of Amazon Linux is available!
+      ~~._.   _/
+         _/ _/       Amazon Linux 2023, GA and supported until 2028-03-15.
+       _/m/'           https://aws.amazon.com/linux/amazon-linux-2023/
+
+11 package(s) needed for security, out of 14 available
+Run "sudo yum update" to apply all updates.
+잘된다.
+(방법2) 바로 엔드포인트를 만드는 것이다.(or Bastion host사용) 이 부분은 다음시간에 실습. 
+
+#VPC 삭제하기
+리소스가 삭제되지 않았으므로 바로 VPC를 삭제할 수 없다. 
+NAT 게이트웨이, 서브넷이 존재하므로 삭제가 안되는 것.
+1.NAT게이트웨이 삭제(시간이 좀 걸림) 또한 elastic ip도 릴리즈해줘야한다. 
+2.서브넷 삭제
+3.VPC 삭제 까지 완료하면, 완전히 삭제되었다.
+
+# 수동으로 VPC 생성 (VPC만)
+1. 퍼블릭서브넷 하나만 포함하는 vpc생성하기
+mozzi-vpc-01 
+172.16.0.0/20 CIDR
+생성하기.
+이 상태에서 바로 인스턴스를 만들수는 없다(서브넷, 라우팅등이 없음)
+2. 서브넷을 생성
+mozzi-subnet-01-pub
+az - 2a or 2c 아무거나
+ipv4 subnet CIDR 172.16.0.0/24 (하위개념)
+서브넷을 생성하게되면 자동으로 라우팅테이블도 생성된다.
+자동 ipv4설정을 하고싶으면, 우측상단 작업>서브넷 설정편집에서 자동할당IP를 설정한다.
+3.인터넷 게이트웨이 생성
+먼저 인터넷게이트웨이 mozzi-igw를 생성하고, 우측상단 작업>VPC에 연결을 선택하여
+mozzi vpc와 연결해준다.
+4.라우팅테이블 설정or 생성
+생성된 라우팅테이블로 들어와서, 하단 명시적서브넷연결> 서브넷연결편집> 2에서만든 서브넷을 연결해준다.
+라우팅편집> 대상을 0.0.0.0/0 / 인터넷 게이트웨이-igw중 하나를 선택한다.
+이러면 설정완료.
+
+
+
