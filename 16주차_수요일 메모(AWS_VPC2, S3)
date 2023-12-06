@@ -1,0 +1,354 @@
+16주차 수요일 메모(AWS_ VPC , S3 )
+
+
+지난시간엔 EC2, VPC에 대해서 실습하는시간을 가졌다.
+
+VPC(Virtual Private Cloud)
+  - 클라우드에서 인프라를 구축하기 위한 독립적인 가상의 네트워크
+  - AWS에서는 리전에 속하는 AWS 리소스로 하나의 리전 범위 안에서 네트워크를 구성할 수 있음
+
+# VPC실습
+(수동) VPC - Subnet - rtb - igw - 보안그룹
+1. VPC 생성
+리소스 ‘VPC만’ 선택
+mozzi-vpc-01
+10.0.0.0/16 IPv4 CIDR 지정
+2. Subnet 생성
+mozzi-subnet-pub-01
+가용영역 설정( 설정안할 시 자동선택)
+IPv4 subnet CIDR block: 10.0.0.0/24 지정_하위개념
++ 새 서브넷 추가
+mozzi-subnet-priv-02
+이하는 동일하게 설정.
+IPv4 subnet CIDR block: 10.0.2.0/24
+3. 인터넷게이트웨이 생성
+mozzi-igw-01
+vpc에 연결> mozzi-vpc-01에 인터넷게이트웨이 연결.
+4. 라우팅테이블 생성
+mozzi-rtb-01(pub)
+mozzi-rtb-02(priv)
+를 생성한다. 
+라우팅 편집> 1. public- 10.0.0.0/16에 0.0.0.0/0 -대상 인터넷게이트웨이 설정.
+	     2. public- 서브넷 연결- 명시적 서브넷 연결로 subnet-pub 연결해준다.
+*어떤원칙에 따라서 비교되는가?> 패킷이 갈때, 목적지 주소를 보고 가는 경로가있는지 확인을 하는데, 같은 목적지로가는 여러개의 경로가 있으면 “ *Longest Prefix Match ”방식으로 비교가 된다.
+* 가장 긴 접두사 일치 를 말함.
+(참조: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Route_Tables.html#route-table-longest-prefix-match)
+
+5.보안그룹 생성
+mozzi-pub-01 / mozzi-vpc-01에 연동
+인바운드규칙 SSH - anywhere ipv4 0.0.0.0/0 추가 후 생성
+mozzi-priv-01 / 이하같음
+인바운드규칙 SSH - anywhere ipv4 0.0.0.0/0 추가 후 생성
+
+6.인스턴스 생성
+mozzi-host1-public
+네트워크설정- mozzi-vpc-01 연동
+public subnet 연동
+퍼블릭 ip 자동할당 활성화
+기존보안그룹선택 > mozzi-pub-01선택
+
+mozzi-host2-private (특이사항: Amazon Linux 2023 AMI 사용)
+네트워크설정- mozzi-vpc-01 연동
+private subnet 연동
+퍼블릭 ip 자동할당 비활
+기존보안그룹선택 > mozzi-priv-01선택 
+생성
+
+7. 인스턴스에 접속 (SSH)
+cmd- 
+1)퍼블릭 접속
+C:\Users\USER>ssh ec2-user@43.202.43.7 -i my-all-machine-key-231204.pem
+
+2)프라이빗 접속(퍼블릭호스트를 통해서)
+[ec2-user@ip-10-0-0-91 ~]$ vim my-all-machine-key-231204.pem
+=====
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpQIBAAKCAQEAnEdG1J/xsZyC6B9uzIoHmq4cOExq1EhHkLdjkHpUDtXeGN0A
+UV5y/ZJWBjTh+hlxjzHr3M7e+zJr+jCxTinJZ76Gxc6mk79QnSRO2PFUk+8QP8rX
+HbtSBi/lEbH8+JQAXuS4ATwBmD+6mw6tuWmHpOI8Ari4jurxo45LDswAUY4aYzld
+=====
+붙여넣고 저장
+[ec2-user@ip-10-0-0-91 ~]$ chmod 400 my-all-machine-key-231204.pem
+[ec2-user@ip-10-0-0-91 ~]$ ssh ec2-user@10.0.2.203 -i my-all-machine-key-231204.pem
+[root@ip-10-0-0-91 ~]# vim /etc/ssh/sshd_config
+권한 no를 yes로 바꿈
+[root@ip-10-0-0-91 ~]# systemctl restart sshd
+[root@ip-10-0-0-91 ~]# exit
+[ec2-user@ip-10-0-0-91 ~]$ ssh ec2-user@10.0.2.203 -i my-all-machine-key-231204.pem
+[ec2-user@ip-10-0-2-203 ~]$ sudo -i
+[root@ip-10-0-2-203 ~]# passwd
+프라이빗인스턴스 passwd를 바꿨음. ( ec2-user::user , root::root)
+
+
+8.NAT gateway 설정
+(수동으로 IP할당) 우선 탄력적 IP 할당 탭으로 들어간다.
+탄력적 아이피 할당> 할당.  43.200.142.66
+**참조: BYOIP 방식이란, Amazon EC2에서 자체 IP 주소 가져오기이며 Bring Your OWN IP이다.
+***BYOD (Bring Your Own Device)란 개념도 존재한다. BYOIP는 이 개념의 확장판이다.
+
+다시 natgateway생성으로 가서
+mozzi-nat-gateway
+(중요) NAT의 서브넷은 반드시 “퍼블릭 서브넷”에 위치해야 한다. 
+연결 유형- 퍼블릭
+탄력적ip를 아까 받은것을 할당해준다.
+그리고 생성. 
+
+9. 라우팅테이블로 이동
+라우팅 편집(프라이빗)> 0.0.0.0/0에 대상을 NAT게이트웨이로 설정한다.
+서브넷 연결 > 명시적 서브넷 연결- private subnet 연동
+이후 private instance에서 ping 8.8.8.8을 하면 외부로 핑이 나간다.
+
+9. 다른 가용영역을 사용하기
+서브넷 탭으로 이동. 
+(1) vpc를 선택해주고 mozzi-subnet-pub-02c 
+IPv4 subnet CIDR block   10.0.1.0/24
+(2) mozzi-subnet-priv-02c
+10.0.3.0/24 로 설정
+
+라우팅테이블 탭으로 이동.
+(1) 서브넷 연결>명시적 서브넷 연결 편집- mozzi-subnet-pub-02c 를 추가 /퍼블릭
+나트게이트웨이 탭으로 이동
+(2) NAT 생성> mozzi-nat-gateway2 / 서브넷 mozzi-subnet-pub-02c 를 연동
+연결유형 퍼블릭, 탄력적IP 할당해주기
+다시 라우팅테이블 탭 이동.
+(3)  mozzi-rtb-02(priv)c 를 추가
+라우팅 편집> 0.0.0.0/0 대상 NAT게이트웨이( c가용영역에 만든 것 )선택
+서브넷 연결>명시적 서브넷 연결 편집- mozzi-subnet-priv-02c 를 추가
+
+인스턴스를 하나 추가한다.
+mozzi-host3-private
+mozzi-subnet-priv-02c
+기존 보안그룹 mozzi-priv-01 그룹 선택.후 실행.
+ 
+host 3의 주소로 접속해본다. 10.0.3.84
+[ec2-user@ip-10-0-2-203 ~]$ vim my-all-machine-key-231204.pem (키 복사붙여넣기)
+[ec2-user@ip-10-0-2-203 ~]$ chmod 400 my-all-machine-key-231204.pem
+[ec2-user@ip-10-0-2-203 ~]$ ssh ec2-user@10.0.3.84 -i my-all-machine-key-231204.pem
+,     #_
+   ~\_  ####_        Amazon Linux 2023
+  ~~  \_#####\
+  ~~     \###|
+  ~~       \#/ ___   https://aws.amazon.com/linux/amazon-linux-2023
+   ~~       V~' '->
+    ~~~         /
+      ~~._.   _/
+         _/ _/
+       _/m/'
+>>잘 실습이 되었다. (ping 8.8.8.8도 잘 됨)
+
+# 실습내용 삭제하기
+1. NAT 02c를 삭제한다
+ 이와중에 할당된 탄력적IP를 릴리즈해준다. (연결이 해제된 IP임)
+2. 라우팅테이블을 고쳐준다
+ 다른 ntgw를 같이 사용해본다.
+mozzi-rtb-02(priv)c를 편집
+ 
+보면 NAT하나가 삭제되었으므로 status가 ‘블랙홀’이라고 표시된다.
+기존 2a가용영역 ntgw를 사용한다.
+
+
+# Bastion host 실습
+내부 네트워크로 접근하기 위해 외부에 노출되어있는 Host를 말한다.
+*실습시 ssh key기반 인증도 같이 사용한다. host1-public - Bastion Host (외부 접속용호스트)
+
+1. 보안그룹 설정
+mozzi-host1-public 작업>보안그룹 변경
+default 보안그룹을 추가한다.
+mozzi-host2-private 작업>보안그룹 변경
+기존 보안그룹 제거+default 보안그룹 추가
+ 
+이렇게 설정한뒤 
+[ec2-user@ip-10-0-2-203 ~]$ ping 8.8.8.8 시 핑이 잘 된다.(private가 더이상 아님)
+but 외부에서 접근하는것은 안되는 설정이 완료되었다.
+
+2. (사용자폴더) user>.ssh 폴더로 이동>config라는 파일을 생성한다(txt) - 사용자폴더\.ssh\config
+Host bastion
+  Hostname 43.202.43.7
+  User ec2-user
+  IdentityFile ~\my-all-machine-key-231204.pem
+
+Host host2
+  Hostname 10.0.2.203
+  User ec2-user
+  IdentityFile ~\my-all-machine-key-231204.pem
+  ProxyCommand ssh.exe bastion -W %h:%p
+
+Host host3
+  Hostname 10.0.3.84
+  User ec2-user
+  IdentityFile ~\my-all-machine-key-231204.pem
+  ProxyCommand ssh.exe bastion -W %h:%p
+>> 작성한 내용은 yaml작성할때와 비슷하게 작성했다.
+host1의 퍼블릭ip주소/ host2의 프라이빗ip / host3의 프라이빗ip를 각각 넣었다.
+프록시커맨드는 배스쳔에 접속하기위한 명령어(hostname bastion(host1)을 넣음. /+포트옵션)
+
+3. 배스쳔에 접속, 나머지 호스트에 접속
+(1) C:\Users\USER> ssh bastion
+Last login: Wed Dec  6 01:31:17 2023 from 121.134.211.97
+   ,     #_
+   ~\_  ####_        Amazon Linux 2
+  ~~  \_#####\
+  ~~     \###|       AL2 End of Life is 2025-06-30.
+  ~~       \#/ ___
+   ~~       V~' '->
+    ~~~         /    A newer version of Amazon Linux is available!
+      ~~._.   _/
+         _/ _/       Amazon Linux 2023, GA and supported until 2028-03-15.
+       _/m/'           https://aws.amazon.com/linux/amazon-linux-2023/
+
+11 package(s) needed for security, out of 14 available
+Run "sudo yum update" to apply all updates.
+(2)  C:\Users\USER> ssh host2
+(3)  C:\Users\USER> ssh host3
+전부 로그인이 가능해진다. 다만 이 배스쳔호스트의 경우 인스턴스(호스트2,3)가 실행되고 있어야 된다는 점을 유의. 
+- Private Subnet Host에도 bastion host를 통해 접근이 가능하다.
+- Bastion Host에 SSH Key File을 업로드 하지 않고 사용할 수 있다.
+- Bastion Host가 항상 켜있어야 한다
+
+# VPC Peering
+- 서로 다른 VPC를 서로 연동하여 다른 VPC의 호스트에 바로 접근 할 수 있도록 하는 VPC 네트워크 구성 방법
+- 인터넷을 거쳐서 통신하는게아닌, VPC를 직접연결하여 사용할 수 있다.
+- 인터넷을 통해서 다른 vpc를 접속하면 거치는 요금, 민감한 데이터가 유출될 가능성이 있으므로 VPC peering을 통해서 논리적으로 연결된다면 불필요한 패킷노출 등을 피할 수 있는 장점이 있다. 
+
+#피어링 실습(eu-west>northeast)
+1. 다른 리전에 들어가서 VPC를 생성한다. (eu-west-2)
+london-vpc-01
+172.20.0.0/16  CIDR 설정
+2. 서브넷 생성
+london-sub-public01a / 2a 가용영역
+172.20.0.0/24 서브넷 CIDR block 설정
+3. 인터넷 게이트웨이 생성
+london-igw-01 생성 후 vpc에 연결.
+4. 라우팅테이블
+라우팅편집 - 0.0.0.0/0 IGW 설정
+ 5. 키페어 탭 이동
+aws-london-231206.pem 으로 생성한다 이를 C:\Users\USER\에 붙여넣는다. 
+6. 보안그룹
+london-vpc-pub-sg / 런던 vpc 적용
+인바운드규칙 SSH / anywhere ipv4 0.0.0.0/0 추가
+7. 인스턴스로 이동
+인스턴스 시작> london-host1-public
+ubuntu AMI 선택 
+네트워크 설정> 편집> vpc, 서브넷을 할당, 퍼블릭ip자동할당 활성화
+기존보안그룹선택> london sg 선택
+생성
+8. 런던 인스턴스로 접속
+london-host1-public 3.9.175.122
+C:\Users\USER>ssh ubuntu@3.9.175.122 -i aws-london-231206.pem 로 접속.
+9.서울리전으로 이동
+VPC- 피어링 연결로 이동
+Seoul-london-peering
+피어링할 로컬 vpc > mozzi-vpc-01선택
+피어링할 다른 vpc 선택> 내 계정- 다른 리전 (eu-west-2)선택
+VPC ID(수락자) > vpc-0b7ea2af6d315b23f (런던리전 VPC ID참조)
+피어링연결한다.
+10.런던리전으로 이동
+vpc - 피어링연결로 이동하면 ‘수락대기중’ 상태의 요청이 있다.
+작업>연결 수락을 누르면 피어링 연결이 설정되었다.
+ 
+>>이제 피어링 설정을 했으니, 테스트하도록 한다.
+
+# VPC피어링 테스트
+VPC끼리 논리적으로 연결은 되었다. 그런데 패킷들이 상대방vpc에 있는 호스트로 전달되기 위해서는, vpc에서 사용하는 라우팅테이블들에 상대방 vpc 라우팅정보가 들어가있어야 한다. 
+1.서울리전 - VPC
+라우팅테이블 탭으로 이동
+각각의 라우팅테이블에 172.20.0.0/16 - 피어링연결(pcx-078c2cff9dda8d43c) 추가해줌
+2.서울리전 - SG(보안그룹)
+각각 인바운드규칙에 모든트래픽 - 172.20.0.0/16에 대한 규칙을 추가.
+런던에서도 이를 추가해주어야 한다.
+3.런던리전 - VPC 
+라우팅테이블로 간다. 라우팅테이블 편집 - 10.0.0.0/16 대상 피어링 연결 추가.
+4.런던리전 - SG(보안그룹)
+인바운드규칙에 모든트래픽 - 10.0.0.0/16에 대한 규칙을 추가.
+
+5.접속 시도
+접속해서 핑테스트 3.9.175.122 /  172.20.0.196 (런던)
+		13.124.69.174 /  10.0.0.91(서울)
+C:\Users\USER>ssh ubuntu@3.9.175.122 -i aws-london-231206.pem
+우분투접속
+[ec2-user@ip-10-0-0-91 ~]$ ping 172.20.0.196 (서울>런던)
+PING 172.20.0.196 (172.20.0.196) 56(84) bytes of data.
+64 bytes from 172.20.0.196: icmp_seq=1 ttl=64 time=247 ms
+64 bytes from 172.20.0.196: icmp_seq=2 ttl=64 time=247 ms
+64 bytes from 172.20.0.196: icmp_seq=3 ttl=64 time=247 ms
+64 bytes from 172.20.0.196: icmp_seq=4 ttl=64 time=247 ms
+ubuntu@ip-172-20-0-196:~$ ping 10.0.0.91 (런던>서울)
+PING 10.0.0.91 (10.0.0.91) 56(84) bytes of data.
+64 bytes from 10.0.0.91: icmp_seq=1 ttl=255 time=248 ms
+64 bytes from 10.0.0.91: icmp_seq=2 ttl=255 time=248 ms
+64 bytes from 10.0.0.91: icmp_seq=3 ttl=255 time=248 ms
+64 bytes from 10.0.0.91: icmp_seq=4 ttl=255 time=248 ms
+패킷교환이 잘 된다.
+
+#런던리전 리소스 삭제
+1. 인스턴스 삭제
+2. 피어링 연결 삭제
+3.  VPC 삭제
+4. 서울리전 라우팅테이블- 설정해줬던 172.20.0.0~ 라우팅 모두 제거
+5. (선택항목) 보안그룹- 설정해줬던 인바운드규칙 삭제
+
+키워드 S3, CloudFront, CDN(Content delivery network), 
+# AWS Simple Storage Service ( S3 )
+파일단위로 저장공간이 필요한경우 사용할 수 있는,
+무제한의 저장공간을 제공하는 오브젝트 스토리지 서비스.
+각 ‘리전’에 속하는 서비스이며 S3 Bucket 이라는 무제한 저장공간에 파일을 저장하여 관리
+파일1개당 최대 5TB까지 가능하지만, 
+일반적으로 객체 크기가 100MB에 근접할 경우
+업로드 속도를 위해 multipart upload 방식을 이용할 것을 권장하고 있다.
+(참조_ https://docs.aws.amazon.com/ko_kr/AmazonS3/latest/userguide/mpuoverview.html )
+ 
+
+# 버킷생성
+1. ap-northeast-2리전에 mozzi-bucket 생성
+버킷이름은 도메인주소를 기반으로 버킷에 접근하기때문에 도메인주소로 사용할 수 없는 사유에 해당하면 쓸 수없다.
+객체소유권- ACL비활성화됨(권장) 이 기본값이다.
+(중요) 이 버킷의 퍼블릭 액세스 차단 설정- 기본이 전부 차단이다. 따라서 이것을 다 해제하지 않을경우 외부에서 내 버킷으로 접근자체가 불가능하므로, 외부접근 다운로드 등 서비스를 원하면 모두 해제.
+기본 암호화- sse-se3은 Amazon에서 제공하는 완전관리형 s3 키로, 서버측 암호화가 된다.
+다른 두 옵션은 aws key management service를 사용한 서버측암호화 SSE-KMS/ 이중계층 서버 측 암호화 *DSSE-KMS가 있다.
+* SSE-KMS server-side encryption
+* DSSE-KMS dual-layer server-side encryption
+
+2.버킷에 파일 생성
+s3://mozzi-bucket 
+
+	mozzidir1/ 새 디렉터리를 생성
+
+ bucket-sample.jpg 파일하나를 업로드.
+ 
+3. IAM 으로 이동
+사용자 생성> 세부정보지정 >s3manager >직접정책 연결     
+AmazonS3FullAccess 추가 > 검토 및 생성에서 재확인한다.
+ 
+s3manager 사용자로 들어가서 ‘보안자격증명’ 탭 으로 이동 액세스 키 만들기
+Command Line Interface(CLI) 사용사례를 선택 (AWS CLI를 사용하여 AWS 계정에 액세스할 수 있도록 이 액세스 키를 사용할 것입니다)
+
+4. cmd 콘솔창에서 키로 접속해본다.
+C:\Users\USER>ssh ec2-user@13.124.69.174 -i my-all-machine-key-231204.pem
+[ec2-user@ip-10-0-0-91 ~]$ aws configure
+>>오류가 났었는데. 이 경우 shell 환경이 깨져서 그런것일 수 있으므로, cmd (CLI)에서 reset을 입력하여 환경을 초기화해주자.
+[ec2-user@ip-10-0-0-91 ~]$ aws configure
+AWS Access Key ID [None]: AKIA6H~~~~GPLRR
+AWS Secret Access Key [None]: x4hPFFx~~~~fZ/5dHO~~5vBO
+Default region name [None]: ap-northeast-2
+
+버킷목록을 확인하기
+[ec2-user@ip-10-0-0-91 ~]$ aws s3 ls
+2023-12-06 07:07:39 mozzi-bucket
+내용물 확인
+[ec2-user@ip-10-0-0-91 ~]$ aws s3 ls s3://mozzi-bucket/mozzidir1/
+2023-12-06 07:28:06          0
+2023-12-06 07:28:47     106976 bucket-sample.jpg
+버킷에서 파일을 다운로드하기
+[ec2-user@ip-10-0-0-91 ~]$ aws s3 cp s3://mozzi-bucket/mozzidir1/bucket-sample.jpg .
+download: s3://mozzi-bucket/mozzidir1/bucket-sample.jpg to ./bucket-sample.jpg
+[ec2-user@ip-10-0-0-91 ~]$ ls -l
+total 58544
+drwxr-xr-x 3 ec2-user ec2-user       78 Nov 30 22:22 aws
+-rw-rw-r-- 1 ec2-user ec2-user 59832742 Dec  6 08:02 awscliv2.zip
+-rw-rw-r-- 1 ec2-user ec2-user   106976 Dec  6 07:28 bucket-sample.jpg
+-r-------- 1 ec2-user ec2-user     1679 Dec  6 01:37 my-all-machine-key-231204.pem
+
+>>위 실습을통해 bucket-sample.jpg 파일을 다운로드에 성공했다(ec2 인스턴스 내에)
+
+
+
