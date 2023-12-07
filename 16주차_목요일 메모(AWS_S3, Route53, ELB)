@@ -1,0 +1,377 @@
+16주차 목요일 메모(AWS_ S3 , Route53, ELB )
+
+
+지난시간엔 VPC, S3 로 실습하는시간을 가졌다.
+
+
+# S3를 이용해 정적 웹 사이트 구축하기
+
+1. S3 버킷 생성
+mozzi-bucket-20231207-web
+acl 비활성화
+퍼블릭액세스 차단설정> 모든퍼블릭 액세스 차단을 해제.
+기본암호화>aws s3관리형 sse-s3(server side encrypt) 키로 서버측 암호화
+
+2. 파일 업로드
+-index.html (예제는 아무거나)
+-sample.jpg 
+
+3. 정적 웹 사이트 호스팅 편집
+ 
+버킷 내 탭으로 들어가서, 웹호스팅을 활성화로 변경한다.
+s3://mozzi-bucket-20231207-web/bucket-sample.jpg 
+s3://mozzi-bucket-20231207-web/index.html
+
+객체url은
+https://mozzi-bucket-20231207-web.s3.ap-northeast-2.amazonaws.com/bucket-sample.jpg
+https://mozzi-bucket-20231207-web.s3.ap-northeast-2.amazonaws.com/index.html
+이다.
+그냥 들어가보면 에러페이지(access deny)가 나옴. 버킷정책이 버킷의 소유자만 읽을 수 있게끔 되어있기 때문이다.
+
+4. 버킷 정책변경
+버킷 탭 이동> 권한> 버킷정책이 설정되어있지 않으므로 편집해준다.
+정책생성기> 선언이 필요하다.
+Select Type of Policy - S3 bucket policy
+Principal: *
+ARN : arn:aws:s3:::mozzi-bucket-20231207-web
+-add statement
+~~
+{
+  "Id": "Policy1701910229549",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Stmt1701910130501",
+      "Action": "s3:*",
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::mozzi-bucket-20231207-web/*",
+      "Principal": "*"
+    }
+  ]
+}
+~~
+ 
+모든 권한을 부여해봤다.
+
+5. 접속
+https://mozzi-bucket-20231207-web.s3.ap-northeast-2.amazonaws.com/index.html
+ 
+잘 출력된다.
+
+
+# AWS RDS(Relational Database Service)
+ - AWS 클라우드에서 관계형 데이터베이스를 간단하게 구성, 운영, 확장이 가능한 Managed Database Service
+
+Amazon RDS에서 지원하는 DBMS
+ - Amazon Aurora
+ - MySQL
+ - MariaDB
+ - MSSQL
+ - Oracle
+
+# RDS 실습
+데이터베이스 생성> 표준생성
+엔진옵션> 엔진유형 mysql를 사용해본다.
+ 
+템플릿> 프리 티어 선택
+설정> mozzi-rds-db01
+자격증명- admin/ testuser 사용자지정으로 설정한다.
+보안그룹- vpc-01-db-sg (가용영역2C)
+DB인증- 암호인증 
+
+데이터베이스에 접근할 인스턴스를 생성한다.
+mozzi-rds-host1
+[root@ip-10-0-0-96 ~]# yum install mariadb -y
+[root@ip-10-0-0-96 ~]# mysql -u admin -h RDS_엔드포인트 -p
+
+[root@ip-172-31-42-198 ~]# mysql -u admin -h mozzi-rds-db01.cgvwqikhep67.ap-northeast-2.rds.amazonaws.com -p
+Enter password: testuser
+>>오류가 생긴다면, VPC 가 달라서, 인스턴스의 ip대역이 다른 경우에 해당한다. 172.31.0.0/16이 default 일것이므로 자신이 설정한 대로 VPC보안규칙에서 수정이 필요한 부분.
+ 
+이것만 수정하면 잘 된다.
+
+마리아디비 테스트
+MySQL [(none)]> create database exampledb01;
+
+MySQL [(none)]> create user 'webapp01'@'172.31.%' identified by 'webapppass!';
+
+MySQL [(none)]> grant all privileges on exampledb01.* to 'webapp01'@'172.31.%';
+
+MySQL [(none)]> flush privileges;
+
+MySQL [(none)]> show databases;
++--------------------+
+| Database           |
++--------------------+
+| exampledb01        |
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+
+# 웹서비스로 제공하도록 구축하기 (PHP웹)
+[root@ip-172-31-42-198 ~]# yum install httpd php php-mysqlnd -y
+[root@ip-172-31-42-198 ~]# echo "BaBaYaGa" >> /var/www/html/index.html
+[root@ip-172-31-42-198 ~]# cd /var/www/html
+[root@ip-172-31-42-198 html]# ls
+index.html
+[root@ip-10-0-0-96 ~]# cd /var/www/html/
+[root@ip-10-0-0-96 html]# mkdir inc
+[root@ip-10-0-0-96 html]# vim simple_webapp.php
+(소스코드임)
+
+
+
+
+
+[root@ip-10-0-0-96 html]# vim inc/dbinfo.inc
+<?php
+define('DB_SERVER', 'DB_HOST_ADDRESS'); /* RDS 주소, 사용자, PW, DB 이름 */
+define('DB_USERNAME', 'DB_USER');
+define('DB_PASSWORD', 'DB_PASS');
+define('DB_DATABASE', 'sample');
+?>
+
+주소 mozzi-rds-db01.cgvwqikhep67.ap-northeast-2.rds.amazonaws.com
+사용자 webapp01
+pw webapppass!
+db명 exampledb01  를 참고해서 적는다.
+===
+<?php
+define('DB_SERVER', 'DB_HOST_ADDRESS');
+define('DB_USERNAME', 'webapp01');
+define('DB_PASSWORD', 'webapppass!');
+define('DB_DATABASE', 'exampledb01');
+?>
+===
+
+인바운드 규칙으로 넘어가서, HTTP 프로토콜  ipv4 anywhere 0.0.0.0/0 을 추가해준다.
+
+웹 접속
+instance의 퍼블릭 ip주소(3.35.208.128)로 접근하면 설정한 index가 뜨고, 
+http://3.35.208.128/simple_webapp.php 으로 접근하면 name, address를 추가할 수 있는 페이지가 나타난다.
+ 
+
+# RDS 데이터베이스 인스턴스 삭제
+스냅샷과 자동백업 보존이 필요없다면 체크해제하고 삭제를 한다.
+
+# EC2 인스턴스로 AMI 이미지 생성
+ 인스턴스-이미지생성-
+simple-web-AMI-linux 
+ 
+이후 이 이미지는 AMI 메뉴에서 확인가능하다.
+ 
+
+AMI 확인하기
+인스턴스 >인스턴스 시작> 내 AMI> ‘내 소유’에서 만들어둔 이미지로 인스턴스를 생성가능함.
+ 
+
+mozzi-host2(bak)가 내 AMI를 통해서 생성되었다.
+PS C:\Users\USER> ssh ec2-user@43.201.62.104 -i .\my-all-machine-key-231204.pem
+[ec2-user@ip-172-31-9-74 ~]$ curl http://localhost
+BaBaYaGa
+웹브라우저로 접속도 가능하다.
+>>안쓰는 스냅샷, AMI는 꼭 지워야만 비용이 과금되지 않는다. 실습후 지우기.
+
+# Route 53 (DNS 서비스) 
+DNS를 사용할 수 있는 서비스이다. 
+ - AWS의 관리형 DNS 서비스
+ - Domain 주소 구입 및 Domain Zone 설정 등을 할 수 있음
+ - 고 가용성을 고려한 DNS 서비스 제공
+ 
+만약 가지고있는 개인 소유의 도메인이 없다면 ‘등록된 도메인> 도메인등록’에서 구입을 할 수 있으며,
+소유한 도메인이 있다면 ‘호스팅 영역’ 탭에서 자신의 도메인을 등록하면 된다.
+
+호스팅 영역
+  - Domain Zone을 관리하기 위한 메뉴
+
+호스팅 영역 종류
+ - 퍼블릭 호스팅 영역 (Domain 구입 필요)
+   - 인터넷에서 접근 가능한 Domain  Zone  제공
+ - 프라이빗 호스팅 영역
+   - VPC에서 접근 가능한 Domain  Zone  제공
+
+#Route53 프라이빗 호스팅영역을 통한 도메인 구성 실습
+1. 윈도우 서버 인스턴스를 만들어본다(client 역할) launch-wizard-1
+mozzi-host3(win_client)
+이번엔 t3.micro를 사용해봄 
+보안그룹 생성>example-vpc01-windows-sg
+윈도우서버라 rdp/3389가 추가되어있다. 생성.
+
+호스트 1,2,3 주소(나열)
+3.39.235.59 / 172.31.42.198
+43.201.247.207 / 172.31.9.74
+3.39.235.59 / 172.31.11.94
+
+2. 호스트영역으로 이동> 호스팅 영역 생성
+example.com 도메인 이용
+프라이빗 호스팅 영역 유형 선택.
+vpc를 연동함(리전, vpc 선택)
+>호스팅영역 생성.
+ 
+
+3. 레코드 생성 
+레코드 생성 방법> 빠른 레코드 생성 (라우팅정책, 레코드 유형 참조)
+
+무제 - 호스트1 의 프라이빗 ip등록 172.31.42.198 (무제)
+host1 호스트1 의 프라이빗 ip등록 172.31.42.198
+host2 호스트2 의 프라이빗 ip등록 - 172.31.9.74
+host3 호스트3 의 프라이빗 ip등록 - 172.31.11.94(클라이언트)
+
+www 호스트1 cname생성 host1	 
+ftp 호스트2 cname생성 host2
+>ssh로 접근해본다.
+PS C:\Users\USER> ssh ec2-user@13.125.217.255 -i .\my-all-machine-key-231204.pem
+[ec2-user@ip-172-31-42-198 ~]$ nslookup host1.example.com
+Server:         172.31.0.2
+Address:        172.31.0.2#53
+
+Non-authoritative answer:
+Name:   host1.example.com
+Address: 172.31.42.198
+
+[ec2-user@ip-172-31-42-198 ~]$ nslookup www.example.com
+Server:         172.31.0.2
+Address:        172.31.0.2#53
+
+** server can't find www.example.com: NXDOMAIN
+>> 지금 NX도메인으로 사용이 불가한데, 다시 해보자.
+4. VPC 내의 Route53 private 호스팅 영역 이름 풀이관련 VPC설정 
+VPC메뉴로 들어감> VPC 설정 편집
+DNS확인 활성화, DNS호스트 이름 활성화에 체크.
+
+아까 실패했던 www CNAME을 다시 확인해보자(TTL 때문에 그럴 수도 있다. ttl을 변경해서 확인)
+[ec2-user@ip-172-31-42-198 ~]$ nslookup www.example.com
+Server:         172.31.0.2
+Address:        172.31.0.2#53
+
+Non-authoritative answer:
+www.example.com canonical name = host1.example.com.
+Name:   host1.example.com
+Address: 172.31.42.198
+
+[ec2-user@ip-172-31-42-198 ~]$ nslookup ftp.example.com
+Server:         172.31.0.2
+Address:        172.31.0.2#53
+
+Non-authoritative answer:
+ftp.example.com canonical name = host2.example.com.
+Name:   host2.example.com
+Address: 172.31.9.74
+>>잘 된다.
+
+호스트 2에 설치 vsftpd
+[ec2-user@ip-172-31-9-74 ~]$ sudo yum install vsftpd -y
+[ec2-user@ip-172-31-9-74 ~]$ sudo systemctl enable --now vsftpd
+
+[root@ip-10-0-0-19 ~]# vim /etc/vsftpd/vsftpd.conf
+=== 추가
+pasv_enable=YES
+pasv_min_port=50000
+pasv_max_port=50010
+===
+[ec2-user@ip-172-31-9-74 ~]$ sudo tail -n 4 /etc/vsftpd/vsftpd.conf
+pasv_enable=YES
+pasv_min_port=50000
+pasv_max_port=50010
+ 
+-인바운드규칙에 사용자지정 TCP를 추가
+보안그룹에서 포트 20,21 그리고 50000~50010까지 추가해준다.
+50000 - 50010
+
+
+5. 윈도우 인스턴스로 이동(host3)
+[ec2-user@ip-172-31-9-74 ~]$ sudo yum install ftp -y
+인스턴스2에서 먼저 ftp를 다운로드
+
+i-0d0468d9ffa6ac8c7  (mozzi-host3(win_client))로 인스턴스에 연결(RDP클라이언트)
+ 자격증명을 요한다. (키페어 업로드)
+oL4lAW(kCv7g%u2D)9Y!wJKKDOCjj&u-
+>>제어판에들어가서 암호변경 -Testuser1234
+
+host2의 세션으로 다시이동
+[ec2-user@ip-172-31-9-74 ~]$ sudo passwd ec2-user
+Changing password for user ec2-user.
+New password: user
+
+다시 host3의 세션으로 넘어와 ftp://ftp.example.com/를 입력해본다.
+ 
+또 윈도우서버로 이동해서 ftp://ftp.example.com/로 웹에 들어가본다.
+ 
+>>웹은 잘 실행되고있음.
+실습이 끝났으면 host3 윈도우서버 인스턴스를 종료한다.
+
+# Route53 도메인 삭제
+1. 호스팅영역> example.com에 대한 도메인을 삭제한다.
+-그 전에, 만들었던 레코드들을 우선적으로 삭제해야한다.
+NS , SOA 레코드를 제외한 모든 레코드를 삭제한다.
+그다음 호스팅영역 example.com을 삭제하면 된다.
+
+>>RDS, ROUTE 53 까지의 실습을 모두 마쳤다.
+
+
+# ELB (Elastic Load Balancer) 탄력적 부하 분산
+엘라스틱 로드밸런서 - 라는 것은 4클래스의 로드밸런서를 통칭하는 서비스이다.
+-로드밸런싱 기법을 알아본다
+1. 라운드 로빈(round robin) 방식*(대표적)
+라운드로빈은 여러 대상들이 있을때 어떤 요청이 들어오게되면 한번은 host1, host2, host3에 순차적으로 골고루 (부하를) 전달해주는 방식이다. 현재 연결된세션과 무관하게 각 대상 서버에 순차적 부하분산 요청을 하는 것.
+2. 해쉬(Hash) 방식 
+해시 알고리즘을 사용한 로드밸런싱이며, 클라이언트와 서버 간 세션을 유지하고 클라이언트가 동일한 서버로 연결되도록 보장해준다.
+3. 최소연결우선 (least connection) 방식
+현재 연결된 세션의 수에 따라서 부하분산을 하는 기술. 세션에 대해 보장을 제공하지 않음.
+4. 응답시간우선(Response time) 방식
+빠른 응답이 가능한 서버에 세션을 연결(부하분산). 세션에 대해 보장을 제공하지 않음.
+
+#ELB의 유형 (각각이 다 중요함)
+그 유형별로 CLB(현재 쓰이지않음), NLB, ALB, GWLB 가 존재한다
+Layer 4 수준(TCP)과 Layer 7(HTTP, HTTPS) 수준으로 접근이 가능하다. 
+ 
+-Network Load Balancer
+
+-Application Load Balancer
+
+-GateWay Load Balancer
+
+#ELB가 적용되는 대상
+-EC2 인스턴스
+-컨테이너
+-IP주소 
+
+#로드밸런싱 사용 장점
+-어플리케이션에 대한 내결함성을 확보 가능. 
+ - 원활한 부하 처리를 위한 부하 분산이 가능함
+ - 서버를 클라이언트에 직접 노출하지 않고 로드밸런서를 노출하므로 서버의 보안을 강화할 수 있음
+
+ 
+클래식로드밸런서를 살펴본다.
+이름 classic-lb
+체계 - 인터넷 경계
+네트워크 매핑- az선택(a,c 총 두개를 선택)
+보안그룹- public-sg (HTTP 80번포트 인바운드규칙 추가)
+리스너와 상태검사는 디폴트로 둔다.
+인스턴스 추가- 로드밸런싱 할 ec2인스턴스를 선택해준다. 그리고 생성.
+ 
+
+classic-lb-693522912.ap-northeast-2.elb.amazonaws.com 을 접속해본다.
+index가 출력된다. 
+이번엔 각 호스트로 접속해서, 인덱스를 수정해본다.
+[root@ip-172-31-42-198 ~]# echo "host1 web index.html" > /var/www/html/index.html
+[root@ip-172-31-9-74 ~]# echo "host2 web index.html" > /var/www/html/index.html
+로 설정하고 다시 로드밸런싱 도메인을 새로고침한다.
+ 
+ 
+>>그럼 번갈아가면서 접속이 된다.
+
+이번엔 host1 인스턴스를 중지해본다(종료x)
+host에 문제가 일어나고 조치하기까지 시간이 걸릴 수 있다.
+ 
+ 
+ 
+상태검사에서 비정상 임계값이 출력되고, 
+대상인스턴스 상태확인에서 서비스 중단이 출력된다. 
+다시 host1 인스턴스를 시작하면 다시 상태가 정상적으로 출력된다.
+
+>>다음시간엔 ALB부터 IAM까지 다뤄보도록 하겠다.
+
+
