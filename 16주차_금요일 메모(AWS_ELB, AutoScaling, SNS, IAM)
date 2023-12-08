@@ -1,0 +1,230 @@
+16주차 금요일 메모(AWS_ ELB autoscaling SNS IAM  )
+나갈때 NAT게이트웨이같은 과금요소들 리소스 다 지우기!
+
+지난시간엔 VPC, S3, ROUTE53, ELB를 학습했다.
+
+NAT 게이트웨이를 하나 만들어서mozzi-nat-gateway
+public1a서브넷에 연동, 라우팅편집에서 private rtb와 연동시켜줬다.(0.0.0.0/0)
+
+# WEB 실습
+1 . 인스턴스 생성
+- EC2인스턴스 1 생성     
+host1-public-web01	43.202.42.2  /  10.0.0.141
+ubuntu 22.04AMI사용
+네트워크 설정>퍼블릭서브넷a에 할당, 퍼블릭ip자동할당 체크
+기존보안그룹-public-sg할당
+
+- EC2인스턴스 2 생성
+host2-public-web02       54.180.87.54   /    10.0.1.148
+ubuntu 22.04AMI사용
+네트워크 설정>퍼블릭서브넷c에 할당, 퍼블릭ip자동할당 체크
+기존보안그룹-public-sg할당
+
+2. 인스턴스 접속후 설치
+$ sudo apt-get update
+$ sudo apt-get install apache2 -y
+
+
+ubuntu@ip-10-0-0-141:/etc/apache2$ sudo -i
+root@ip-10-0-0-141:~# echo "host1 web01 web index.html" > /var/www/html/index.html
+root@ip-10-0-1-148:~# echo "host2 web02 index.html" > /var/www/html/index.html
+
+3. 로드밸런서 설치
+로드밸런서 생성 (ALB 선택)
+Application Load Balancer 생성
+>기본구성
+mozzi-web-alb
+ 
+>네트워크 매핑
+각각의 퍼블릭 서브넷을 연동
+ 
+>보안그룹
+ssh 접속허용을 하는 vpc와 다른 로드밸런서 전용 보안그룹을 따로 구성해서, 사용하는것이 
+보안적으로 좋다. (SSH가 필요가 없음)
+ 
+>리스너 및 라우팅
+하나의 로드밸런서에 여럿 대상이 타겟될 수 있으며(타겟그룹)
+타겟그룹을 만드는 ‘대상그룹 생성’으로 가서 확인
+대상유형에따라서 선택하면 된다. - 인스턴스 유형 선택
+mozzi-ALB-tg01 (target group)
+- 대상등록
+처음에 만든 인스턴스들을 지정.
+host2-public-web02
+host1-public-web01
+‘체크후 아래에 보류중인 것으로 포함’ 을 해야 대상등록이 된다.
+ 
+다시 돌아와서,
+리스너 및 라우팅에 새로 생성한 타겟그룹을 등록한다
+ 
+
+4. 웹에 접속(로드밸런싱 DNS으로)
+로드밸런서가 활성화 되면, mozzi-web-alb의 ‘DNS 이름’에 있는 레코드를 통해서 웹에 접속이 가능해진다.
+>mozzi-web-alb-1620740331.ap-northeast-2.elb.amazonaws.com
+ 
+>>504에러가 뜨는데, 처리할 대상이 에러가 발생해서 뜬다.
+ 
+>>trouble shooting : 인스턴스의 VPC -mozzi-public-sg에 http 80번포트 0.0.0.0/0 인바운드규칙이 추가되지 않아서 뜬 것. 추가해줬더니 잘 된다.
+ 
+ 
+
+5. 대상그룹으로 이동
+타겟그룹 속성으로 가면, 트래픽 구성
+로드밸런싱 알고리즘이 ‘라운드 로빈’으로 되어있다.
+‘편집’으로 들어간다.
+ 
+
+>ALB에서 접속 서버 고정하기 (Sticky Session Setting)
+대상선택 구성으로 들어간다 (Target group)
+그 다음 스티키 세션에서 고정켜기를 체크해준다. (Sticky Session enable)
+고정이라는 것은, 웹 서비스 프로토콜(HTTP)에서 쿠키를 설정하는 방식으로, 쿠키 값을 보고 로드밸런서가 특정한 쪽으로 트래픽을 전달해주도록 값을 지정해주는 방법을 설정하는것이다. 
+여기서 선택지는
+-로드밸런서 생성 쿠키
+-애플리케이션 기반 쿠키
+두가지가 존재한다. 애플리케이션에서 수집하는 쿠키 기반으로도 가능하다.
+1)로드밸런서 생성쿠키는 로드밸런서가 접속하면서 수집한 쿠키값으로 기억해서 연결해주는 것.
+2)애플리케이션 기반 쿠키는 위에서 말한대로 애플리케이션에서 수집하는 쿠키값으로 연결해준다.
+대부분 애플리케이션의 경우 웹에 연결되면 10분~20분단위 혹은 몇시간단위, 길면 하루를 통째로 세션유지한 채로 사용할 수 있게 된다. 다만 기간을 너무 길게 설정하면 특정 서버로 트래픽이나 부하가 몰릴 수 있으므로, 적절하게 app환경에 따라 설정한다.
+ 
+로드밸런서 생성쿠키> 고정지속기간을 10분으로 설정해봤다. 저장.
+http://mozzi-web-alb-1620740331.ap-northeast-2.elb.amazonaws.com/  
+로드밸런싱된 DNS 로 접속해보면 라운드로빈형식으로 10분동안 세션이 유지되므로
+host2 web02상태에서 새로고침 시에 host1 web01이 출력된후 10분동안은 새로고침해도
+host1의 index.html만 호출된다.
+>>로드밸런싱 학습을 완료했다.
+
+# Auto Scaling 
+ - 클라우드에서 서버의 애플리케이션 처리 용량을 부하에 따라 자동으로 늘려주거나 줄여주는 기술
+
+가용성(Availability)
+  - 시스템이나 서비스가 가동 및 실행되는 시간의 비율
+    연중 가용성 90% - 36.5일 서비스 중단
+    연중 가용성 99% - 3.65일(87.6 시간) 서비스 중단
+    연중 가용성 99.99% - 52.56분 서비스 중단
+
+고가용성 : 중요 업무 시스템 및 서비스의 다운 타임이 허용되지 않는 시스템
+
+확장성(Scalability)
+ - 성능 증가 요구시 서비스나 애플리케이션이 향상될 수 있는 정도
+ - 확장성이 높을 경우 유동적인 서비스 요구 증가 등에 유연하게 대응할 수 있음
+
+스케일 방식
+  스케일 인/아웃:  처리하는 서버의 개수를 조절   ( instance 늘리기)
+  스케일 업/다운 : 처리하는 서버의 성능을 조절   ( instance의 CPU, RAM 등 하드웨어성능 늘림) 
+
+Amazon Auto Scaling 특징
+ - 사용자가 정의한 조건에 따라 EC2 용량이 자동으로 확장/축소
+ - 실행 중일 EC2 인스턴스의 개수를 일정 개수로 유지할 수 있음
+ - 수요가 급증할 경우 인스턴스 개수 증가
+ - 수요가 감소할 경우 인스턴스 개수 감소
+ - Auto Scaling 서비스 이용 자체는 무료이지만 인스턴스 추가 생성 등의 비용은 발생할 수 있음
+ 
+
+Auto Scaling Group
+ - 인스턴스의 조정 및 관리 목적으로 구성된 논리적 그룹
+ - Auto Scaling을 수행하는 인스턴스의 모임
+
+시작 구성 (시작 템플릿)
+1 - Auto Scaling Group에서 인스턴스를 시작하기 위해 사용하는 템플릿
+*시작구성으로 AutoScalingGroup을 생성하는것은 2023.12.31까지만 CLI, API로 사용이 가능.
+2 - 구성요소
+- AMI
+- 인스턴스 유형
+- 키페어
+- 보안그룹(SG)
+- EBS (elastic block storage)
+3 - Auto Scaling Group 당 1개의 시작 구성을 사용함
+4 - 시작 구성은 수정할 수 없다.
+변경이 필요한 경우, 새로 작성후 AutoScalingGroup을 업데이트해야 한다.
+AWS에서는 현재 시작구성 대신 시작템플릿을 지원하고있으며 다양한 설정을 제공한다.
+
+Auto Scaling Group 조정
+ - 주요 인스턴스 조정 옵션
+  - 현재 인스턴스 수준 유지 관리 : 항상 정해진 인스턴스의 개수 유지
+  - 수동 조정 : 최소, 최대 또는 원하는 용량의 변경 사항을 조정
+  - 일정 기반 조정
+  - 온 디맨드 조정 : 인스턴스의 CPU, 메모리 사용율, 네트워크 대역폭에 따른 조정
+      예:  CPU 사용율이 90%로 15분 유지시 인스턴스 확장
+
+
+#오토스케일링 실습
+1. CLB 로드밸런서를 하나 만든다.
+mozzi-autoscaling-clb
+internet-facing 체계
+각각 가용영역에 public 서브넷을 할당
+인스턴스 2개를 할당
+ 
+
+2. 오토스케일링 구성
+오토스케일링> 오토스케일링 그룹> 그룹생성
+Mozzi-AutoScaling-Group
+2-1. ‘시작템플릿 생성’으로 들어간다.
+mozzi-autoscaling-temp 
+시작템플릿콘텐츠> AMI 선택 quick start에서 linux 2 선택
+네트워크설정>시작 템플릿에 포함하지 않음(서브넷 미지정) 
+기존보안그룹-public sg 
+고급세부정보-사용자 데이터 칸에
+User Data
+#!/bin/sh
+yum -y install httpd php mysql php-mysql
+
+systemctl enable httpd.service
+systemctl start httpd.service
+
+cd /tmp
+
+wget https://s3.ap-northeast-2.amazonaws.com/cftest20180909/autoscaling-source.zip
+
+unzip autoscaling-source.zip
+
+sudo mv *.php /var/www/html
+를 입력해주고 생성.
+
+2-2. 시작탬플릿을 로드해준다
+ 
+ 
+네트워크에서 VPC와 각각 가용영역의 subnet (public)을 연동시켜준다.
+다음으로가서 고급옵션 구성이다.
+ 
+기존 로드밸런서에 연결
+전에만든 CLB에서 선택해서 연동해주고 
+상태확인>에서 ‘ELB 상태확인켜기’ 에 체크해준다.
+그룹크기 및 크기조정 구성> 
+크기조정에서 원하는 최소용량(인스턴스)과 최대용량을 설정할수있다. 
+1~3개로 조정한다.
+ 
+유지관리정책은 일단 ‘정책없음’으로 설정한다.
+ 
+알림을 받을 수 있는데, 이는 AWS SNS 서비스를 통해 받을 수 있다.
+간단하게 알림을 받도록 SNS주제를 생성한다.
+Autoscaling-sns-alarm
+ 
+다 되었으면 생성.(생성하자마자 Gmail알림이 온다.)
+ 
+
+3. CLB 로드밸런서로 이동한다.
+mozzi-autoscaling-clb 로 이동해서 확인해보니 오류가 있다.
+퍼블릭 ipv4 대역이 할당되지 않은것이다.(탄력적 ip 자동할당 안됨)
+‘대상인스턴스’에서 host1, host2에 해당하는 인스턴스를 등록취소해준다.
+ 
+시작탬플릿 편집>퍼블릭 ip자동할당 활성화.
+User Data
+#!/bin/sh
+yum -y install httpd php mysql php-mysql
+
+systemctl enable httpd.service
+systemctl start httpd.service
+
+cd /tmp
+
+wget https://s3.ap-northeast-2.amazonaws.com/cftest20180909/autoscaling-source.zip
+
+unzip autoscaling-source.zip
+
+sudo mv *.php /var/www/html
+
+echo "index.html" > /var/www/html/index.html 
+다시 수정.
+탬플릿 버전을 수정하던, 새로 탬플릿을 만들던 해서 오토스케일링 그룹에 선택해준다.
+
+
+
