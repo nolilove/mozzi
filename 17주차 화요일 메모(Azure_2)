@@ -1,0 +1,202 @@
+17주차 화요일 메모 Microsoft (Azure2)
+랩 3~4 
+# AZ-104T00A Administer Azure Resources
+학습 목표 - Azure 리소스
+• 도구를 사용하여 Azure 리소스 구성
+• ARM 템플릿으로 리소스 구성
+• 랩 03b - ARM 템플릿을 사용하여 Azure 리소스 관리 
+• 랩 03c - Azure PowerShell을 사용하여 Azure 리소스 관리(선택 사항) 
+• 랩 03d - Azure CLI를 사용하여 Azure 리소스 관리(선택 사항)
+
+-Configure Azure Resources with Tools
+도구를 사용하여 Azure 리소스 구성
+관리 도구 비교(학생 주제 4개)
+데모 ‒ Azure 포털
+데모 ‒ Azure Cloud Shell
+데모 ‒ 로컬에서 PowerShell 작업(선택 사항)
+데모 ‒ Azure CLI(선택 사항)
+요약 및 리소스
+ 
+*데모 ‒ Azure Portal(선택 사항) 
+도움말 및 키보드 단축키
+경험 맞춤화
+
+*데모 ‒ Cloud Shell(선택사항)
+Cloud Shell 구성
+Azure PowerShell을 사용해 실험해 보세요.
+Bash 셸 실험
+클라우드 편집기로 실험해 보세요
+
+*데모 ‒ PowerShell 작업(선택 사항)
+Az 모듈 설치
+NuGet 설치(필요한 경우)
+Azure에 연결하고 구독 정보 보기
+리소스 생성
+
+*데모 ‒ CLI 작업(선택 사항)
+CLI 설치
+CLI 설치 확인
+Azure에 로그인
+리소스 그룹 만들기
+리소스 그룹 확인
+
+# Configure Resources with ARM Template
+ARM 템플릿을 사용하여 리소스 구성
+
+ARM 템플릿의 장점 검토
+Azure Bicep 파일 고려 
+데모 ‒ PowerShell을 사용하여 템플릿 실행(선택 사항) 
+JSON 템플릿 스키마 탐색 
+JSON 템플릿 매개변수 살펴보기 
+데모 ‒ QuickStart 템플릿
+
+- ARM 템플릿의 장점 검토
+일관성을 향상하고 재사용을 촉진합니다.
+Express 복잡한 배포 
+모듈식이며 연결 가능 
+코드를 통해 요구사항 표현 수동적이고 오류가 발생하기 쉬운 반복 작업을 줄입니다
+검증 작업 제공
+오케스트레이션 단순화
+
+-JSON 템플릿 매개변수 살펴보기
+ 
+템플릿이 실행될 때 구성 가능 한 값을 지정합니다.
+VM의 사용자 이름 (adminUsername) 및 해당 비밀번호 (adminPassword) 가 매개변수.
+
+- JSON 템플릿 스키마 탐색
+ 
+배포의 모든 Resource Manager 리소스를 정의합니다.
+JSON으로 작성됨
+키-값 쌍의 컬렉션
+각 키는 문자열입니다.
+각 값은 문자열, 숫자, 부울 표현식, 값 목록, 객체 일 수 있습니다.
+
+-Azure Bicep 파일 고려
+ 
+템플릿 작성을 위한 더 간단한 구문
+기본 템플릿에서 참조할 수 있는 더 작은 모듈 파일
+리소스 간의 종속성을 자동으로 감지합니다.
+유효성 검사 및 IntelliSense가 포함된 Visual Studio Code 확장
+
+$ 랩 03a ‒ Azure Portal을 사용하여 Azure 리소스 관리
+랩 시나리오
+리소스 프로비저닝 및 리소스 그룹 간 리소스 이동을 포함하여 리소스 그룹을 기반으로 구성하는 것과 관련된 기본 Azure 관리 기능을 탐색해야 합니다.
+또한 디스크 리소스가 실수로 삭제되지 않도록 보호하는 동시에 성능 특성과 크기를 수정할 수 있는 옵션도 살펴보고 싶습니다.
+ 
+작업>> 1.리소스 그룹만들어 그룹에 리소스 배포 / 2. 리소스이동 리소스 그룹 / 3. 구현 및 테스트 리소스 잠금
+
+$ 랩 03b ‒ 템플릿을 사용하여 Azure 리소스 관리
+랩 시나리오
+Azure Portal을 사용하여 리소스를 프로비저닝하고 리소스 그룹을 기반으로 구성하는 것과 관련된 기본 Azure 관리 기능 을 살펴보았으므로 이제 Azure Resource Manager 템플릿을 사용하여 동등한 작업을 수행해야 합니다.
+ 
+작업>> 1.ARM탬플릿 검토 , Azure 관리디스크 배포용 / 2. ARM탬플릿을 이용해 Azure관리디스크 만들기 / 3. 관리디스크의ARM 탬플릿 기반배포 검토
+
+
+$ 랩 03c ‒ PowerShell을 사용하여 Azure 리소스 관리(선택 사항)
+랩 시나리오
+Azure Portal 및 Azure Resource Manager 템플릿을 사용하여 리소스를 프로비저닝하고 리소스 그룹을 기반으로 구성하는 것 과 관련된 기본 Azure 관리 기능을 살펴보았으므로 이제 Azure PowerShell을 사용하여 동등한 작업을 수행해야 합니다. Azure PowerShell 모듈을 설치하지 않으려면 Azure Cloud Shell을 활용합니다
+ 
+작업>>1. powershell세션 시작_Azure 클라우드 셸 / 2. 리소스그룹 및 Azure관리디스크를 만듬(애저 파워셸) / 3. Azure Powershell사용해서 디스크 구성.
+
+
+$ 랩 03d ‒ Azure CLI를 사용하여 Azure 리소스 관리(선택 사항)
+랩 시나리오
+Azure Portal, Azure Resource Manager 템플릿 및 Azure PowerShell을 사용하여 리소스를 프로비저닝하고 리소스 그룹을 기반으로 구성하는 것과 관련된 기본 Azure 관리 기능을 살펴보았으므로 이제 Azure CLI를 사용하여 동등한 작업을 수행해야 합니다. Azure CLI 설치를 방지하려면 Azure Cloud Shell에서 사용 가능한 Bash 환경을 활용하세요.
+ 
+작업>> 1. Azure에서 bash세션 시작_클라우드셸 / 2. 리소스그룹만들기_관리디스크는 Azure CLI을 사용한다 / 3. Azure CLI를 사용하여 관리디스크 구성.
+
+
+# AZ-104T00A Administer Virtual Networking
+학습 목표 - 가상 네트워킹 관리
+
+$ Azure 가상 네트워크의 기능 ‒ 1/2
+인터넷과의 커뮤니케이션
+• 아웃바운드 트래픽은 기본적으로 허용됩니다.
+• 인바운드 트래픽은 다음을 통해 제공될 수 있습니다.
+• 공개 IP 주소
+• 공용 로드 밸런서
+
+-Azure 리소스 간 통신
+• 가상 네트워크를 통해
+• 가상 네트워크 서비스 엔드포인트를 통해 및/또는 개인 엔드포인트를 통해
+• VNet 피어링을 통해
+ 
+
+$ Azure 가상 네트워크의 기능 ‒ 2/2
+온프레미스 간 통신
+• 지점 및 사이트 간 VPN
+• 사이트 간 VPN	
+• Azure Express 경로
+-네트워크 트래픽 필터링
+• 네트워크 보안 그룹 • 네트워크 가상 어플라이언스
+-네트워크 트래픽 라우팅
+• 라우팅 테이블
+• BGP 경로
+
+ 
+-가상 네트워크 주소 공간
+ 
+-서브넷
+ 
+$ IP 주소 지정 계획
+-개인 IP 주소 - Azure 가상 네트워크(VNet) 및 온-프레미스 네트워크(VPN 게이트웨이 또는 ExpressRoute 회로를 사용하여 네트워크를 Azure 로 확장하는 경우)
+-공용 IP 주소 - 다음을 포함하여 인터넷 통신에 사용됩니다. Azure 공용 서비스
+ 
+ 
+ 
+
+# Configure Network Security Groups
+네트워크 보안 그룹 구성
+Implement Network Security Groups (NSGs)
+Determine NSG Rules
+Determine NSG Effective Rules
+Create NSG Rules
+Implement Application Security Groups (ASGs)
+Demonstration – NSGs
+Summary and Resources
+
+-NSG(네트워크 보안 그룹) 구현
+가상 네트워크 리소스에 대한 네트워크 트래픽을 제한합니다.
+인바운드 또는 아웃바운드 네트워크 트래픽을 허용 하거나 거부하는 보안 규칙 나열
+서브넷 또는 네트워크 인터페이스 연동
+여러 번 연결될 수 있음
+
+-NSG 규칙 결정
+NSG의 보안 규칙을 사용하면 가상 네트워크 서브넷 및 네트워크 인터페이스에서 
+들어오고 나갈 수 있는 네트워크 트래픽을 필터링 할 수 있습니다.
+
+기본 보안 규칙이 있습니다. 기본 규칙은 삭제할 수 없지만
+우선순위가 더 높은 다른 규칙을 추가할 수 있습니다.
+
+-NSG 유효 규칙 결정
+NSG는 다음에 대해 독립적 으로 평가됩니다. 서브넷 및 NIC
+'허용' 규칙이 있어야 합니다 트래픽에 대해 두 수준 모두에서 편입될수 있는
+어떤 보안 규칙이 적용되고 있는지 확실 하지 않은 경우 유효 규칙 링크를 사용
+ 
+
+-NSG 규칙 만들기
+소스 (모든, IP 주소, 내 IP 주소, 서비스 태그 및 애플리케이 션 보안 그룹)
+대상 (모든, IP 주소, 서비스 태그 및 애플리케이션 보안 그 룹)
+서비스 (HTTPS, SSH, RDP, DNS, POP3, 사용자 정의, …)
+우선순위 - 숫자가 낮을수록 우선순위가 높음
+ 
+
+- 애플리케이션 보안 그룹 구현
+애플리케이션 구조 확장
+ASG는 논리적으로 가상 머신을 그룹화합니다. 웹 서버, 애플리케이션 서버
+트래픽 흐름을 제어하는 규칙 정의
+보안 강화를 위해 ASG를 NSG로 래핑
+ 
+
+
+
+
+# 랩 04 ‒ 가상 네트워크 구현
+랩 시나리오
+두 개의 Azure 가상 머신을 호스팅할 가상 네트워크를 Azure에 만들 계획입니다. 가상 네트워크의 다른 서브넷에 배포합니다 . 또한 개인 및 공용 IP 주소가 시간이 지나도 변경되지 않는지 확인하려고 합니다 . Contoso 보안 요구 사항을 준수하려면 인터넷에서 액세스할 수 있는 Azure 가상 머신의 공용 끝점을 보호해야 합니다. 마지막으로 가상 네트워크 내와 인터넷 모두에서 Azure 가상 머신에 대한 DNS 이름 확인을 구현해야 합니다.
+작업>> 1. 가상네트워크 생성 및 구성 / 2. 가상머신에 가상네트워크 배포 / 3. Azure VM의 개인 및 공용 IP주소 구성 / 4. 네트워크 보안그룹 구성 / 5. Azure DNS 내부이름 확인 구성 / 6. Azure DNS 외부이름 확인 구성
+ 
+ 
+
+
+
