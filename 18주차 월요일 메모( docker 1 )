@@ -1,0 +1,301 @@
+18주차 월요일 메모( Docker )
+
+이번주차부터는 도커, 그리고 차후 일정은 쿠버네티스에 이어서 프로젝트와 관련해서 진행할예정.
+컨테이너_도커란 무엇인지에 대해서 공부할 것이고, 책을 참조할 것.
+리눅스 버추얼박스 기본스냅샷(ova)링크:
+https://www.dropbox.com/scl/fo/em4co6i9ldufnienhm1y0/h?rlkey=x5gz13bztbton96e3e1h6hdgf&dl=0
+http://192.168.10.5/ 로 설정해둔다.
+
+OS(Operating System) : 사용자가 컴퓨터 하드웨어 리소스를 쉽게 사용할 수 있도록 도움을 주는 시스템 소프트웨어
+가상화(Virtualization)
+  시스템의 리소스를 논리적으로 나눠서 사용
+
+가상화 종류
+   서버 가상화
+     물리적인 컴퓨터를 가상머신으로 만들어 사용하는 기술
+
+   네트워크 가상화
+     네트워크를 논리적으로 만들어서 사용하는 기술
+
+   스토리지 가상화
+      Storage를 가상화하는 기술
+
+   컨테이너 가상화
+      컨테이너 단위로 애플리케이션을 배포하고 관리하도록 하는 가상화 기술
+
+리눅스 컨테이너(LXC)
+  리눅스 운영체제에서 제공하는 컨테이너 도구
+
+리눅스 컨테이너를 구성하는 핵심 기술
+  CGroups, Namespace
+
+CGroups(Control Groups)
+  프로세스를 그룹화하여 관리하며 시스템의 리소스를 제한할 수 있는 기술
+
+Namespace (컨테이너기반) _네임스페이스 
+  다수의 오브젝트를 격리할 수 있는 기술
+  오브젝트 별 독립적인 환경을 제공함 
+namespace 	describe 
+ mnt 	 CLONE_NEWNS 플래그에 의해 지정 
+ uts 	 CLONE_NEWUTS 플래그에 의해 지정
+ ipc	 CLONE_NEWIPC 플래그에 의해 지정 
+ pid 	 CLONE_NEWPID 플래그에 의해 지정
+ usr 	 CLONE_NEWUSER 플래그에 의해 지정
+ net 	 CLONE_NEWNET 플래그에 의해 지정 
+
+ - PID Namespace : Namespace 내에서 독립적인 PID 사용
+ - Network Namespace : Namespace 내에서 독립적인 네트워크 기능을 사용
+ - Mount Namespace : Namespace 내에서 독립적인 Mount Point를 사용
+ - UID Namespace : Namespace 내에서 독립적인 UID를 사용
+ - UTS Namespace : Namespace 내에서 독립적인 Hostname을 사용
+ - IPC Namespace : Namespace 내에서 독립적인 IPC를 사용
+IPC란, Inter-Process Communication 
+
+# Docker
+  Docker사에서 2013년에 개발한 컨테이너 도구
+  기존의 Linux Container 기술보다 사용성이 개선됨.
+  개발환경, 테스트 환경, 서비스 환경을 모두 동일하게 구성하여 사용할 수 있음
+
+Docker 특징
+  - 서버를 코드 형태로 정의할 수 있음
+  - 이식성이 높음
+  - 다양한 벤더 환경에서의 상호 운용성
+
+Docker 관련 용어
+이미지(Image) - 애플리케이션이 포함된 컨테이너를 생성하기 위한 실행환경을  포함하는 초기 데이터 세트
+저장소(Registry) -   컨테이너를 생성하기 위한 이미지를 저장하는 네트워크 상의 저장공간(Docker Hub)
+컨테이너(Container) -  컨테이너 이미지가 실행된 형태. 
+ 
+>>그림과 같은 구조로 되어있다.
+
+#도커 실행하기( 버추얼박스 )
+(우선 hostnamectl hostname docker1으로 변경했다)
+설치단계
+# yum install epel-release -y
+# cd /etc/yum.repos.d/
+# wget https://download.docker.com/linux/centos/docker-ce.repo
+# yum install docker-ce docker-ce-cli containerd.io -y
+# systemctl start docker.service
+# systemctl enable docker.service
+
+확인과정
+[root@docker1 yum.repos.d]# docker info   로 설치된모습을 본다.
+Client: Docker Engine - Community
+ Version:    24.0.7
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  buildx: Docker Buildx (Docker Inc.)
+    Version:  v0.11.2
+    Path:     /usr/libexec/docker/cli-plugins/docker-buildx
+  compose: Docker Compose (Docker Inc.)
+    Version:  v2.21.0
+    Path:     /usr/libexec/docker/cli-plugins/docker-compose
+
+지금은 루트계정으로해서 권한이 있어서 나왔으나, 일반 유저로 실행해보면 퍼미션 디나이드가 뜬다.
+[root@docker1 ~]# ssh user@localhost
+[user@docker1 ~]$ dockerinfo
+~
+Server:
+ERROR: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.24/info": dial unix /var/run/docker.sock: connect: permission denied
+errors pretty printing info
+>>컨테이너를 사용할 수 있는 권한을 부여해줘야 한다. 부여의 가장 손쉬운 방법은
+도커설치되는 때에 ‘도커’ 라는 그룹에 권한을 주게 되면, 일반 사용자도 컨테이너를 다룰 수가 있게 된다. 
+
+권한부여
+[user@docker1 ~]$ grep docker /etc/group  로 도커권한이 없는것을 일단 확인한다.
+docker:x:976:
+[root@docker1 ~]# usermod -aG docker user
+[root@docker1 ~]# grep docker /etc/group
+docker:x:976:user
+이후 배쉬쉘과 로그아웃>재접속을 한 뒤 인포를 다시 확인
+[user@docker1 ~]$ id user
+uid=1000(user) gid=1000(user) groups=1000(user),10(wheel),976(docker)
+[user@docker1 ~]$ docker info
+Server:
+ Containers: 0
+  Running: 0
+  Paused: 0
+  Stopped: 0
+ Images: 0
+ Server Version: 24.0.7
+ Storage Driver: overlay2
+  Backing Filesystem: xfs
+  Supports d_type: true
+  Using metacopy: false
+  Native Overlay Diff: true
+  userxattr: false
+ Logging Driver: json-file
+ Cgroup Driver: systemd
+ Cgroup Version: 2
+>>잘 뜬다.
+
+도커 버전 확인(구성요소, 컴포넌트 버전)
+[user@docker1 ~]$ docker version
+Client: Docker Engine - Community
+ Version:           24.0.7
+ API version:       1.43
+ Go version:        go1.20.10
+ Git commit:        afdd53b
+ Built:             Thu Oct 26 09:09:13 2023
+ OS/Arch:           linux/amd64
+ Context:           default
+
+Server: Docker Engine - Community
+ Engine:
+  Version:          24.0.7
+  API version:      1.43 (minimum version 1.12)
+  Go version:       go1.20.10
+  Git commit:       311b9ff
+  Built:            Thu Oct 26 09:07:45 2023
+  OS/Arch:          linux/amd64
+  Experimental:     false
+ containerd:
+  Version:          1.6.26
+  GitCommit:        3dd1e886e55dd695541fdcd67420c2888645a495
+ runc:
+  Version:          1.1.10
+  GitCommit:        v1.1.10-0-g18a0cb0
+ docker-init:
+  Version:          0.19.0
+  GitCommit:        de40ad0
+>>도커인포가 전반적인것을 보여준다 치면, 여기서는 버전정보를 자세하게 보여준다.
+
+# 도커 명령방식
+docker SUBCOMMAND 가  기존방식(두단계) 
+docker OBJECT SUBCOMMAND 가 새로운 방식으로 나뉘어있다.(세단계)
+
+-도커 이미지 확인하기
+[user@docker1 ~]$ docker images (기존)
+REPOSITORY   TAG       IMAGE ID   CREATED   SIZE
+[user@docker1 ~]$ docker images ls (바뀜)
+REPOSITORY   TAG       IMAGE ID   CREATED   SIZE
+
+>>정리하면,  
+Registry : image의 저장소  //
+Repository : image 저장소에 각 이미지별로 이미지가 저장되는 공간. (프로젝트 디렉토리정도의 개념을 가진다) 
+도커 공식 레지스트리(Docker Hub)
+https://hub.docker.com/ 에서 레포지토리를 검색할 수 있다. 
+
+도커 이미지 검색
+[user@docker1 ~]$ docker search [keyword] 를 사용해서 검색이 가능.
+NAME   		DESCRIPTION      	   STARS     OFFICIAL     AUTOMATED
+marioard/raspberry-pi-kvs-streamer                                                     0                    
+marionapp/api                                                                        0        
+공식 컨테이너(이미지) 인 경우
+
+[user@docker1 ~]$ docker search centos
+centos                    The official build of CentOS.    7093      [OK]   
+처럼 나온다 *stars는 평점을 나타냄.
+[user@docker1 ~]$ docker search ubuntu
+ubuntu           Ubuntu is a Debian-based Linux operating sys…   16686     [OK]       
+[user@docker1 ~]$ docker search linux
+alpine             A minimal Docker image based on Alpine Linux…   10530     [OK]       
+rockylinux         The official build of Rocky Linux.              204       [OK]       
+>>이처럼 키워드를 입력해서 검색을 할 수 있다. 참고로 컨테이너 이미지엔 OS를 포함할 수 없다. 그러나 OS에서 사용하던 명령어 도구들을 포함해서 리눅스 배포판에서 사용하던 환경을(shell) 사용할 수 있도록 이미지를 만든 것이 검색될 수 있다. (자체에 운영체제 포함 안됨.) 
+호스트 운영체제 (커널)의 도움을 받아서 실제로 이미지를 사용하게 되는 방식이다.
+>>공식 도커 홈페이지를 통해서도 이미지를 받을 수 있다. 
+
+ 
+hello-world 도커 컨테이너 실행
+실행을 시켜보면, 
+[user@docker1 ~]$ docker container run hello-world:latest
+Unable to find image &apos;hello-world:latest&apos; locally  >>로컬에서는 이미지가 없다는뜻
+latest: Pulling from library/hello-world >> 허브 웹 라이브러리에서 이미지를 가져온다.
+c1ec31eb5944: Pull complete 
+Digest: sha256:ac69084025c660510933cca701f615283cdbb3aa0963188770b54c31c8962493
+Status: Downloaded newer image for hello-world:latest
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+To try something more ambitious, you can run an Ubuntu container with:
+ $ docker run -it ubuntu bash
+Share images, automate workflows, and more with a free Docker ID:
+ https://hub.docker.com/
+For more examples and ideas, visit:
+ https://docs.docker.com/get-started/
+
+도커 아키텍처
+ 
+https://docs.docker.com/get-started/overview/
+>>로컬에 이미지가 있으면 그대로 실행하고, 없다면 web lib에서 받아서 실행하게되는 과정이다. 도커 빌드(이미지빌드) 명령어는 컨테이너이미지를 만드는 명령어이다. 
+순서: docker pull > docker daemon > docker registry(hub) download > run images > docker run >make containers 
+
+컨테이너 목록확인 (둘은 같은 명령어임)
+[user@docker1 ~]$ docker container ls  / 
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+[user@docker1 ~]$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+>> 명령어에 -a 를 붙이면 모두 출력가능하다
+e1a6a72a7f4b   hello-world:latest   "/hello"   16 minutes ago   Exited (0) 16 minutes ago             gallant_mendel
+
+도커 컨테이너이미지 다운로드(pull)
+$ docker image pull IMG_REPO:TAG
+$ docker pull IMG_REPO:TAG
+
+새로운 컨테이너 실행
+$ docker container run  [OPTION]  IMG_REPO:TAG  [COMMAND]  [ARG…]
+
+#실습 
+확인한다
+[user@docker1 ~]$ docker images
+REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
+hello-world   latest    d2c94e258dcb   7 months ago   13.3kB
+이미지를 받는다
+[user@docker1 ~]$ docker image pull rockylinux:9
+9: Pulling from library/rockylinux
+489e1be6ce56: Pull complete 
+Digest: sha256:c944604c0c759f5d164ffbdf0bbab2fac582b739938937403c067ab634a0518a
+Status: Downloaded newer image for rockylinux:9
+docker.io/library/rockylinux:9
+
+컨테이너를 실행해본다
+[user@docker1 ~]$ docker container run -it --name rocky9-1 rockylinux:9
+[root@986cc0c95fc3 /]# 
+로컬에 이미지가 있기때문에 위 상태로 실행하여 명령줄이 바뀌게 되는데,
+이때 확인하는법은 shell prompt를 확인하면 변경점을 알 수 있다 
+(user>root 사용자/ hostname>임의의 호스트네임/ 작업디렉토리 ~{홈디렉터리}>/{최상위디렉터리} /$프롬포트에서 #프롬포트로 변경됨) 
+>>실행할때 옵션들을 정리해보자면, ($ docker container run --help)
+옵션	설명
+-i	표준 입력을 컨테이너에 연결(키보드 입력을 컨테이너로 전달)
+-t	제어 터미널을 사용(Pseudo Terminal_가상터미널)
+-d	백그라운드(Detached Mode)로 컨테이너를 실행
+
+
+[root@986cc0c95fc3 /]# touch container-test1.txt
+[root@986cc0c95fc3 /]# ls -l
+total 4
+dr-xr-xr-x.   2 root root    6 May 16  2022 afs
+lrwxrwxrwx.   1 root root    7 May 16  2022 bin -> usr/bin
+-rw-r--r--.   1 root root    0 Dec 18 06:30 container-test1.txt
+drwxr-xr-x.   5 root root  360 Dec 18 06:14 dev
+drwxr-xr-x.   1 root root   66 Dec 18 06:14 etc
+drwxr-xr-x.   2 root root    6 May 16  2022 home
+lrwxrwxrwx.   1 root root    7 May 16  2022 lib -> usr/lib
+lrwxrwxrwx.   1 root root    9 May 16  2022 lib64 -> usr/lib64
+drwx------.   2 root root    6 Nov 19 22:25 lost+found
+drwxr-xr-x.   2 root root    6 May 16  2022 media
+drwxr-xr-x.   2 root root    6 May 16  2022 mnt
+drwxr-xr-x.   2 root root    6 May 16  2022 opt
+dr-xr-xr-x. 267 root root    0 Dec 18 06:14 proc
+dr-xr-x---.   2 root root  162 Nov 19 22:25 root
+drwxr-xr-x.   2 root root    6 Nov 19 22:25 run
+lrwxrwxrwx.   1 root root    8 May 16  2022 sbin -> usr/sbin
+drwxr-xr-x.   2 root root    6 May 16  2022 srv
+dr-xr-xr-x.  13 root root    0 Dec 18 02:42 sys
+drwxrwxrwt.   2 root root    6 Nov 19 22:25 tmp
+drwxr-xr-x.  12 root root  144 Nov 19 22:25 usr
+drwxr-xr-x.  18 root root 4096 Nov 19 22:25 var
+
+종료된 컨테이너 포함 모든 컨테이너 목록 확인
+$ docker container ls -a
+$ docker ps -a
+
+
