@@ -1,0 +1,600 @@
+18주차 화요일 메모( Docker 2_컨테이너 명령어 )
+
+1. 도커 개요
+2. 도커 기본 명령어
+3. 도커 네트워크
+4. 도커 볼륨
+5. 도커 이미지 관리
+6. 도커 Private Registry
+
+docker
+도커 컨테이너 이미지 다운로드(pull)
+$ docker image pull IMG_REPO:TAG
+$ docker pull IMG_REPO:TAG
+
+새로운 컨테이너 실행
+$ docker container run  [OPTION]  IMG_REPO:TAG  [COMMAND]  [ARG…]
+$ docker run  [OPTION]  IMG_REPO:TAG  [COMMAND]  [ARG…]
+옵션	설명
+-i	표준 입력을 컨테이너에 연결(키보드 입력을 컨테이너로 전달)
+-t	제어 터미널을 사용(Pseudo Terminal)
+-d	백그라운드(Detached Mode)로 컨테이너를 실행
+
+실행중인 컨테이너 목록 확인
+$ docker container ls
+$ docker ps
+
+종료된 컨테이너 포함 모든 컨테이너 목록 확인
+$ docker container ls -a
+$ docker ps -a
+
+#실습
+# 시나리오1:
+우분투 이미지를 다운로드받고 이 이미지를 컨테이너로 실행시켜본다. 이름을 ubuntu-test0지정
+[user@docker1 ~]$ docker container run --name ubuntu-test0 ubuntu:20.04
+Unable to find image &apos;ubuntu:20.04&apos; locally
+20.04: Pulling from library/ubuntu
+527f5363b98e: Pull complete 
+Digest: sha256:f2034e7195f61334e6caff6ecf2e965f92d11e888309065da85ff50c617732b8
+Status: Downloaded newer image for ubuntu:20.04
+실행했는데 안보인다
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+Centos나 우분투나 같으나. 터미널이 있어야 쉘이 실행되는데 
+컨테이너같은경우 독립적인 환경을 제공하므로 리눅스시스템과는 다르게,
+컨테이너가 생성되어 실행된다. 터미널이 없는채로 우분투 컨테이너가 실행된 것이다
+실행되자마자 종료되어서, 도커 ps 나 도커 ls로도 확인이 불가한 것.
+
+[user@docker1 ~]$ docker container ps -a 로 종료된 것도 보도록 한다
+CONTAINER ID   IMAGE  COMMAND       CREATED         STATUS   PORTS     NAMES
+44dfc04d4d22   ubuntu:20.04       "/bin/bash"   4 minutes ago   Exited (0) 4 minutes ago                   ubuntu-test0
+986cc0c95fc3   rockylinux:9         "/bin/bash"   19 hours ago    Exited (255) About an hour ago             rocky9-1
+e1a6a72a7f4b   hello-world:latest   "/hello"      20 hours ago    Exited (0) 20 hours ago                    gallant_mendel
+
+test1 이름으로 다시 우분투 컨테이너를 실행시켜본다.
+[user@docker1 ~]$ docker container run -i -t --name ubuntu-test1 ubuntu:20.04
+root@458d24e8a472:/# 
+그러면 쉘 프롬포트가 바뀌었다. 
+목록 확인해보기
+root@458d24e8a472:/# ls -l
+total 0
+lrwxrwxrwx.   1 root root   7 Dec 11 02:04 bin -> usr/bin
+drwxr-xr-x.   2 root root   6 Apr 15  2020 boot
+drwxr-xr-x.   5 root root 360 Dec 19 01:36 dev
+drwxr-xr-x.   1 root root  66 Dec 19 01:36 etc
+drwxr-xr-x.   2 root root   6 Apr 15  2020 home
+lrwxrwxrwx.   1 root root   7 Dec 11 02:04 lib -> usr/lib
+lrwxrwxrwx.   1 root root   9 Dec 11 02:04 lib32 -> usr/lib32
+lrwxrwxrwx.   1 root root   9 Dec 11 02:04 lib64 -> usr/lib64
+lrwxrwxrwx.   1 root root  10 Dec 11 02:04 libx32 -> usr/libx32
+drwxr-xr-x.   2 root root   6 Dec 11 02:04 media
+drwxr-xr-x.   2 root root   6 Dec 11 02:04 mnt
+drwxr-xr-x.   2 root root   6 Dec 11 02:04 opt
+dr-xr-xr-x. 277 root root   0 Dec 19 01:36 proc
+drwx------.   2 root root  37 Dec 11 02:07 root
+drwxr-xr-x.   5 root root  58 Dec 11 02:07 run
+lrwxrwxrwx.   1 root root   8 Dec 11 02:04 sbin -> usr/sbin
+drwxr-xr-x.   2 root root   6 Dec 11 02:04 srv
+dr-xr-xr-x.  13 root root   0 Dec 19 00:12 sys
+drwxrwxrwt.   2 root root   6 Dec 11 02:07 tmp
+drwxr-xr-x.  13 root root 145 Dec 11 02:04 usr
+drwxr-xr-x.  11 root root 139 Dec 11 02:07 var
+
+프로세스 실행을 확인해보면
+root@458d24e8a472:/# ps -ef
+UID          PID    PPID  C STIME TTY          TIME CMD
+root           1       0  0 01:36 pts/0    00:00:00 /bin/bash
+root          11       1  0 01:37 pts/0    00:00:00 ps -ef
+>>bash쉘 이 PID 1로 가장먼저 실행된 것을 알 수 있다.
+
+# 시나리오2 : 여기서 tree라는 명령어를 사용하고싶다.
+root@458d24e8a472:/# tree
+bash: tree: command not found
+root@458d24e8a472:/# apt-get install tree
+Reading package lists... Done
+Building dependency tree       
+Reading state information... Done
+E: Unable to locate package tree
+
+초기의 우분투이므로 확장팩이 없기에 tree 패키지에 도달할 수 없었다. 따라서 update를해줌
+root@458d24e8a472:/# apt-get update
+Fetched 29.6 MB in 1min 35s (313 kB/s)                                                                
+Reading package lists... Done
+
+이제 다시 tree를 설치한다
+root@458d24e8a472:/# apt-get install tree
+Reading package lists... Done
+Building dependency tree       
+Reading state information... Done
+The following NEW packages will be installed:
+  tree
+0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Need to get 43.0 kB of archives.
+After this operation, 115 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu focal/universe amd64 tree amd64 1.8.0-1 [43.0 kB]
+Fetched 43.0 kB in 1s (54.8 kB/s)
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package tree.
+(Reading database ... 4124 files and directories currently installed.)
+Preparing to unpack .../tree_1.8.0-1_amd64.deb ...
+Unpacking tree (1.8.0-1) ...
+Setting up tree (1.8.0-1) ...
+
+이제 tree명령어를 사용해서 프로세스를 tree형태로 볼 수 있다.
+
+# 시나리오3 : 다른탭에서컨테이너 사용을 확인해본다. 
+[user@docker1 ~]$ docker container ps
+CONTAINER ID   IMAGE          COMMAND       CREATED         STATUS         PORTS     NAMES
+458d24e8a472   ubuntu:20.04   "/bin/bash"   9 minutes ago   Up 9 minutes             ubuntu-test1
+현재 ubuntu:20.04 이미지의 컨테이너 458d24e8a472이 실행되고 있따.
+ root@458d24e8a472:/# exit 으로 컨테이너를 빠져나간다.
+[user@docker1 ~]$ 로 쉘프롬포트가 바뀌는것으로 확인 가능.
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+확인해보면 실행중인 컨테이너목록이 조회되지 않는다. 
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE                COMMAND       CREATED          STATUS                        PORTS     NAMES
+458d24e8a472   ubuntu:20.04         "/bin/bash"   11 minutes ago   Exited (130) 46 seconds ago             ubuntu-test1
+ls -a 로 확인해보면 종료되었다.
+컨테이너가 왜 종료되었나? > bash 쉘에서 exit로 프로세스가 종료되었을 때, 컨테이너도 같이 종료되기 때문이다.
+
+# 시나리오4 : 새로운 컨테이너를 실행하고, 컨테이너 종료없이 쉘을 빠져나가기
+[user@docker1 ~]$ docker container run -it --name ubuntu-test2 ubuntu:20.04 
+root@8a8f5015e5e5:/# ls
+bin   dev  home  lib32  libx32  mnt  proc  run   srv  tmp  var
+boot  etc  lib   lib64  media   opt  root  sbin  sys  usr
+이 상태에서 컨테이너를 종료하지 않고 빠져나가고자한다. 
+이를 위해서는 
+Ctrl +  p  +  q  
+를 입력하면 도커 호스트로 빠져나가진다.
+root@8a8f5015e5e5:/# [user@docker1 ~]$ 
+
+컨테이너가 어떤지 확인을 해본다.
+root@8a8f5015e5e5:/# [user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND       CREATED         STATUS         PORTS     NAMES
+8a8f5015e5e5   ubuntu:20.04   "/bin/bash"   2 minutes ago   Up 2 minutes             ubuntu-test2
+
+
+컨테이너를 종료하지 않고 컨테이너 터미널의 쉘에서 빠져나가기
+[Ctrl]+[p]+[q]
+
+Docker Container 내부에 연결하기(attach 방법)
+$ docker container attach CONTAINER
+ *참고로 컨테이너명이 8a8f5015e5e5 이면, docker container attach 8 이나 8a 처럼 들어가기만 해도 자동으로 인식해서 진입한다.
+>>attach의 역할은 컨테이너의 시작 프로세스(같이 실행된 프로세스)에 연결해주는 것이고, 작업을 할 수 있도록 하는 역을 맡는다_일반적으로 디버깅용이다.
+
+컨테이너를 백그라운드로 실행하기 (컨테이너를 실행하면 기본값은 fg포그라운드 실행이다.)
+$ docker container run -dt --name ubuntu-test3d ubuntu:20.04
+
+
+#실습 
+시나리오1 : 컨테이너를 백그라운드로 실행해본다.
+[user@docker1 ~]$ docker container run -dt --name ubuntu-test3d ubuntu:20.04
+c95ecb846494640254618f54afb4debcf2ca9492d5ab4cfa704cd32934f995ce
+여기서 확인을 해보면,
+[user@docker1 ~]$ docker container ps
+CONTAINER ID   IMAGE          COMMAND       CREATED         STATUS         PORTS     NAMES
+c95ecb846494   ubuntu:20.04   "/bin/bash"   9 seconds ago   Up 8 seconds             ubuntu-test3d
+실행된 컨테이너가 조회된다. 
+백그라운드로 실행한 컨테이너로 들어가보자
+[user@docker1 ~]$ docker container attach ubuntu-test3d 
+root@c95ecb846494:/# ls
+ls 명령어를 실행했는데 나타나질 않는다.
+전달이 잘 안되었기 때문이다. (컨테이너 시작할 때 -i명령어옵션*_위 참조 가 없었기 때문임)
+
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND       CREATED         STATUS         PORTS     NAMES
+c95ecb846494   ubuntu:20.04   "/bin/bash"   6 minutes ago   Up 6 minutes             ubuntu-test3d
+여전히 컨테이너는 실행되고있다. attach 명령어가 아닌 방법으로 다시 들어가보는 방법을 알아보도록 한다.
+
+
+Docker Container에 추가 프로세스 실행( attach 가 아닌 접속)
+$ docker container exec  [OPTION]  CONTAINER  PROCESS
+$ docker exec  [OPTION]  CONTAINER  PROCESS
+[user@docker1 ~]$ docker container exec --help
+따라서 배쉬쉘을 실행하는 명령어의 형태는 
+$ docker container exec -i -t CONTAINER /bin/bash
+$ docker exec -i -t CONTAINER /bin/bash
+
+[user@localhost ~]$ docker container attach ubuntu-test3d
+•	컨테이너 내부로 진입하여 Shell로 작업하고자 하는 경우 docker container exec 커맨드로 새로운 Shell 을 실행하여 작업하는 것을 권장함.
+(docker container attach 커맨드는 상황에 따라 작업이 진행되지 않을 수 있음.)
+
+
+#실습
+백그라운드 컨테이너에 내부진입해본다. 
+[user@docker1 ~]$ docker container exec -it ubuntu-test3d bash 
+도 가능하지만, bash가 환경변수로 잘 잡혀있지 않는경우 실행이 안되는 경우도 있다. 따라서
+[user@docker1 ~]$ docker container exec -it ubuntu-test3d /bin/bash
+로 진입.
+확인을 해보면,
+root@c95ecb846494:/# ps -ef
+UID          PID    PPID  C STIME TTY          TIME CMD
+root           1       0  0 02:00 pts/0    00:00:00 /bin/bash
+root           9       0  0 02:33 pts/1    00:00:00 bash
+root          17       0  0 02:33 pts/2    00:00:00 /bin/bash
+root          25      17  0 02:34 pts/2    00:00:00 ps -ef
+>> 셸 작업을 위해서는 attach는 그다지 권장되지 않는다. exec 명령어를 이용하도록 한다.
+필요한 작업을 다했으면, exit으로 빠져나간다.
+
+root@c95ecb846494:/# exit
+exit
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND       CREATED          STATUS          PORTS     NAMES
+c95ecb846494   ubuntu:20.04   "/bin/bash"   36 minutes ago   Up 36 minutes             ubuntu-test3d
+>>이방법은 컨테이너를 종료하지않고 추가 작업을 할 수 있는 방법이다.
+
+다시들어가서 확인해보면
+[user@docker1 ~]$ docker container exec -it ubuntu-test3d /bin/bash
+root@c95ecb846494:/# ps -ef
+UID          PID    PPID  C STIME TTY          TIME CMD
+root           1       0  0 02:00 pts/0    00:00:00 /bin/bash
+root           9       0  0 02:33 pts/1    00:00:00 bash
+root          26       0  0 02:37 pts/2    00:00:00 /bin/bash
+root          34      26  0 02:37 pts/2    00:00:00 ps -ef
+>마찬가지로 26번프로세스를 통해서 추가적인 작업을 하고 컨테이너 종료없이 빠져나갈 수 있다. 
+
+Docker 컨테이너 종료
+$ docker container stop CONTAINER
+$ docker stop CONTAINER
+
+[user@docker1 ~]$ docker container stop ubuntu-test3d
+ubuntu-test3d
+
+Docker Container 시작 (종료된 컨테이너의 시작) 
+$ docker container start CONTAINER
+$ docker start CONTAINER
+
+[user@docker1 ~]$ docker container start ubuntu-test3d
+ubuntu-test3d
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE                COMMAND       CREATED             STATUS                         PORTS     NAMES
+c95ecb846494   ubuntu:20.04         "/bin/bash"   43 minutes ago      Up 2 seconds                             ubuntu-test3d
+
+[user@docker1 ~]$ docker container start ubuntu-test2
+ubuntu-test2
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE                COMMAND       CREATED             STATUS                         PORTS     NAMES
+c95ecb846494   ubuntu:20.04         "/bin/bash"   44 minutes ago      Up About a minute                        ubuntu-test3d
+8a8f5015e5e5   ubuntu:20.04         "/bin/bash"   53 minutes ago      Up 2 seconds                             ubuntu-test2
+>>run 명령어는 create와 start 명령어가 합쳐진 명령어라고 생각하면 된다.
+start 명령어는 ‘이미 만들어져있는 컨테이너’를 시작하는 명령어이다.
+
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND       CREATED          STATUS         PORTS     NAMES
+c95ecb846494   ubuntu:20.04   "/bin/bash"   46 minutes ago   Up 3 minutes             ubuntu-test3d
+8a8f5015e5e5   ubuntu:20.04   "/bin/bash"   56 minutes ago   Up 2 minutes             ubuntu-test2
+
+Docker Container 를 삭제하는 명령어
+$ docker container rm CONTAINER
+$ docker rm CONTAINER
+[user@docker1 ~]$ docker container rm rocky9-1 
+rocky9-1
+
+[user@docker1 ~]$ docker container rm ubuntu-test0 ubuntu-test1
+ubuntu-test0
+ubuntu-test1
+
+실행중인 컨테이너를 지워보는 시도를해본다. 
+[user@docker1 ~]$ docker container rm ubuntu-test2
+Error response from daemon: You cannot remove a running container 8a8f5015e5e59fd22ea6d67c7b09c1acc2d495898dd41e43496dbee804c5ea0a. Stop the container before attempting removal or force remove
+>컨테이너는 종료된 컨테이너만 기본적으로 삭제할 수 있다. 
+
+[user@docker1 ~]$ docker container stop ubuntu-test2 
+ubuntu-test2
+[user@docker1 ~]$ docker container rm ubuntu-test2 
+ubuntu-test2
+
+남은 컨테이너를 조회를 해보면
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE          COMMAND       CREATED          STATUS          PORTS     NAMES
+c95ecb846494   ubuntu:20.04   "/bin/bash"   53 minutes ago   Up 10 minutes             ubuntu-test3d
+단 하나의 컨테이너만이 남아있는 것을 볼 수 있다. 이를 종료하고, 삭제하면 컨테이너를 다 삭제하게 되었다.
+
+[user@docker1 ~]$ docker container stop ubuntu-test3d 
+ubuntu-test3d
+[user@docker1 ~]$ docker container rm ubuntu-test3d 
+ubuntu-test3d
+
+Docker Container 로그 확인
+$ docker container logs CONTAINER
+$ docker logs CONTAINER
+
+도커 호스트에서 Docker Container로 파일 복사
+$ docker container cp SOURCE CONTAINER:/PATH
+$ docker cp SOURCE CONTAINER:/PATH
+(Docker Host의 다른 탭에서)
+[user@localhost ~]$ docker container cp host-file1.txt rocky9-1:/root/
+Successfully copied 2.05kB to rocky9-1:/root/
+
+
+Docker Container에서 Docker Host로 파일 복사
+$ docker container cp CONTAINER:/PATH/FILE DESTINATION
+$ docker cp CONTAINER:/PATH/FILE  DESTINATION
+
+(rocky9-1 Container에서)
+[root@998c12fe4b53 ~]# touch container-file1.txt
+[root@998c12fe4b53 ~]# echo "Docker Container rocky9-1 File" > container-file1.txt 
+[root@998c12fe4b53 ~]# cat container-file1.txt 
+Docker Container rocky9-1 File
+(Docker Host의 다른 탭에서)
+[user@localhost ~]$ docker container cp rocky9-1:/root/container-file1.txt .
+Successfully copied 2.05kB to /home/user/.
+[user@localhost ~]$ ls
+container-file1.txt  
+[user@localhost ~]$ cat container-file1.txt 
+Docker Container rocky9-1 File
+
+시나리오: 웹 컨테이너를 백그라운드로 실행해본다.
+[user@docker1 ~]$ docker container run -d -p 80:80 --name web-test httpd:2.4
+Unable to find image &apos;httpd:2.4&apos; locally
+2.4: Pulling from library/httpd
+1f7ce2fa46ab: Pull complete 
+aa62678efbbf: Pull complete 
+4f4fb700ef54: Pull complete 
+81e685072fd5: Pull complete 
+6610d11ccdda: Pull complete 
+abe5214606cc: Pull complete 
+Digest: sha256:bb56126969beb90ea4912aa6353be3b419b05ca89e1c12621d4457cd5c02ed16
+Status: Downloaded newer image for httpd:2.4
+e180caadc47dbae45f0a38b370711b53ec27d84705369e22298a4e1c60eeb525
+
+컨테이너목록을 조회를 해보고, curl명령어로 웹을 미리 조회해본다
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE       COMMAND              CREATED              STATUS              PORTS                               NAMES
+e180caadc47d   httpd:2.4   "httpd-foreground"   About a minute ago   Up About a minute   0.0.0.0:80->80/tcp, :::80->80/tcp   web-test
+[user@docker1 ~]$ curl http://localhost/
+<html><body><h1>It works!</h1></body></html>
+
+우리는 background모드로 컨테이너를 실행했기에 화면에서 볼수는 없다.
+따라서 로그를 살펴보아야 한다.
+[user@docker1 ~]$ docker container logs web-test 
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 172.17.0.2. Set the 'ServerName' directive globally to suppress this message
+AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 172.17.0.2. Set the 'ServerName' directive globally to suppress this message
+[Tue Dec 19 03:23:43.430986 2023] [mpm_event:notice] [pid 1:tid 140680035612544] AH00489: Apache/2.4.58 (Unix) configured -- resuming normal operations
+[Tue Dec 19 03:23:43.431161 2023] [core:notice] [pid 1:tid 140680035612544] AH00094: Command line: 'httpd -D FOREGROUND'
+172.17.0.1 - - [19/Dec/2023:03:25:03 +0000] "GET / HTTP/1.1" 200 45
+
+복사할 단순파일하나를 생성한다. 
+[user@docker1 ~]$ touch host-file1.txt
+[user@docker1 ~]$ echo "Docker host file" > host-file1.txt 
+[user@docker1 ~]$ cat host-file1.txt 
+Docker host file
+컨테이너를 하나 실행한다
+[user@docker1 ~]$ docker container run -dt --name rocky9-1 rockylinux:9
+85684aa5d8844aa5d245ffc3adb05a3b6f0466befddc0b0ae4128e12368dd20a
+
+추가작업을 위해 내부진입을 실행한다(컨테이너 다른탭에서 실행)
+[user@docker1 ~]$ docker container exec -i -t rocky9-1 /bin/bash
+[root@85684aa5d884 /]# cd
+[root@85684aa5d884 ~]# pwd
+/root
+[root@85684aa5d884 ~]# ls -l
+total 12
+-rw-------. 1 root root 2506 Nov 19 22:25 anaconda-ks.cfg
+-rw-r--r--. 1 root root  133 Nov 19 22:25 anaconda-post.log
+-rw-------. 1 root root 2067 Nov 19 22:25 original-ks.cfg
+이 루트사용자의 홈디렉터리에 아까만든 단순파일을 추가해본다.
+[user@docker1 ~]$ docker container cp host-file1.txt rocky9-1:/root/
+Successfully copied 2.05kB to rocky9-1:/root/
+
+이제 컨테이너 탭으로 다시 돌아와서확인
+[root@85684aa5d884 ~]# ls -l
+total 16
+-rw-------. 1 root root 2506 Nov 19 22:25 anaconda-ks.cfg
+-rw-r--r--. 1 root root  133 Nov 19 22:25 anaconda-post.log
+-rw-r--r--. 1 1000 1000   17 Dec 19 03:33 host-file1.txt
+-rw-------. 1 root root 2067 Nov 19 22:25 original-ks.cfg
+
+
+rocky9-1 도커 컨테이너에서 도커호스트로 파일 복사하기
+[root@85684aa5d884 ~]# touch container-file1.txt
+[root@85684aa5d884 ~]# ls -l
+total 16
+-rw-------. 1 root root 2506 Nov 19 22:25 anaconda-ks.cfg
+-rw-r--r--. 1 root root  133 Nov 19 22:25 anaconda-post.log
+-rw-r--r--. 1 root root    0 Dec 19 03:42 container-file1.txt
+-rw-r--r--. 1 1000 1000   17 Dec 19 03:33 host-file1.txt
+-rw-------. 1 root root 2067 Nov 19 22:25 original-ks.cfg
+[root@85684aa5d884 ~]# echo " docker container rocky9-1 file " > container-file1.txt 
+[root@85684aa5d884 ~]# cat container-file1.txt 
+ docker container rocky9-1 file 
+
+(다른 탭에서 확인) 
+[user@docker1 ~]$ ls
+Desktop  Documents  Downloads  host-file1.txt  Music  Pictures  Public  Templates  Videos
+여기에 container-file1.txt는 아직 존재하지 않는다.
+복사를 해본다.
+[user@docker1 ~]$ docker container cp rocky9-1:/root/container-file1.txt .
+Successfully copied 2.05kB to /home/user/.
+[user@docker1 ~]$ ls
+container-file1.txt  Documents  host-file1.txt  Pictures  Templates
+Desktop              Downloads  Music           Public    Videos
+>원래는 없었던 container-file1.txt가 복사되었다.
+
+도커 파일시스템 ( Union Mount File System)
+여러개의 레이어가 적층되면, 파일시스템으로 변화한다.
+이것을 유니온 마운트 파일시스템이라고 한다.
+ - 파일 시스템을 각 레이어로 구분하고 각 레이어를 합쳐 마치 하나의 파일시스템이 동작하는 것 처럼 보이는 파일 시스템
+ Union Mount Filesystem 구현체 
+ - AUFS
+ - Btrfs
+ - OverlayFS
+
+참조 : https://docs.docker.com/storage/storagedriver/
+
+ 
+
+Docker Container 내의 파일 변경 상태 확인
+$ docker container diff  CONTAINER
+$ docker diff  \CONTAINER
+표시방법
+ A : 추가된 파일  (ADDED)
+ C : 변경된 파일  (CHANGED)
+   D : 삭제된 파일  (DELETED)
+
+#실습
+시나리오: 컨테이너에 파일변경상태확인을 해본다.
+우선 새로 컨테이너를 생성한다.
+[user@docker1 ~]$ docker container run -it --name rocky9-2 rockylinux:9
+[root@c53ad87ec6e3 /]# mkdir /work
+[root@c53ad87ec6e3 /]# touch /work/file1
+[root@c53ad87ec6e3 /]# touch /work/file2
+
+파일을 변경해본다
+[root@c53ad87ec6e3 /]# cd /etc/
+issue.net라는 파일을 ‘변경’할 것이다.
+[root@c53ad87ec6e3 etc]# cat issue.net 
+\S
+Kernel \r on an \m
+[root@c53ad87ec6e3 etc]# echo "TEST" >> issue.net
+[root@c53ad87ec6e3 etc]# cat issue.net 
+\S
+Kernel \r on an \m
+TEST
+
+변경 두번째(변경)
+[root@c53ad87ec6e3 etc]# echo "TEST Message of Today docker" > motd
+변경 세번째(삭제)
+[root@c53ad87ec6e3 etc]# rm -rf motd.d
+변경 네번째(삭제)
+[root@c53ad87ec6e3 etc]# rm exports
+rm: remove regular empty file &apos;exports&apos;? y
+변경 다섯(삭제)
+[root@c53ad87ec6e3 etc]# rm group
+rm: remove regular file &apos;group&apos;? y
+[root@c53ad87ec6e3 etc]# rm -rf skel
+변경 여섯(추가)
+[root@c53ad87ec6e3 etc]# touch test1
+[root@c53ad87ec6e3 etc]# touch test2
+
+변경된 파일 확인하기_diff (A;추가/C;변경/D;삭제)
+이제 도커 호스트에서 새로운탭을 열어본다.
+[user@docker1 ~]$ docker container diff rocky9-2 
+C /etc
+C /etc/motd
+C /etc/issue.net
+A /etc/test2
+A /etc/test1
+D /etc/motd.d
+D /etc/exports
+D /etc/skel
+D /etc/group
+A /work
+A /work/file1
+A /work/file2
+>>추가,변경,삭제된 내용이 출력된다. 디렉터리도 ‘파일’중 하나라는 것을 유의하자.
+
+Docker Container에서 실행중인 프로세스 목록 확인
+$ docker container top CONTAINER [PS_OPTION]
+$ docker top CONTAINER [PS_OPTION]
+
+[user@docker1 ~]$ docker container top rocky9-1
+UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD
+root                14436               14410               0                   12:34               pts/0               00:00:00            /bin/bash
+root                14651               14410               0                   12:35               pts/1               00:00:00            /bin/bash
+
+Docker Container 일시 정지
+$ docker container pause CONTAINER
+$ docker pause CONTAINER
+
+Docker Container 일시 정지 해제
+$ docker container unpause CONTAINER
+$ docker unpause CONTAINER
+
+#실습
+[user@docker1 ~]$ curl http://localhost/
+<html><body><h1>It works!</h1></body></html>
+[user@docker1 ~]$ docker container pause web-test 
+web-test
+[user@docker1 ~]$ curl http://localhost/
+^C          
+[user@docker1 ~]$ docker container unpause web-test 
+web-test
+[user@docker1 ~]$ curl http://localhost/
+<html><body><h1>It works!</h1></body></html>
+>> 일시정지하고, 일시정지해제까지 잘 되는것을 볼 수 있었다.
+
+docker container 생성(create)하기
+$ docker container create [OPTION] IMAGE_REPO:TAG
+$ docker create [OPTION] IMAGE_REPO:TAG
+
+[user@docker1 ~]$ docker container create -it --name rocky9-3 rockylinux:9
+980998b49d74c86006baa765b8ccd2a45a716810514f073e7e170f9007d79268
+만들었으면 조회해보자.
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE          COMMAND              CREATED              STATUS          PORTS                               NAMES
+980998b49d74   rockylinux:9   "/bin/bash"          About a minute ago   Created                                             rocky9-3
+>>status 를 보면, 방금 생성한 컨테이너가 Created라고 표시된다. 이 컨테이너는 아직 실행되지는 않은 상태로, start 로 실행시켜주어야 한다.
+[user@docker1 ~]$ docker container start rocky9-3
+rocky9-3
+
+컨테이너 재시작 (restart CONTAINER)
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND              CREATED          STATUS          PORTS                               NAMES
+980998b49d74   rockylinux:9   "/bin/bash"          6 minutes ago    Up 2 minutes                                        rocky9-3
+스테이터스를 보면 약 2분전에 실행되었음을 알 수 있다.
+그러면 재시작을 해보자. 
+[user@docker1 ~]$ docker container restart rocky9-3
+rocky9-3
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND              CREATED          STATUS          PORTS                               NAMES
+980998b49d74   rockylinux:9   "/bin/bash"          6 minutes ago    Up 2 seconds                                        rocky9-3
+>다시 시작돼서, 약 2초전에 시작되었다고 나타난다.
+
+Docker Container Image 삭제하기 / 이미지 삭제
+$ docker image rm IMAGE_REPO:TAG
+$ docker rmi IMAGE_REPO:TAG
+유의할점은 docker rm은 단순 컨테이너 삭제에 해당하고, rmi는 컨테이너의 이미지 삭제라는것.
+Usage:  docker rm [OPTIONS] CONTAINER [CONTAINER...] 
+Usage:  docker rmi [OPTIONS] IMAGE [IMAGE...]  의 차이이다.
+
+#실습
+우선 도커이미지를 확인해본다.
+[user@docker1 ~]$ docker images
+REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
+ubuntu        20.04     f78909c2b360   5 days ago     72.8MB
+ubuntu        latest    174c8c134b2a   6 days ago     77.9MB
+rockylinux    9         b72d2d915008   2 weeks ago    176MB
+httpd         2.4       e499c02ff073   2 months ago   174MB
+hello-world   latest    d2c94e258dcb   7 months ago   13.3kB
+
+이제 삭제할 이미지를 정하고, 삭제를 해본다. 
+[user@docker1 ~]$ docker image rm hello-world:latest 
+Untagged: hello-world:latest
+Untagged: hello-world@sha256:ac69084025c660510933cca701f615283cdbb3aa0963188770b54c31c8962493
+Deleted: sha256:d2c94e258dcb3c5ac2798d32e1249e42ef01cba4841c2234249495f87264ac5a
+Deleted: sha256:ac28800ec8bb38d5c35b49d45a6ac4777544941199075dff8c4eb63e093aa81e
+>설명: Untagged: 라고 되어있는 라벨은, 태그가 붙어있는 것을 먼저 떼주는 작업이다. 그런다음, Deleted: 에서 삭제작업을 진행해서 이미지를 삭제하는 두 단계를 거치게 된다.
+
+마찬가지로 ubuntu 이미지도 지워보자
+[user@docker1 ~]$ docker rmi hello-world:latest 
+Untagged: hello-world:latest
+Untagged: hello-world@sha256:ac69084025c660510933cca701f615283cdbb3aa0963188770b54c31c8962493
+Deleted: sha256:d2c94e258dcb3c5ac2798d32e1249e42ef01cba4841c2234249495f87264ac5a
+Deleted: sha256:ac28800ec8bb38d5c35b49d45a6ac4777544941199075dff8c4eb63e093aa81e
+>동일하게 Untagged 작업과 Deleted 작업이 진행되었다.
+
+Docker Container CPU, RAM, 네트워크 사용량 확인
+$ docker container stats [OPTION] [CONTAINER]
+$ docker stats [OPTION] [CONTAINER]
+
+특정 Docker Container CPU, RAM, 네트워크 사용량 확인
+$ docker container stats CONTAINER
+$ docker stats CONTAINER
+
+모든 Docker Container CPU, RAM, 네트워크 사용량 확인
+$ docker container stats -a
+$ docker stats -a
+
+ 
+>>모든 명령어들은 Ctrl +C 전까지 계속 갱신되어 bashshell에 등장하므로 유의하자.
+
+사용량을 갱신하지않고 한번만 보고싶을때는 (한 시점만 보기)
+[user@docker1 ~]$ docker container stats --no-stream
+노 스트림 옵션을 사용해주면 된다.
+
+**컨테이너의 이름을 바꾸고 싶을때. (RENAME)
+Usage:  docker container rename CONTAINER NEW_NAME
+
+
