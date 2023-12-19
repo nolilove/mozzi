@@ -1,0 +1,226 @@
+231219 docker container/ images 실습
+
+도커이미지를 조회한다
+[user@docker1 ~]$ docker image ls
+REPOSITORY   TAG       IMAGE ID       CREATED        SIZE
+ubuntu       latest    174c8c134b2a   6 days ago     77.9MB
+rockylinux   9         b72d2d915008   2 weeks ago    176MB
+httpd        2.4       e499c02ff073   2 months ago   174MB
+
+도커 컨테이너도 조회해본다
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND              CREATED          STATUS          PORTS                               NAMES
+980998b49d74   rockylinux:9   "/bin/bash"          50 minutes ago   Up 43 minutes                                       rocky9-3
+85684aa5d884   rockylinux:9   "/bin/bash"          4 hours ago      Up 4 hours                                          rocky9-1
+e180caadc47d   httpd:2.4      "httpd-foreground"   4 hours ago      Up 4 hours      0.0.0.0:80->80/tcp, :::80->80/tcp   web-test
+
+rocky9-1이 마음에 안드니 rename한다
+[user@docker1 ~]$ docker container rename rocky9-1 mozzi-docker1
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND              CREATED          STATUS          PORTS                               NAMES
+980998b49d74   rockylinux:9   "/bin/bash"          51 minutes ago   Up 44 minutes                                       rocky9-3
+85684aa5d884   rockylinux:9   "/bin/bash"          4 hours ago      Up 4 hours                                          mozzi-docker1
+e180caadc47d   httpd:2.4      "httpd-foreground"   4 hours ago      Up 4 hours      0.0.0.0:80->80/tcp, :::80->80/tcp   web-test
+
+컨테이너 실행(run)하고 나오기
+[user@docker1 ~]$ docker container run -i -t --name mozzi-docker2 rockylinux:9
+[root@493c2f1a4ed0 /]# ^C
+[root@493c2f1a4ed0 /]# [user@docker1 ~]$ 
+
+attach로 컨테이너에 재접속하기
+[user@docker1 ~]$ docker container attach mozzi-docker2
+[root@493c2f1a4ed0 /]# 
+
+attach가 아닌 exec으로 접속하기
+[user@docker1 ~]$ docker container exec -it mozzi-docker2 /bin/bash
+[root@493c2f1a4ed0 /]# 
+
+컨테이너> 도커호스트로 파일 전송하기
+(컨테이너에서)
+[root@493c2f1a4ed0 /]# touch mozzifile1.txt
+[root@493c2f1a4ed0 /]# echo "powerfull max-level rabbit is attacked you!" >> mozzifile1.txt 
+[root@493c2f1a4ed0 /]# cat mozzifile1.txt 
+powerfull max-level rabbit is attacked you!
+[root@493c2f1a4ed0 /]# ls
+afs  dev  home	lib64	    media  mozzifile1.txt  proc  run   srv  tmp  var
+bin  etc  lib	lost+found  mnt    opt		   root  sbin  sys  usr
+
+(도커호스트에서 실행)
+[user@docker1 ~]$ docker container cp mozzi-docker2:/mozzifile1.txt .
+Successfully copied 2.05kB to /home/user/.
+
+도커호스트> 컨테이너로 파일 전송하기
+(도커호스트에서)
+[user@docker1 ~]$ touch mozzifile2.txt
+[user@docker1 ~]$ echo " You defeated the rabbit! " >> mozzifile2.txt
+[user@docker1 ~]$ cat mozzifile2.txt
+ You defeated the rabbit! 
+[user@docker1 ~]$ docker container cp mozzifile2.txt mozzi-docker2:/
+Successfully copied 2.05kB to mozzi-docker2:/
+
+(컨테이너에서)
+[root@493c2f1a4ed0 /]# ls
+afs  dev  home	lib64	    media  mozzifile1.txt  opt	 root  sbin  sys  usr
+bin  etc  lib	lost+found  mnt    mozzifile2.txt  proc  run   srv   tmp  var
+
+프로세스 확인하기 
+[user@docker1 ~]$ docker container top mozzi-docker2
+UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD
+root                19588               19565               0                   16:18               pts/0               00:00:00            /bin/bash
+root                19866               19565               0                   16:23               pts/1               00:00:00            /bin/bash
+
+파일 변경하고 변경점 확인
+[root@493c2f1a4ed0 /]# cd /etc/
+[root@493c2f1a4ed0 etc]# ls
+[root@493c2f1a4ed0 etc]# cat machine-id
+[root@493c2f1a4ed0 etc]# echo "broken window" >> machine-id 
+[root@493c2f1a4ed0 etc]# rm issue
+rm: remove regular file &apos;issue&apos;? y
+[root@493c2f1a4ed0 etc]# touch watermelon_server . 
+[root@493c2f1a4ed0 etc]# echo "finally!" >> watermelon_server 
+
+[user@docker1 ~]$ docker container diff mozzi-docker2
+A /mozzifile1.txt
+A /mozzifile2.txt
+C /etc
+A /etc/watermelon_server
+C /etc/machine-id
+D /etc/issue
+
+도커 컨테이너 생성 및 실행
+[user@docker1 ~]$ docker container start mozzi-docker3 ubuntu:20.04
+Error response from daemon: No such container: mozzi-docker3
+Error response from daemon: No such container: ubuntu:20.04
+Error: failed to start containers: mozzi-docker3, ubuntu:20.04
+우선 도커를 생성해야한다.
+
+[user@docker1 ~]$ docker container create mozzi-docker3 ubuntu:latest
+Unable to find image &apos;mozzi-docker3:latest&apos; locally
+Error response from daemon: pull access denied for mozzi-docker3, repository does not exist or may require &apos;docker login&apos;: denied: requested access to the resource is denied
+이래도안됨
+
+그렇다면 호스트에 이미지를받자
+[user@docker1 ~]$ docker image pull ubuntu:20.04
+20.04: Pulling from library/ubuntu
+527f5363b98e: Pull complete 
+Digest: sha256:f2034e7195f61334e6caff6ecf2e965f92d11e888309065da85ff50c617732b8
+Status: Downloaded newer image for ubuntu:20.04
+docker.io/library/ubuntu:20.04
+
+>>명령어를 넣지않아서 실행이 안된거였음
+[user@docker1 ~]$ docker container create -it --name mozzi-docker3 ubuntu:20.04
+a7cf371e75facb4fa24392f6d98e961c8399a193daacb99624e17eefb55c493a
+조회
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE          COMMAND              CREATED             STATUS                        PORTS                               NAMES
+a7cf371e75fa   ubuntu:20.04   "/bin/bash"          19 seconds ago      Created                                                           mozzi-docker3
+
+실행
+[user@docker1 ~]$ docker container start mozzi-docker3
+mozzi-docker3
+접속
+[user@docker1 ~]$ docker container exec -it mozzi-docker2 bash
+[root@493c2f1a4ed0 /]# 
+
+
+서비스 일시정지/재개
+[user@docker1 ~]$ curl http://localhost/
+<html><body><h1>It works!</h1></body></html>
+[user@docker1 ~]$ docker container pause web-test 
+web-test
+[user@docker1 ~]$ curl http://localhost/
+^C
+[user@docker1 ~]$ docker container unpause web-test 
+web-test
+
+웹 컨테이너 실행하기
+[user@docker1 ~]$ docker container run -d -p 80:80 --name web-mozzi httpd:latest
+Unable to find image &apos;httpd:latest&apos; locally
+latest: Pulling from library/httpd
+Digest: sha256:bb56126969beb90ea4912aa6353be3b419b05ca89e1c12621d4457cd5c02ed16
+Status: Downloaded newer image for httpd:latest
+b7b963d8914463ae9bb35569f1c355f9afaef9d8e28814708f759cefeda3fdd4
+docker: Error response from daemon: driver failed programming external connectivity on endpoint web-mozzi (bccaf6a64de60773674a41447621a28ba9f7e73ec27396ee8601c410ad40d7aa): Bind for 0.0.0.0:80 failed: port is already allocated.
+이미 포트가 할당되어있다고 뜬다. 
+삭제
+[user@docker1 ~]$ docker container rm web-mozzi 
+web-mozzi
+
+다시 올바른포트로 생성
+[user@docker1 ~]$ docker container run -d -p 8080:8080 --name web-mozzi2 httpd:2.4
+3adc14f8b76a6a217a691a888ec2f5254f17da7a71e5698755bdbdadf086d0ac
+
+궁금점(포트매핑): 앞포트 8080과 뒷포트 8080 //
+앞포트: 호스트머신의 포트,즉 호스트의 8080포트로 들어오는 요청이 컨테이너로 전달
+뒷포트: 컨테이너 내부의 포트, 즉 컨테이너 내부에서 동작하는 웹 서버가 8080포트에서 수신하는것을 의미함
+ 
+
+컨테이너(웹) 사용량 등등 확인하기
+[user@docker1 ~]$ docker container stats web-mozzi2
+CONTAINER ID   NAME         CPU %     MEM USAGE / LIMIT     MEM %     NET I/O      BLOCK I/O        PIDS
+3adc14f8b76a   web-mozzi2   0.01%     14.13MiB / 1.723GiB   0.80%     2.1kB / 0B   6.11MB / 4.1kB   82
+
+백그라운드로 컨테이너 실행
+[user@docker1 ~]$ docker container run -dt --name mozzi-docker4 rockylinux:9
+068993e3c36d2b80a9887e0e80d13543b932645300506d656d4d6e769c40d135
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND              CREATED          STATUS          PORTS                                               NAMES
+068993e3c36d   rockylinux:9   "/bin/bash"          9 seconds ago    Up 9 seconds                                                        mozzi-docker4
+>바로 배쉬쉘로 들어가지 않은 모습.
+
+[user@docker1 ~]$ docker container run -it --name mozzi-docker5 rockylinux:9
+[root@228b6143d9e3 /]# 
+와 비교하면 차이 있음
+
+접속(-t만 사용)
+[user@docker1 ~]$ docker container exec -t mozzi-docker4 /bin/bash
+[root@068993e3c36d /]# 
+
+^C
+>명령이 전송되지 않는이유는 -i 옵션을 지정하지 않았기 때문
+다시 접속(-it)
+[user@docker1 ~]$ docker container exec -it mozzi-docker4 /bin/bash
+[root@068993e3c36d /]# 
+[root@068993e3c36d /]# 
+[root@068993e3c36d /]# 
+>전송이 잘 됨.
+
+실습한 도커 컨테이너 삭제하기
+[user@docker1 ~]$ docker container stop mozzi-docker1
+mozzi-docker1
+[user@docker1 ~]$ docker container stop mozzi-docker2
+mozzi-docker2
+[user@docker1 ~]$ docker container stop web-mozzi2 mozzi-docker3 mozzi-docker4
+web-mozzi2
+mozzi-docker3
+mozzi-docker4
+
+일괄삭제
+[user@docker1 ~]$ docker container rm mozzi-docker{1..4}
+mozzi-docker1
+mozzi-docker2
+mozzi-docker3
+mozzi-docker4
+[user@docker1 ~]$ docker container rm web-mozzi2 
+web-mozzi2
+
+실습도커 이미지삭제
+[user@docker1 ~]$ docker images
+REPOSITORY   TAG       IMAGE ID       CREATED        SIZE
+ubuntu       20.04     f78909c2b360   5 days ago     72.8MB
+ubuntu       latest    174c8c134b2a   6 days ago     77.9MB
+rockylinux   9         b72d2d915008   2 weeks ago    176MB
+httpd        2.4       e499c02ff073   2 months ago   174MB
+httpd        latest    e499c02ff073   2 months ago   174MB
+
+[user@docker1 ~]$ docker rmi ubuntu:latest 
+Untagged: ubuntu:latest
+Untagged: ubuntu@sha256:6042500cf4b44023ea1894effe7890666b0c5c7871ed83a97c36c76ae560bb9b
+Deleted: sha256:174c8c134b2a94b5bb0b37d9a2b6ba0663d82d23ebf62bd51f74a2fd457333da
+Deleted: sha256:a1360aae5271bbbf575b4057cb4158dbdfbcae76698189b55fb1039bc0207400
+[user@docker1 ~]$ docker rmi httpd:latest
+Untagged: httpd:latest
+
+실습 복기끝!
+
+
