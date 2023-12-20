@@ -1,0 +1,1139 @@
+18주차 수요일 메모( Docker 3_ 도커 네트워크 )
+
+1. 도커 개요
+2. 도커 기본 명령어   ( CPU&MEM에 부하테스트 )
+3. 도커 네트워크
+4. 도커 볼륨
+5. 도커 이미지 관리
+6. 도커 Private Registry
+
+*컨테이너 한번에 삭제하기: 
+[user@docker1 ~]$ docker container ls -a 로 확인하면 무쟈게많은 컨테이너가 있을것이다.
+docker container ls -a -q를 해보면 ID만이 출력된다.
+[user@docker1 ~]$ docker container stop $(docker container ls -a -q) 
+[user@docker1 ~]$ docker container rm $(docker container ls -a -q)
+
+
+어제 실습한 컨테이너를 삭제해보자
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE          COMMAND              CREATED        STATUS                      PORTS     NAMES
+228b6143d9e3   rockylinux:9   "/bin/bash"          16 hours ago   Exited (0) 16 hours ago               mozzi-docker5
+980998b49d74   rockylinux:9   "/bin/bash"          18 hours ago   Exited (0) 16 hours ago               rocky9-3
+c53ad87ec6e3   rockylinux:9   "/bin/bash"          19 hours ago   Exited (129) 17 hours ago             rocky9-2
+e180caadc47d   httpd:2.4      "httpd-foreground"   21 hours ago   Exited (0) 16 hours ago               web-test
+[user@docker1 ~]$ docker container rm mozzi-docker5 rocky9-{2,3} web-test
+mozzi-docker5
+rocky9-2
+rocky9-3
+web-test
+
+이미지도 삭제해보자 
+[user@docker1 ~]$ docker images
+REPOSITORY   TAG       IMAGE ID       CREATED        SIZE
+ubuntu       20.04     f78909c2b360   6 days ago     72.8MB
+rockylinux   9         b72d2d915008   2 weeks ago    176MB
+httpd        2.4       e499c02ff073   2 months ago   174MB
+[user@docker1 ~]$ docker rmi f78
+Untagged: ubuntu:20.04
+Untagged: ubuntu@sha256:f2034e7195f61334e6caff6ecf2e965f92d11e888309065da85ff50c617732b8
+Deleted: sha256:f78909c2b360d866b3220655c0b079838258b8891a12ac25fc670f0cbb54229f
+Deleted: sha256:3a03f09d212915b240e9d216069aba5652ed4765c7e4b098c65e71860d47b8e1
+[user@docker1 ~]$ docker rmi b
+Untagged: rockylinux:9
+Untagged: rockylinux@sha256:c944604c0c759f5d164ffbdf0bbab2fac582b739938937403c067ab634a0518a
+Deleted: sha256:b72d2d915008c02a15dce4b06cbbfe5bd9daa4d410c25234da75e5cc9ce73be7
+Deleted: sha256:c4bc4a1387e82c199a05c950a61d31aba8e1481a94c63196b82e25ac8367e5d1
+[user@docker1 ~]$ docker rmi e
+Untagged: httpd:2.4
+Untagged: httpd@sha256:bb56126969beb90ea4912aa6353be3b419b05ca89e1c12621d4457cd5c02ed16
+Deleted: sha256:e499c02ff073eab9c792e71c456c07489a4bf4ee86c6db754bbd16304858d064
+Deleted: sha256:002e2637616a08af4f925d289e7ea5ab80e9f6416d452c7e27dc87d06915d636
+Deleted: sha256:4dc70846b7a356199468e1b0316798cd02340b880a662efe3bfc370e823af10b
+Deleted: sha256:073e52a8f3caa5c3d3b52487d625ad93a7bb7fcaecee693fb763e24fbaa14dd6
+Deleted: sha256:7f19bb5ba637cfe67d252f5427e39254fbc1ac796358d424db266f2d0dedfde8
+Deleted: sha256:3a4167d661de957fb8e71d8ef73d0df2e615f00b772862a3a990384481f47c7e
+Deleted: sha256:92770f546e065c4942829b1f0d7d1f02c2eb1e6acf0d1bc08ef0bf6be4972839
+>> repository 이름으로 삭제해도, image id로 삭제해도 된다.
+
+깔끔하게 정리되었다.
+[user@docker1 ~]$ docker images -a
+REPOSITORY   TAG       IMAGE ID   CREATED   SIZE
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+
+
+# 이미지 Pull하기 
+CentOS 7버전을 받으려고 한다. docker image pull을 실행하자
+[user@docker1 ~]$ docker image pull centos:7
+7: Pulling from library/centos
+2d473b07cdd5: Pull complete 
+Digest: sha256:be65f488b7764ad3638f236b7b515b3678369a5124c47b8d32916d6487418ea4
+Status: Downloaded newer image for centos:7
+docker.io/library/centos:7
+
+이제 컨테이너를 실행한다
+[user@docker1 ~]$ docker container run -it --name centos7-1 centos:7
+[root@7584f69db9fd /]#
+[root@7584f69db9fd /]# exit   
+exit
+[user@docker1 ~]$ docker container start centos7-1 
+centos7-1
+>>프롬포트가 안나왔다는건 , 백그라운드로 실행되었다는 뜻이다. 
+확인해보자. 
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE      COMMAND       CREATED         STATUS          PORTS     NAMES
+7584f69db9fd   centos:7   "/bin/bash"   5 minutes ago   Up 43 seconds             centos7-1
+
+attach로 접속해보자
+[user@docker1 ~]$ docker container attach centos7-1 
+[root@7584f69db9fd /]# pwd
+/
+[root@7584f69db9fd /]# ls
+anaconda-post.log  dev  home  lib64  mnt  proc  run   srv  tmp  var
+bin                etc  lib   media  opt  root  sbin  sys  usr
+
+Ctrl p q로 컨테이너 종료 없이 나오자.
+이 컨테이너를 종료시켜본다.
+[root@7584f69db9fd /]# read escape sequence
+[user@docker1 ~]$ docker stop 75
+75
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE      COMMAND       CREATED         STATUS                        PORTS     NAMES
+7584f69db9fd   centos:7   "/bin/bash"   9 minutes ago   Exited (137) 11 seconds ago             centos7-1
+>>정상적으로 종료되었다. stop의 옵션을 한번 보자. 
+Options:
+  -s, --signal string   Signal to send to the container
+  -t, --time int        Seconds to wait before killing the container
+ >> 별도로 지정이 없다면 10초 후가 default, 따로 시간을 지정해주면 컨테이너가 그 시간이후 종료된다.
+
+다시 컨테이너를 실행시키고, 다른 컨테이너를 생성한다. 단 이때 run이 아닌 다른 명령어를 사용.
+[user@docker1 ~]$ docker container start centos7-1 
+centos7-1
+[user@docker1 ~]$ docker container create -i -t --name centos7-2 centos:7
+668e8781eaa1f8c92fe83b074ad4b4b1c8134be1dbd4ae77a823c5444e06cf93
+create로 생성된 컨테이너를 실행시키기로 한다. 
+[user@docker1 ~]$ docker ps
+CONTAINER ID   IMAGE      COMMAND       CREATED          STATUS         PORTS     NAMES
+7584f69db9fd   centos:7   "/bin/bash"   15 minutes ago   Up 2 minutes             centos7-1
+[user@docker1 ~]$ docker ps -a
+CONTAINER ID   IMAGE      COMMAND       CREATED          STATUS         PORTS     NAMES
+668e8781eaa1   centos:7   "/bin/bash"   46 seconds ago   Created                  centos7-2
+7584f69db9fd   centos:7   "/bin/bash"   15 minutes ago   Up 2 minutes             centos7-1
+생성만되고 실행되지 않은 컨테이너2가 있다. 
+실행시켜보자.
+[user@docker1 ~]$ docker container start 66
+66
+[user@docker1 ~]$ docker ps
+CONTAINER ID   IMAGE      COMMAND       CREATED          STATUS         PORTS     NAMES
+668e8781eaa1   centos:7   "/bin/bash"   3 minutes ago    Up 4 seconds             centos7-2
+7584f69db9fd   centos:7   "/bin/bash"   17 minutes ago   Up 4 minutes             centos7-1
+접속해보자.   ( start  -a 옵션은 attach 옵션을 사용하는것임)
+[user@docker1 ~]$ docker container start -a -i 66
+[root@668e8781eaa1 /]# 
+다시 나와본다.
+
+exec으로 들어가본다. (내부 추가접속)
+[user@docker1 ~]$ docker container exec -it centos7-2 /bin/bash
+이렇게 들어간 작업에서는 exit로 나와도 컨테이너가 종료되지 않는다는 것을 유의.
+[user@docker1 ~]$ docker ps
+CONTAINER ID   IMAGE      COMMAND       CREATED          STATUS          PORTS     NAMES
+668e8781eaa1   centos:7   "/bin/bash"   12 minutes ago   Up 6 minutes              centos7-2
+7584f69db9fd   centos:7   "/bin/bash"   27 minutes ago   Up 13 minutes             centos7-1
+
+
+Docker container 의 상세정보 확인하기
+$ docker container inspect  CONTAINER
+
+[user@docker1 ~]$ docker container inspect centos7-2
+[
+    {
+        "Id": "668e8781eaa1f8c92fe83b074ad4b4b1c8134be1dbd4ae77a823c5444e06cf93",
+        "Created": "2023-12-20T00:40:11.227005318Z",
+        "Path": "/bin/bash",
+        "Args": [],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 5354,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2023-12-20T00:46:00.257434487Z",
+            "FinishedAt": "2023-12-20T00:44:56.073785915Z"
+        },
+>여기에 다 담지 못했으나 컨테이너의 정보가 담겨있다.
+
+컨테이너 활용하기
+$ docker container run -e VARIABLE1=VALUE1 -e VARIABLE2=VALUE2  --name CONTAINER IMAGE_REPO:TAG
+쉘 환경변수를 원하는만큼 지정해서 사용가능하다.
+-e 옵션을 사용해서 ‘전달’ 할 수 있다.
+
+#실습
+[user@docker1 ~]$ docker container run -dt -e VAR1=test1234 --name rocky9-1 rockylinux:9 
+Unable to find image &apos;rockylinux:9&apos; locally
+9: Pulling from library/rockylinux
+489e1be6ce56: Pull complete 
+Digest: sha256:c944604c0c759f5d164ffbdf0bbab2fac582b739938937403c067ab634a0518a
+Status: Downloaded newer image for rockylinux:9
+836227baf167ab108c5f03d07f0f67e2e4510cc7fea7abf2ed07fd19e2604cb8
+
+목록을 조회한다
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND       CREATED             STATUS          PORTS     NAMES
+836227baf167   rockylinux:9   "/bin/bash"   30 seconds ago      Up 28 seconds             rocky9-1
+668e8781eaa1   centos:7       "/bin/bash"   47 minutes ago      Up 41 minutes             centos7-2
+7584f69db9fd   centos:7       "/bin/bash"   About an hour ago   Up 48 minutes             centos7-1
+
+쉘에 exec으로 접속해본다.
+[user@docker1 ~]$ docker container exec -it rocky9-1 /bin/bash
+[root@836227baf167 /]# echo $VAR1
+test1234
+환경변수값을 호출하는것을 $를 붙이고 환경변수를 적으면 된다.
+
+이것은 env 를 입력해서 확인할 수 있다(환경변수 조회)
+[root@836227baf167 /]# env
+HOSTNAME=836227baf167
+PWD=/
+HOME=/root
+LANG=C.UTF-8
+TERM=xterm
+LESSOPEN=||/usr/bin/lesspipe.sh %s
+SHLVL=1
+VAR1=test1234
+DEBUGINFOD_URLS=https://debuginfod.centos.org/ 
+PATH=/root/.local/bin:/root/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+_=/usr/bin/env
+
+도커허브로가서 탐색해본다.
+ 
+mysql 이미지를 확인해보자.
+Tags 탭으로 이동하면 많은 태그들이 등장하는데 우리는 latest tag를 사용해본다.
+컨테이너에서 ctrl을 누른채로 p , q를 번갈아 눌러 나와주자.
+
+[root@836227baf167 /]# read escape sequence
+mysql을 pull하고 실행시켜주자
+[user@docker1 ~]$ docker container run -d --name mysql mysql
+Unable to find image &apos;mysql:latest&apos; locally
+latest: Pulling from library/mysql
+e9f2695d7e5b: Pull complete 
+51a05c734012: Pull complete 
+2332296fb21b: Pull complete 
+a7f1d508f977: Pull complete 
+c20d302a7e41: Pull complete 
+fc5e4ef7630a: Pull complete 
+5bfdb6442486: Pull complete 
+44e64c297aa6: Pull complete 
+2704e3b13aeb: Pull complete 
+2427709f5f35: Pull complete 
+Digest: sha256:b359741e9fb794c4b6e39ea5d14047609c8ed1efcb03ababe61a239b48a165a9
+Status: Downloaded newer image for mysql:latest
+7dd9b96ac735c99862b12b3b58f3bf53bcd071506b17d52eebe2379807fff59f
+
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND       CREATED             STATUS          PORTS     NAMES
+836227baf167   rockylinux:9   "/bin/bash"   9 minutes ago       Up 9 minutes              rocky9-1
+668e8781eaa1   centos:7       "/bin/bash"   56 minutes ago      Up 50 minutes             centos7-2
+7584f69db9fd   centos:7       "/bin/bash"   About an hour ago   Up 57 minutes             centos7-1
+헌데 조회를 해보니, mysql이 실행되지 않았다. 
+
+컨테이너가 종료된채로 남아있다.
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE          COMMAND                  CREATED              STATUS                          PORTS     NAMES
+7dd9b96ac735   mysql          "docker-entrypoint.s…"   About a minute ago   Exited (1) About a minute ago             mysql
+836227baf167   rockylinux:9   "/bin/bash"              9 minutes ago        Up 9 minutes                              rocky9-1
+668e8781eaa1   centos:7       "/bin/bash"              56 minutes ago       Up 51 minutes                             centos7-2
+7584f69db9fd   centos:7       "/bin/bash"              About an hour ago    Up 58 minutes                             centos7-1
+
+mysql 이미지 레포지토리에서 overview를 살펴보자.( https://hub.docker.com/_/mysql )
+MYSQL_ROOT_PASSWORD 가 필요하댄다.
+ 
+우선 방금전 컨테이너는 사용할 수 없으므로 지워주자
+[user@docker1 ~]$ docker container rm mysql
+mysql
+다시 필요한 조건을 갖춰서 생성한다
+$ docker container run -d -e MYSQL_ROOT_PASSWORD=test1234 --name mysql mysql:latest
+3399bed4b30a1c9e352daa7761f87d108c51be51cee6f0a674aadef4de73ca9e
+실행하고, mysql에 접근해본다(꼭 대문자로 해줘야함. 규칙이다.)
+
+[user@docker1 ~]$ docker container exec -it mysql /bin/bash
+bash-4.4# mysql
+ERROR 1045 (28000): Access denied for user &apos;root&apos;@&apos;localhost&apos; (using password: NO)
+bash-4.4# mysql -h localhost -u root -p
+Enter password: 
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 9
+Server version: 8.2.0 MySQL Community Server - GPL
+
+Copyright (c) 2000, 2023, Oracle and/or its affiliates.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type &apos;help;&apos; or &apos;\h&apos; for help. Type &apos;\c&apos; to clear the current input statement.
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+4 rows in set (0.01 sec)
+
+mysql> exit
+Bye
+bash-4.4# exit
+exit
+>>리소스가 한쪽으로 지나치게 몰리지 않게 하는 방법들 
+
+CPU 개수(Core 개수) 성능을 제한하여 컨테이너 실행 & 부하 확인
+$ docker container run --cpus CPUS  --name CONTAINER IMAGE_REPO:TAG 
+$ docker container run -it --cpus 0.3 --name rocky9-2 rockylinux:9
+
+컨테이너를 실행해보자
+[user@docker1 ~]$ docker container run -it --cpus 0.3 --name rocky9-2 rockylinux:9
+(도커 호스트의 다른 탭에서) 
+[user@docker1 ~]$ docker container stats rocky9-2
+CONTAINER ID   NAME        CPU %     MEM USAGE / LIMIT     MEM %     NET I/O       BLOCK I/O         PIDS
+adf4a787cc2b   rocky9-2    0.00%     3.211MiB / 1.723GiB   0.18%     2.24kB / 0B   7.54MB / 12.3kB   1
+어떤 작업을 하지 않았기때문에 아직은 타 컨테이너와 별 차이가 나지 않는다.
+
+부하 작업을 해본다
+다시 컨테이너로 와서
+[root@adf4a787cc2b /]# sha256sum /dev/zero& 입력
+[user@docker1 ~]$ docker container stats rocky9-2
+ 
+CONTAINER ID   NAME       CPU %     MEM USAGE / LIMIT     MEM %     NET I/O       BLOCK I/O      PIDS
+adf4a787cc2b   rocky9-2   42.22%    3.688MiB / 1.723GiB   0.21%     2.38kB / 0B   8MB / 12.3kB   2
+계속해서 유동적으로 cpu사용량이 나타난다.
+
+
+rocky9-1 다른 컨테이너로 접속해서 부하를 줘서 비교해보자.
+[root@836227baf167 /]# sha256sum /dev/zero&
+[1] 54
+[user@docker1 ~]$ docker container stats rocky9-1
+ 
+>>부하가 거의 5배가까이 차이나는것을 확인할 수 있다.
+
+최대 메모리 사용량을 제한하여 컨테이너 실행 // 부하주기
+$ docker container run -m MAX_MEM  --name CONTAINER  IMAGE_REPO:TAG
+$ docker container run -it -m 256m  --name rocky9-3 rockylinux:9
+
+메모리제한을 300mb로 주고, 실행해본다
+[user@docker1 ~]$ docker container run -it -m 300m  --name rocky9-3 rockylinux:9
+[root@22ab4ed2984f /]# 
+
+(다른탭에서 확인)
+[user@docker1 ~]$ docker container stats --no-stream rocky9-3
+CONTAINER ID   NAME       CPU %     MEM USAGE / LIMIT   MEM %     NET I/O       BLOCK I/O      PIDS
+22ab4ed2984f   rocky9-3   0.00%     3.672MiB / 300MiB   1.22%     2.24kB / 0B   6MB / 12.3kB   1
+>>확인해보면 설정한대로 300MiB 로 메모리가 제한된 채로 실행되고 있음을 알 수 있다.
+
+다른 컨테이너들과 비교를해보면 확연히 차이난다.
+[user@docker1 ~]$ docker container stats --no-stream 
+CONTAINER ID   NAME        CPU %     MEM USAGE / LIMIT     MEM %     NET I/O       BLOCK I/O         PIDS
+22ab4ed2984f   rocky9-3    0.00%     3.672MiB / 300MiB     1.22%     2.24kB / 0B   6MB / 12.3kB      1
+3399bed4b30a   mysql       0.50%     394.9MiB / 1.723GiB   22.39%    2.59kB / 0B   125MB / 562MB     38
+836227baf167   rocky9-1    323.66%   3.777MiB / 1.723GiB   0.21%     2.59kB / 0B   8MB / 12.3kB      3
+668e8781eaa1   centos7-2   0.00%     1.195MiB / 1.723GiB   0.07%     2.66kB / 0B   7.17MB / 12.3kB   1
+7584f69db9fd   centos7-1   0.00%     820KiB / 1.723GiB     0.05%     2.92kB / 0B   287kB / 0B        1
+>각 1.723gb씩 최대로 먹지만 rocky9-3의 경우 300mb만 줬기 때문에 저렇게 출력됨.
+
+* stats에서 나오는 용량 정리
+KiB MiB GiB
+1.	KiB (Kibibyte):
+•	1 KiB는 1024 바이트를 나타냅니다.
+•	1 KiB = 1024 bytes
+2.	MiB (Mebibyte):
+•	1 MiB는 1024 KiB를 나타냅니다.
+•	1 MiB = 1024 KiB = 1024 * 1024 bytes
+3.	GiB (Gibibyte):
+•	1 GiB는 1024 MiB를 나타냅니다.
+•	1 GiB = 1024 MiB = 1024 * 1024 KiB = 1024 * 1024 * 1024 bytes
+
+
+도커 네트워크
+도커 네트워크 유형
+ - Bridge Network
+ - Host Network
+ - Null Network
+ - MAC VLAN Network
+
+Bridge Network
+ - Docker Host 내부에 구성되는 네트워크로 호스트의 인터페이스를 사용하여 외부 네트워크와 연결될 수 있는 네트워크
+ - Docker Host의 기본 브리지 네트워크 인터페이스 :  docker0
+ - Docker Container의 기본 브리지 인터페이스 : vethXXX
+ 
+그림에 있는 라우터표기는 > 라우팅정보가 있어야 한다는 것을 의미한다. 
+따로 라우팅정보를 설정해주거나 할필요는 없다. 브릿지 네트워크를 만들었다면 자동으로 정보가 생성된다.
+<요약>
+기본적인 구조로는 eth0 를 가지고있는 컨테이너에서
+veth라는 인터페이스에 연결이 되고,
+이 인터페이스는 docker0에 연결된다.
+도커제로는 내부 네트워크를 구성하게 된다. 따라서 도커내 여러 컨테이너와의 통신이 가능하다.
+외부네트워크에 접속하기위해서는, 인터페이스에 연결됨으로써 간접적으로 외부의 물리적 네트워크에 연결되어 사용할 수 있는 상태가 된다.
+
+ Host Network
+  - Docker Host의 네트워크를 직접 공유하는 네트워크
+  - Docker Host 주소를 사용하여 Docker에서 사용중인 포트로 접근할 수 있음
+Null Network (none)
+  - 네트워크가 필요하지 않은 도커 컨테이너에서 사용하는 네트워크 유형으로 외부와 단절됨
+MAC VLAN Network
+  - 호스트 네트워크 인터페이스와 같은 네트워크에 연결하는 네트워크 유형
+
+docker network --help를 확인해보자. 
+[user@docker1 ~]$ docker network --help
+Usage:  docker network COMMAND
+Manage networks
+Commands:
+  connect     Connect a container to a network
+  create      Create a network
+  disconnect  Disconnect a container from a network
+  inspect     Display detailed information on one or more networks
+  ls          List networks
+  prune       Remove all unused networks
+  rm          Remove one or more networks
+Run &apos;docker network COMMAND --help&apos; for more information on a command.
+>대충 이런 명령어들이 있다.
+
+도커 네트워크 목록 확인하기
+[user@docker1 ~]$ docker network ls
+>네트워크고유번호 / 네트워크이름 / 네트워크 종류 / 네트워크의 범위 를 각각 나타낸다.
+NETWORK ID     NAME      DRIVER    SCOPE
+1787cf1abc01   bridge    bridge    local
+9ba8e179ff40   host      host      local
+9beab07f55d4   none      null      local
+
+bridge는 브릿지 타입의 네트워크
+host는 host타입의 네트워크이고
+none이름의 네트워크는 null타입의 네트워크이다.
+>도커를 설치했을 때, 기본적으로 존재하는 네트워크들이다. 
+
+Docker Network 상세 정보확인
+$ docker network inspect NETWORK명
+브릿지타입 네트워크를 확인해보자
+[user@docker1 ~]$ docker network inspect bridge
+[
+    {
+        "Name": "bridge",
+        "Id": "1787cf1abc019a1f66edf4d163b863025a108cdf4922479047a4faf0419b0a01",
+        "Created": "2023-12-20T09:14:29.257418887+09:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.17.0.0/16",
+                    "Gateway": "172.17.0.1"
+>특히나 IPAM에서는 어떤 아이피대역을사용하는지, 외부네트워크로 나가기위한 게이트웨이 주소는 어떤지 등을 알 수 있다.
+"Containers" 항목에서는 도커에 어떤 컨테이너들이 있는지를 알려준다.
+ 
+
+네트워크를 지정하여 컨테이너 실행
+$ docker container run -d -t  --network NETWORK  --name CONTAINER IMAGE_REPO:TAG
+
+Docker Network 생성
+$ docker network create [OPTION]... NETWORK
+<옵션>
+  -d, --driver string  네트워크 유형 지정(기본값 : bridge)
+   --subnet strings   네트워크의 서브넷(네트워크 대역) 지정 (CIDR 표기법)
+   --gateway strings 게이트웨이 지정
+
+#실습
+네트워크를 생성해본다(타입:브릿지)
+[user@docker1 ~]$ docker network create -d bridge my_bridge
+068bbd013cd24df7fffd0a5b5beda361a9dfaaaae5146c5e462a009fc3b20455
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME        DRIVER    SCOPE
+1787cf1abc01   bridge      bridge    local
+9ba8e179ff40   host        host      local
+068bbd013cd2   my_bridge   bridge    local
+9beab07f55d4   none        null      local
+
+상세정보를 확인해본다. 
+[user@docker1 ~]$ docker network inspect my_bridge 
+[
+    {
+        "Name": "my_bridge",
+        "Id": "068bbd013cd24df7fffd0a5b5beda361a9dfaaaae5146c5e462a009fc3b20455",
+        "Created": "2023-12-20T12:28:28.154172003+09:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.18.0.0/16",
+                    "Gateway": "172.18.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+>> Name / Driver / Subnet / Gateway 등 항목에서 정보를 대략 알 수 있다. 
+
+컨테이너를 실행해준다
+[user@docker1 ~]$ docker container run -dt --network my_bridge --name rocky9_net11 rockylinux:9
+7aa53d9194347a5800474a4c13d42a82570d467c8005c6897c7fe045ab423657
+하나더해준다 
+[user@docker1 ~]$ docker container run -dt --network my_bridge --name rocky9_net12 rockylinux:9
+a4d21343312582639b865cf40a2df29b2268c3d9c0a6b39aa5945d60d66ee4a3
+>>이러면 네트워크에 컨테이너들이 연결되어 실행된다.
+확인해보자.
+
+[user@docker1 ~]$ docker network inspect my_bridge 
+[
+    {
+        "Name": "my_bridge",
+        "Id": "068bbd013cd24df7fffd0a5b5beda361a9dfaaaae5146c5e462a009fc3b20455",
+        "Created": "2023-12-20T12:28:28.154172003+09:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.18.0.0/16",
+                    "Gateway": "172.18.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "7aa53d9194347a5800474a4c13d42a82570d467c8005c6897c7fe045ab423657": {
+                "Name": "rocky9_net11",
+                "EndpointID": "ec3cc231ad091cdfda1286324f540396a4ff86d98adfc5d364c3d3d1ffab8c14",
+                "MacAddress": "02:42:ac:12:00:02",
+                "IPv4Address": "172.18.0.2/16",
+                "IPv6Address": ""
+            },
+            "a4d21343312582639b865cf40a2df29b2268c3d9c0a6b39aa5945d60d66ee4a3": {
+                "Name": "rocky9_net12",
+                "EndpointID": "9955549362d3f97ad0246d7e2f3769f259f6770060e1af5e74a27dcf11dcfef1",
+                "MacAddress": "02:42:ac:12:00:03",
+                "IPv4Address": "172.18.0.3/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {},
+        "Labels": {}
+    }
+]
+>>새로 생성한 컨테이너 네트워크 rocky9_net11, rocky9_net12가 연결됨을 확인가능하다.
+컨테이너 정보도 확인해보자.
+[user@docker1 ~]$ docker container inspect rocky9_net11 
+            "Networks": {
+                "my_bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "7aa53d919434"
+                    ],
+                    "NetworkID": "068bbd013cd24df7fffd0a5b5beda361a9dfaaaae5146c5e462a009fc3b20455",
+                    "EndpointID": "ec3cc231ad091cdfda1286324f540396a4ff86d98adfc5d364c3d3d1ffab8c14",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.2",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "02:42:ac:12:00:02",
+                    "DriverOpts": null
+
+[user@docker1 ~]$ docker container inspect rocky9_net12
+           "Networks": {
+                "my_bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "a4d213433125"
+                    ],
+                    "NetworkID": "068bbd013cd24df7fffd0a5b5beda361a9dfaaaae5146c5e462a009fc3b20455",
+                    "EndpointID": "9955549362d3f97ad0246d7e2f3769f259f6770060e1af5e74a27dcf11dcfef1",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.3",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "02:42:ac:12:00:03",
+                    "DriverOpts": null
+
+>>네트워크 정보들을 확인할 수 있었다.
+다음 각각 컨테이너 내부로 진입을 한다.
+
+참고로 각각 다른탭에서 진행해본다
+#net11컨테이너
+[user@docker1 ~]$ docker container exec -it rocky9_net11 /bin/bash
+[root@7aa53d919434 /]# 
+[root@7aa53d919434 /]# ip route
+bash: ip: command not found
+[root@7aa53d919434 /]# ifconfig
+bash: ifconfig: command not found
+[root@7aa53d919434 /]# ip address sh
+bash: ip: command not found
+>각각 명령어를 날려봤는데 나타나지 않았다. ifconfig명령어 실행을 위해 패키지를 설치해본다.
+—-
+**Ifconfig 명령어 패키지
+[root@ccd3fff685f8 /]# yum install net-tools
+—-
+명령어를 날려본다
+[root@7aa53d919434 /]# ifconfig
+eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.18.0.2  netmask 255.255.0.0  broadcast 172.18.255.255
+        ether 02:42:ac:12:00:02  txqueuelen 0  (Ethernet)
+        RX packets 2127  bytes 15557965 (14.8 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 1799  bytes 118178 (115.4 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 72  bytes 9042 (8.8 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 72  bytes 9042 (8.8 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+[root@7aa53d919434 /]# ping -c 3 172.18.0.3
+bash: ping: command not found
+>핑을 날렸는데 핑 패키지도 설치해야할 것 같다.
+**핑 명령어 패키지
+[root@7aa53d919434 /]# yum install iputils 
+핑을 날려본다
+[root@7aa53d919434 /]# ping -c 3 172.18.0.3
+PING 172.18.0.3 (172.18.0.3) 56(84) bytes of data.
+64 bytes from 172.18.0.3: icmp_seq=1 ttl=64 time=0.215 ms
+64 bytes from 172.18.0.3: icmp_seq=2 ttl=64 time=0.087 ms
+64 bytes from 172.18.0.3: icmp_seq=3 ttl=64 time=0.110 ms
+
+--- 172.18.0.3 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2048ms
+rtt min/avg/max/mdev = 0.087/0.137/0.215/0.055 ms
+잘 통함을 알 수 있다.
+
+#net12컨테이너
+(다른탭에서) 
+[user@docker1 ~]$ docker container exec -it rocky9_net12 /bin/bash
+[root@a4d213433125 /]# yum install net-tools
+[root@a4d213433125 /]# yum install iputils -y
+
+[root@a4d213433125 /]# ping -c 3 172.18.0.2
+PING 172.18.0.2 (172.18.0.2) 56(84) bytes of data.
+64 bytes from 172.18.0.2: icmp_seq=1 ttl=64 time=0.143 ms
+64 bytes from 172.18.0.2: icmp_seq=2 ttl=64 time=0.079 ms
+64 bytes from 172.18.0.2: icmp_seq=3 ttl=64 time=0.095 ms
+
+--- 172.18.0.2 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2063ms
+rtt min/avg/max/mdev = 0.079/0.105/0.143/0.027 ms
+>핑이 잘 통한다.
+
+도커 호스트로 핑 보내기
+컨테이너 간 핑테스트를 했으니, 호스트 간 핑을 해본다.
+참조:enp0s8: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.56.116  netmask 255.255.255.0  broadcast 192.168.56.255
+도커호스트로 핑을 날려본다.
+[root@7aa53d919434 /]# ping -c 3 192.168.56.116
+PING 192.168.56.116 (192.168.56.116) 56(84) bytes of data.
+64 bytes from 192.168.56.116: icmp_seq=1 ttl=64 time=0.194 ms
+64 bytes from 192.168.56.116: icmp_seq=2 ttl=64 time=0.088 ms
+64 bytes from 192.168.56.116: icmp_seq=3 ttl=64 time=0.069 ms
+잘된다.
+
+docker0에도 핑을 날려본다. 
+참조: docker0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.17.0.1  netmask 255.255.0.0  broadcast 172.17.255.255
+[root@7aa53d919434 /]# ping -c 3 172.17.0.1
+PING 172.17.0.1 (172.17.0.1) 56(84) bytes of data.
+64 bytes from 172.17.0.1: icmp_seq=1 ttl=64 time=0.230 ms
+64 bytes from 172.17.0.1: icmp_seq=2 ttl=64 time=0.086 ms
+64 bytes from 172.17.0.1: icmp_seq=3 ttl=64 time=0.068 ms
+>잘된다.
+
+다른 컨테이너의 네트워크로 날려보면?
+[root@7aa53d919434 /]# ping -c 3 172.17.0.3
+PING 172.17.0.3 (172.17.0.3) 56(84) bytes of data.
+^C
+>>안된다.
+
+(Docker Host의 다른 탭에서) 실행해보자.
+[user@docker1 ~]$ docker container exec -it centos7-1 /bin/bash
+[root@7584f69db9fd /]# ping -c 3 172.17.0.3
+PING 172.17.0.3 (172.17.0.3) 56(84) bytes of data.
+64 bytes from 172.17.0.3: icmp_seq=1 ttl=64 time=0.260 ms
+64 bytes from 172.17.0.3: icmp_seq=2 ttl=64 time=0.100 ms
+64 bytes from 172.17.0.3: icmp_seq=3 ttl=64 time=0.112 ms
+
+--- 172.17.0.3 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2027ms
+rtt min/avg/max/mdev = 0.100/0.157/0.260/0.073 ms
+>>여기서는 잘 된다.
+>>>결론: 다른 컨테이너 네트워크의 컨테이너 간에는 서로 통신이 불가능함을 유의하자.
+
+
+#실습 (같은네트워크로의 핑)
+컨테이너 네트워크를 하나 더 만든다. 172.20.x.x 대역으로 만들어본다. 
+[user@docker1 ~]$ docker network create -d bridge --subnet 172.20.0.0/16 --gateway 172.20.0.254  my_bridge2
+fb7670c50b6d402beb87663d9471187f37823641b963f6e7a81ed683dae6f9a6
+
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME         DRIVER    SCOPE
+1787cf1abc01   bridge       bridge    local
+9ba8e179ff40   host         host      local
+068bbd013cd2   my_bridge    bridge    local
+fb7670c50b6d   my_bridge2   bridge    local
+9beab07f55d4   none         null      local
+
+[user@docker1 ~]$ docker network inspect my_bridge2
+[
+    {
+        "Name": "my_bridge2",
+        "Id": "fb7670c50b6d402beb87663d9471187f37823641b963f6e7a81ed683dae6f9a6",
+        "Created": "2023-12-20T14:29:11.810647734+09:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.20.0.0/16",
+                    "Gateway": "172.20.0.254"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+서브넷 172.20.0.0/16
+게이트웨이 172.20.0.254 대역 네트워크를 생성했다.
+
+네트워크 컨테이너를 생성한다(net21, 22 하나씩 생성)
+[user@docker1 ~]$ docker container run -dt --network my_bridge2 --name rocky9_net21 rockylinux:9
+b85fb176336d0da6d9fa9605a0ef7f747a35c7486309a4b87eda012831b5f111
+[user@docker1 ~]$ docker container run -dt --network my_bridge2 --name rocky9_net22 rockylinux:9
+d6bad1e71feb103ab4411a9c0a632ca2573d17a87ad12bb161248f2c6bd72f8c
+
+[user@docker1 ~]$ docker network inspect my_bridge2  로 먼저 확인해보면 
+"Containers":
+"Name": "rocky9_net21",
+"IPv4Address": "172.20.0.1/16",
+"Name": "rocky9_net22",
+"IPv4Address": "172.20.0.2/16",
+
+각각 추가작업을 실행하자.
+[user@docker1 ~]$ docker container exec -it rocky9_net21 /bin/bash
+[root@b85fb176336d /]# 
+[user@docker1 ~]$ docker container exec -it rocky9_net22 /bin/bash
+[root@d6bad1e71feb /]#
+
+yum install net-tools iptuils -y 를 각각 입력해서 설치.
+넷21 172.20.0.1
+넷22 172.20.0.2 에 각각 핑을 날려보자
+
+[root@b85fb176336d /]# ping -c 3 172.20.0.2
+PING 172.20.0.2 (172.20.0.2) 56(84) bytes of data.
+64 bytes from 172.20.0.2: icmp_seq=1 ttl=64 time=0.116 ms
+64 bytes from 172.20.0.2: icmp_seq=2 ttl=64 time=0.106 ms
+64 bytes from 172.20.0.2: icmp_seq=3 ttl=64 time=0.082 ms
+
+[root@d6bad1e71feb /]# ping -c 3 172.20.0.1
+PING 172.20.0.1 (172.20.0.1) 56(84) bytes of data.
+64 bytes from 172.20.0.1: icmp_seq=1 ttl=64 time=0.106 ms
+64 bytes from 172.20.0.1: icmp_seq=2 ttl=64 time=0.091 ms
+64 bytes from 172.20.0.1: icmp_seq=3 ttl=64 time=0.079 ms
+>>여기서 알 수 있는사실은 같은 네트워크에서는 핑이 잘 통한다는 것이다.
+
+
+# ‘다른 네트워크’컨테이너에 추가적으로 연결 추가&해제 하기
+Docker Network 생성
+$ docker network create [OPTION]... NETWORK
+     -d, --driver string  네트워크 유형 지정(기본값 : bridge)
+     --subnet strings   네트워크의 서브넷(네트워크 대역) 지정 (CIDR 표기법)
+     --gateway strings 게이트웨이 지정
+
+Docker Container를 특정 Network에 연결
+$ docker network connect  NETWORK  CONTAINER
+
+
+
+#실습
+우선 컨테이너를 확인하자
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE          COMMAND                  CREATED          STATUS          PORTS                 NAMES
+d6bad1e71feb   rockylinux:9   "/bin/bash"              10 minutes ago   Up 10 minutes                         rocky9_net22
+b85fb176336d   rockylinux:9   "/bin/bash"              11 minutes ago   Up 11 minutes                         rocky9_net21
+a4d213433125   rockylinux:9   "/bin/bash"              2 hours ago      Up 2 hours                            rocky9_net12
+7aa53d919434   rockylinux:9   "/bin/bash"              2 hours ago      Up 2 hours                            rocky9_net11
+3399bed4b30a   mysql:latest   "docker-entrypoint.s…"   4 hours ago      Up 4 hours      3306/tcp, 33060/tcp   mysql
+836227baf167   rockylinux:9   "/bin/bash"              4 hours ago      Up 4 hours                            rocky9-1
+668e8781eaa1   centos:7       "/bin/bash"              5 hours ago      Up 5 hours                            centos7-2
+7584f69db9fd   centos:7       "/bin/bash"              5 hours ago      Up 5 hours                            centos7-1
+
+1. 현재 my_bridge2인데) 네트워크 컨테이너 my_bridge와 연결해본다.
+(Docker Host 탭에서)
+[user@localhost ~]$ docker network connect my_bridge rocky9_net21
+
+(rocky9_net21 컨테이너에서)
+[root@b85fb176336d /]# ifconfig 를 입력해보면   eth1인터페이스가 추가되었다.
+eth1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.18.0.4  netmask 255.255.0.0  broadcast 172.18.255.255
+        ether 02:42:ac:12:00:04  txqueuelen 0  (Ethernet)
+        RX packets 17  bytes 2168 (2.1 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 
+my_bridge 네트워크에 핑을 날려보자
+[root@b85fb176336d /]# ping -c 3 172.18.0.2
+PING 172.18.0.2 (172.18.0.2) 56(84) bytes of data.
+64 bytes from 172.18.0.2: icmp_seq=1 ttl=64 time=0.207 ms
+64 bytes from 172.18.0.2: icmp_seq=2 ttl=64 time=0.119 ms
+64 bytes from 172.18.0.2: icmp_seq=3 ttl=64 time=0.112 ms
+>>net21은 172.20 네트워크대역대이므로 172.18 대역은 원래 통신이 되지 않으나 연결해서 통신이 된다.
+
+2. 이번엔 bridge 네트워크에 연결해본다.
+(Docker Host 탭에서) 
+[user@docker1 ~]$ docker network connect bridge rocky9_net22
+
+(rocky9_net22 컨테이너에서)
+[root@d6bad1e71feb /]# ifconfig 를 해보면    eth1인터페이스가 추가되었다.
+eth1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.17.0.6  netmask 255.255.0.0  broadcast 172.17.255.255
+        ether 02:42:ac:11:00:06  txqueuelen 0  (Ethernet)
+        RX packets 15  bytes 2028 (1.9 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+새로운 네트워크 대역에 연결이 되었다.
+bridge 네트워크에 핑을 날려보자. 
+[root@d6bad1e71feb /]# ping -c 3 172.17.0.2
+PING 172.17.0.2 (172.17.0.2) 56(84) bytes of data.
+64 bytes from 172.17.0.2: icmp_seq=1 ttl=64 time=0.243 ms
+64 bytes from 172.17.0.2: icmp_seq=2 ttl=64 time=0.092 ms
+64 bytes from 172.17.0.2: icmp_seq=3 ttl=64 time=0.085 ms
+>>172.20 대역과 172.17 대역은 서로 다른 네트워크대역이므로 원래라면 안되지만, connect해서 핑이 된다.
+반면 연결되지 않은 172.18 대역에 핑을 날려보자
+[root@d6bad1e71feb /]# ping -c 3 172.18.0.2
+PING 172.18.0.2 (172.18.0.2) 56(84) bytes of data.
+^C
+>>172.20 대역과 172.18대역은 서로 다른 네트워크 대역이고, 연결되지 않았으므로 통신이 안됨.
+
+ Docker container를 특정 Network에서 네트워크 연결 해제
+연결된 네트워크 인터페이스를 해제 해본다.
+$ docker network disconnect NETWORK CONTAINER
+
+#실습
+방금전 네트워크 연결했던 것을 disconnect 해본다.
+ 
+(도커 호스트에서) 
+[user@docker1 ~]$ docker network disconnect my_bridge rocky9_net21
+
+(net 21 컨테이너에서)
+[root@b85fb176336d /]# ifconfig   로 확인하면 eth1 인터페이스가 해제되어있다.
+ 
+
+~~
+net22 컨테이너로 가서 확인하자.
+ 
+
+(도커호스트에서) 연결해제
+[user@docker1 ~]$ docker network disconnect bridge rocky9_net22
+(net 22 컨테이너에서)
+[root@d6bad1e71feb /]# ifconfig   를 입력하면 eth1 인터페이스가 해제되어있다.
+ 
+>>당연히 my_bridge2 네트워크 컨테이너에 속해있는 net21,net22가 각각 my_bridge와 bridge네트워크와 연결이 해제되었으므로, 이 상태에서 핑을 날려보면 씨알도 안먹힌다.
+	
+**참조: ifconfig eth0 처럼 특정 인터페이스를 뒤에 붙여주면 구분이 좀더 쉽다.
+
+ Host Network  // 호스트 네트워크
+[Host Network 실습]
+우선 컨테이너를 하나 실행해준다
+[user@docker1 ~]$ docker container run -dt --name rocky9-web rockylinux:9
+9e27c58e163610af89097f7b4f6440b7db03f96b47804f84cbef608f4b9a92c2 
+[user@docker1 ~]$ docker container exec -it rocky9-web /bin/bash
+[root@9e27c58e1636 /]# 
+여기서 간단하게 웹서비스를 구축하려고 한다.
+[root@9e27c58e1636 /]# yum install httpd -y^C 
+[root@9e27c58e1636 /]# systemctl start httpd
+System has not been booted with systemd as init system (PID 1). Can&apos;t operate.
+Failed to connect to bus: Host is down
+>>특이사항으로는 컨테이너에서는 systemctl 명령어를 사용할 수 없다는 것이다.
+대신 아파치웹서버의 프로세스를 수동으로 시작이 가능하다.
+[root@9e27c58e1636 /]# /usr/sbin/httpd -D FOREGROUND&
+[1] 218
+[root@9e27c58e1636 /]# AH00558: httpd: Could not reliably determine the server&apos;s fully qualified domain name, using 172.17.0.6. Set the &apos;ServerName&apos; directive globally to suppress this message
+
+에코로 인덱스파일을 만들자.
+[root@9e27c58e1636 /]# echo "rocky9-web container web server index.html" > /var/www/html/index.html 
+[root@9e27c58e1636 /]# curl http://localhost/ 
+rocky9-web container web server index.html
+>>이러면 컨테이너 안에서 웹 서비스를 시작한것이다.
+--
+다음으로, 도커호스트 탭에서 실행해보자. 
+[user@docker1 ~]$ curl http://localhost/
+curl: (7) Failed to connect to localhost port 80: Connection refused
+>>안되는 이유는 각각 컨테이너가 연결되지 않고 분리되어있기 때문이다.
+Docker host에서는 Localhost로의 Bridge Network Container의 웹 서버에 접속 불가함.
+
+다시 컨테이너로 넘어와서 
+[root@9e27c58e1636 /]# yum install net-tools -y
+도커호스트로 다시이동
+[user@docker1 ~]$ curl http://172.17.0.6/ 
+rocky9-web container web server index.html
+>이방법은 내부 네트워크 주소를 입력했을 때는 되는것으로, 연결되어있는것은 아니다.
+
+도커호스트에서 컨테이너하나를 실행해본다.
+[user@docker1 ~]$ docker container run -dt --network host --name rocky9-host rockylinux:9
+fd5cab1777c2b7408739872dacff6aedc94650333a963ba69efb4c9d6778a048
+
+[user@docker1 ~]$ docker container exec -it rocky9-host /bin/bash
+[root@docker1 /]# yum install net-tools iputils procps -y
+
+[root@docker1 /]# ifconfig 로 확인해보면 
+ 
+veth____ 로 되어있는 인터페이스들이 즐비하다. 
+
+(rocky9-host 컨테이너에서)
+[root@docker1 /]# yum install httpd -y 
+[root@docker1 /]# /usr/sbin/httpd -D FOREGROUND&
+[1] 237
+[root@docker1 /]# AH00558: httpd: Could not reliably determine the server&apos;s fully qualified domain name, using fe80::a00:27ff:feff:10dd%enp0s3. Set the &apos;ServerName&apos; directive globally to suppress this message
+인덱스도 만들어준다
+[root@docker1 /]# echo "rocky9-host Host Network Container web index.html" > /var/www/html/index.html
+[root@docker1 /]# curl http://localhost/
+rocky9-host Host Network Container web index.html
+
+(docker host 탭에서) 
+[user@docker1 ~]$ ps -ef |grep httpd   으로 확인해보자.
+root       15412   15129  0 15:32 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         15413   15412  0 15:32 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         15414   15412  0 15:32 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         15415   15412  0 15:32 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         15416   15412  0 15:32 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+root       16295   15955  0 15:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         16296   16295  0 15:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         16297   16295  0 15:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         16298   16295  0 15:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+48         16299   16295  0 15:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+user       16562   10429  0 15:51 pts/2    00:00:00 grep --color=auto httpd
+실행한적은 없지만 프로세스는 존재한다. 
+[user@docker1 ~]$ curl http://localhost/
+rocky9-host Host Network Container web index.html
+그래서 curl로 접속을 해보면 index파일이 출력된다. (웹서버를 설치한적이 없어도) 
+[user@docker1 ~]$ rpm -qa |grep httpd     << httpd를 설치했는지 확인(패키지 확인)
+^C
+[user@docker1 ~]$ 
+
+netstat 명령어로 어느 포트를 열고있는지 확인해본다.
+[user@docker1 ~]$ netstat -ant | grep :80
+tcp6       0      0 :::80                   :::*                    LISTEN    
+80번포트를 수신하고있는 것을 확인 가능했다.   (Host Network를 사용하는 컨테이너의 웹 서비스에 localhost로 접속됨.)
+
+(rocky9-host 컨테이너에서)
+[root@docker1 /]# ps -ef
+UID          PID    PPID  C STIME TTY          TIME CMD
+root           1       0  0 06:39 pts/0    00:00:00 /bin/bash
+root          18       0  0 06:41 pts/1    00:00:00 /bin/bash
+root         237      18  0 06:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+apache       238     237  0 06:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+apache       239     237  0 06:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+apache       240     237  0 06:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+apache       241     237  0 06:49 pts/1    00:00:00 /usr/sbin/httpd -D FOREGROUND
+root         455      18  0 06:54 pts/1    00:00:00 ps -ef
+웹서비스중인 프로세스를 죽여본다. 
+[root@docker1 /]# killall httpd
+bash: killall: command not found
+[root@docker1 /]# pkill httpd
+[root@docker1 /]# ps -ef
+UID          PID    PPID  C STIME TTY          TIME CMD
+root           1       0  0 06:39 pts/0    00:00:00 /bin/bash
+root          18       0  0 06:41 pts/1    00:00:00 /bin/bash
+root         458      18  0 06:55 pts/1    00:00:00 ps -ef
+[1]+  Done                    /usr/sbin/httpd -D FOREGROUND
+종료하고 들어가지는지 확인해보자 
+[root@docker1 /]# curl http://localhost/
+curl: (7) Failed to connect to localhost port 80: Connection refused
+
+(도커 host 탭으로 이동) 
+[user@docker1 ~]$ curl http://localhost/
+curl: (7) Failed to connect to localhost port 80: Connection refused
+>동일하게 localhost웹서버에 접근이 불가하다.
+
+도커호스트에서 root사용자로 전환해보자.
+[user@docker1 ~]$ sudo -i
+[sudo] password for user: 
+[root@docker1 ~]# yum install httpd -y 
+[root@docker1 ~]# systemctl start httpd
+[root@docker1 ~]# echo "Docker host web index.html" > /var/www/html/index.html
+접속을 시도해본다.
+[root@docker1 ~]# curl http://localhost/
+Docker host web index.html
+>접속이 잘 된다.
+
+(rocky9-host 에서)
+아까 종료해버렸으므로 아파치웹서버를 실행한적이 없다.
+[root@docker1 /]# ps -ef
+UID          PID    PPID  C STIME TTY          TIME CMD
+root           1       0  0 06:39 pts/0    00:00:00 /bin/bash
+root          18       0  0 06:41 pts/1    00:00:00 /bin/bash
+root         461      18  0 06:59 pts/1    00:00:00 ps -ef
+
+[root@docker1 /]# netstat -ant |grep :80
+tcp6       0      0 :::80                   :::*                    LISTEN   
+80번포트를 수신가능하게 listen상태로 나와있다. 
+[root@docker1 /]# curl http://localhost/
+Docker host web index.html
+웹에 접속해보면 접속이 되는것이 확인된다.
+
+>>docker network파트는 복잡한것 같다. 여러번 보는것을 추천.
+
+# Null network 실습
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME         DRIVER    SCOPE
+1787cf1abc01   bridge       bridge    local
+9ba8e179ff40   host         host      local
+068bbd013cd2   my_bridge    bridge    local
+fb7670c50b6d   my_bridge2   bridge    local
+9beab07f55d4   none         null      local
+>널 네트워크를 실행해본다.
+
+[user@docker1 ~]$ docker container run -dt --network none --name rocky9-null rockylinux:9
+f05bed0cb4984fc5a02a2c3daa56ed14999f99d799cb47da2c2fbce273126a3e
+[user@docker1 ~]$ docker container exec -it rocky9-null bash
+
+유의점은, 여기서는 네트워크를 사용하지 못한다
+[root@f05bed0cb498 /]# ping 8.8.8.8
+bash: ping: command not found
+핑이 없으므로 설치 
+[root@f05bed0cb498 /]# yum install net-tools
+Rocky Linux 9 - BaseOS                                                  0.0  B/s |   0  B     00:00    
+Errors during downloading metadata for repository &apos;baseos&apos;:
+  - Curl error (6): Couldn&apos;t resolve host name for https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9 [Could not resolve host: mirrors.rockylinux.org]
+  - Curl error (6): Couldn&apos;t resolve host name for https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9&countme=1 [Could not resolve host: mirrors.rockylinux.org]
+Error: Failed to download metadata for repo &apos;baseos&apos;: Cannot prepare internal mirrorlist: Curl error (6): Couldn&apos;t resolve host name for https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9 [Could not resolve host: mirrors.rockylinux.org]
+>>설치하려고봤더니, yum repo로부터 온라인에서 패키지를 다운로드 받지 못한다는 에러가 나온다.
+
+다른컨테이너로 실습을 해본다. 
+[user@docker1 ~]$ docker container run -dt --network none --name busybox-null busybox:latest   특이사항은 busybox이며
+이것은 리눅스의 명령어들을 모아놓은 환경이 있는 컨테이너화된 Image이다.
+ifconfig, ping 등의 명령어를 사용 가능하다.
+Unable to find image &apos;busybox:latest&apos; locally
+latest: Pulling from library/busybox
+4e6669f810e6: Pull complete 
+Digest: sha256:5c63a9b46e7139d2d5841462859edcbbf57f238af891b6096578e5894cfe5ae2
+Status: Downloaded newer image for busybox:latest
+0acd8ec325d1dac84d3fc5fc1eaea7e8fca570bbef4b4bfdc9b90f0437333dc5
+>도커 허브로부터 이미지를 pull하는것이 출력되었다.
+
+[user@docker1 ~]$ docker container exec -it busybox-null /bin/bash
+OCI runtime exec failed: exec failed: unable to start container process: exec: "/bin/bash": stat /bin/bash: no such file or directory: unknown
+[user@docker1 ~]$ docker container exec -it busybox-null /bin/sh
+/ # 
+>배쉬쉘이 없기때문에 본쉘(sh)로 실행하게된다.
+ifconfig를 입력해보면
+/ # ifconfig
+lo        Link encap:Local Loopback  
+          inet addr:127.0.0.1  Mask:255.0.0.0
+          UP LOOPBACK RUNNING  MTU:65536  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+>네트워크를 루프백테스트하기위한 lo 인터페이스가 있는것을 볼 수 있다.
+핑테스트를해보자
+
+/ # ping -c 3 172.17.0.1
+PING 172.17.0.1 (172.17.0.1): 56 data bytes
+ping: sendto: Network is unreachable
+도커호스트와 연결이 안됨
+
+/ # ping -c 3 8.8.8.8
+PING 8.8.8.8 (8.8.8.8): 56 data bytes
+ping: sendto: Network is unreachable
+외부네트워크와도 연결이 안됨.
+>>null 네트워크는 정말로 통신이 안된다.
+
+
+#실습한 컨테이너 지우기( 모든 컨테이너 종료 )
+아이디만 출력해본다. 
+[user@docker1 ~]$ docker container ls -aq
+0acd8ec325d1
+f05bed0cb498
+fd5cab1777c2
+9e27c58e1636
+d6bad1e71feb
+b85fb176336d
+a4d213433125
+7aa53d919434
+22ab4ed2984f
+adf4a787cc2b
+3399bed4b30a
+836227baf167
+668e8781eaa1
+7584f69db9fd
+
+
+[user@docker1 ~]$ docker container stop $(docker container ls -a -q)
+>>$에 해당하는부분은, bashshell에서 사용되는 명령어가 들어가는자리이고, ‘명령어가 실행되는것을 그 자리에 대체하겠다’ 는 의미이다. 따라서 $( )에있는 명령어가 1순위로 출력되고, 그 다음에 [user@docker1 ~]$ docker ~에서 실행되는 명령어가 진행된다.
+이와 마찬가지로  삭제해본다. 
+[user@docker1 ~]$ docker container rm $(docker container ls -a -q)
+0acd8ec325d1
+f05bed0cb498
+fd5cab1777c2
+9e27c58e1636
+d6bad1e71feb
+b85fb176336d
+a4d213433125
+7aa53d919434
+22ab4ed2984f
+adf4a787cc2b
+3399bed4b30a
+836227baf167
+668e8781eaa1
+7584f69db9fd
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+>>컨테이너들이 모두 삭제되었다.
+
+
