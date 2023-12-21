@@ -1,0 +1,846 @@
+18주차 목요일 메모( Docker 4_도커볼륨, 이미지 관리 )
+
+1. 도커 개요
+2. 도커 기본 명령어
+3. 도커 네트워크
+4. 도커 볼륨v 		(저장소개념)
+5. 도커 이미지 관리v     
+6. 도커 Private Registry
+
+도커책에서의 궁금증: 
+ 요약 - 도커의 구조와 성질_도커에는 커널이없음 (다만 Host OS커널을 빌려씀)
+도커의 장점으로는 컨테이너에 ‘커널을 포함시킬 필요가 없다’라고 나와있는데,
+말그대로 컨테이너는 커널이 없이도 가동이 된다. 
+다만 도커가 아예 커널을 사용하지 않는것은 아니고,
+시스템HOST OS의 도움을 받는 형식이며(커널을 공유함)
+정확히는 커널이 필요하지 않다라는 부분은 
+‘내가 필요한 명령어패키지가 들어가있는 Image를 사용한다’는 뜻도 된다. 
+
+지난시간 학습: 도커 네트워크
+ 
+도커 네트워크 유형
+ - Bridge Network : 
+Docker Host 내부에 구성되는 네트워크로 호스트의 인터페이스를 사용하여 외부 네트워크와 연결될 수 있는 네트워크
+- Docker Host의 기본 브리지 네트워크 인터페이스 :  docker0
+    - Docker Container의 기본 브리지 인터페이스 : vethXXX
+ - Host Network
+ - Null Network
+ - MAC VLAN Network
+
+# 네트워크 복기
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME         DRIVER    SCOPE
+04a258d754d0   bridge       bridge    local
+9ba8e179ff40   host         host      local
+068bbd013cd2   my_bridge    bridge    local
+fb7670c50b6d   my_bridge2   bridge    local
+9beab07f55d4   none         null      local
+
+네트워크를 하나 생성한다. 
+[user@docker1 ~]$ docker network create -d bridge --subnet 172.21.0.0/24 --gateway 172.21.0.254 my-bridge3
+158aa2f02d76dc4b4c26fecb07d6ebc4f2a46984a196faa74db670fb14ab68b8
+
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME         DRIVER    SCOPE
+04a258d754d0   bridge       bridge    local
+9ba8e179ff40   host         host      local
+158aa2f02d76   my-bridge3   bridge    local
+068bbd013cd2   my_bridge    bridge    local
+fb7670c50b6d   my_bridge2   bridge    local
+9beab07f55d4   none         null      local
+
+컨테이너를 하나 실행한다.
+[user@docker1 ~]$ docker container run -dt --network my-bridge3 --name rocky9-net31 rockylinux:9
+cabd7ff412e52dae83968d7a6417c307855e6acca2de255c3bf2319e31a1a5a7
+
+컨테이너 내부로 진입한다
+[user@docker1 ~]$ docker container exec -it rocky9-net31 bash
+
+(다른 탭으로 이동)
+우선 네트워크 정보를 확인한다. inspect 
+        "NetworkSettings" 아래에 
+            "Networks": 를 볼 것이다.
+[user@docker1 ~]$ docker container inspect rocky9-net31 
+            "Networks": {
+                "my-bridge3": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "cabd7ff412e5"
+                    ],
+                    "NetworkID": "158aa2f02d76dc4b4c26fecb07d6ebc4f2a46984a196faa74db670fb14ab68b8",
+                    "EndpointID": "e54341edd9ae1abcbffa19ac2ee28fedd4bc572b5c725e2e935ac3d09a77043a",
+                    "Gateway": "172.21.0.254",
+                    "IPAddress": "172.21.0.1",
+
+# 네트워크를 연결해본다. my_bridge & rocky9-net31
+[user@docker1 ~]$ docker network connect my_bridge rocky9-net31 
+그러면 
+"my_bridge": {
+"NetworkID": "068bbd013cd24df7fffd0a5b5beda361a9dfaaaae5146c5e462a009fc3b20455",
+                    "EndpointID": "b1bd232bfb45a2780b6f6e788d2f8aaed7f01c0de59a8032cffc91e913dc8676",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.2",
+다시 조회했을 때 my_bridge네트워크 컨테이너도 연결된것을 확인가능하다.
+
+# 네트워크를 해제한다.
+(rocky9_net31 컨테이너에서) 
+일단 확인해본다.
+[root@cabd7ff412e5 /]# yum install net-tools iputils -y
+[root@cabd7ff412e5 /]# ifconfig
+eth1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.18.0.2  netmask 255.255.0.0  broadcast 172.18.255.255
+        ether 02:42:ac:12:00:02  txqueuelen 0  (Ethernet)
+        RX packets 40  bytes 5564 (5.4 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+eth1이 추가된 것을 알 수 있다.(my_bridge네트워크)
+해제해본다.
+
+(Docker Host 탭에서) 
+[user@docker1 ~]$ docker container inspect rocky9-net31
+            "Networks": {
+                "my-bridge3": {
+                    "Gateway": "172.21.0.254",
+                    "IPAddress": "172.21.0.1",
+한개만 조회된다.
+
+#다시 연결해본다
+[user@docker1 ~]$ docker network connect my_bridge rocky9-net31 
+eth2: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 172.18.0.2  netmask 255.255.0.0  broadcast 172.18.255.255
+        ether 02:42:ac:12:00:02  txqueuelen 0  (Ethernet)
+        RX packets 17  bytes 2288 (2.2 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+아까 있던 eth1이 사라지고 eth2가 추가되었다.
+
+#네트워크를 지워본다.
+(Docker Host 탭에서)
+ 
+먼저 확인
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME         DRIVER    SCOPE
+04a258d754d0   bridge       bridge    local
+9ba8e179ff40   host         host      local
+158aa2f02d76   my-bridge3   bridge    local
+068bbd013cd2   my_bridge    bridge    local
+fb7670c50b6d   my_bridge2   bridge    local
+9beab07f55d4   none         null      local
+지워본다.
+[user@docker1 ~]$ docker network rm my_bridge2
+my_bridge2
+또 지워본다
+[user@docker1 ~]$ docker network rm my_bridge my-bridge3 
+Error response from daemon: error while removing network: network my_bridge id 068bbd013cd24df7fffd0a5b5beda361a9dfaaaae5146c5e462a009fc3b20455 has active endpoints
+Error response from daemon: error while removing network: network my-bridge3 id 158aa2f02d76dc4b4c26fecb07d6ebc4f2a46984a196faa74db670fb14ab68b8 has active endpoints
+>지우려고했더니, active endpoints이기 때문에 삭제가 안됨을 알 수 있었다. (활성화된 네트워크 컨테이너가 있음)
+>>따라서 지우기위해서는 네트워크 컨테이너에 연결되지 않아야한다. 우선 네트워크 연결을 끊자.
+우선 컨테이너를 종료해준다.
+[user@docker1 ~]$ docker container stop rocky9-net31 
+그리고 네트워크를 삭제한다.
+[user@docker1 ~]$ docker network rm my_bridge my-bridge3 
+my_bridge
+my-bridge3
+>성공적으로 삭제가 된 모습이다.
+
+
+#사용하지 않는 컨테이너 네트워크 삭제하기.
+네트워크를 임의로 세개를 만든다. 
+[user@docker1 ~]$ docker network create testnet1
+a47154ae3e5f96d4f9843c11c452f3cda49e504c0c6cbf84a12b6644a6f0414a
+[user@docker1 ~]$ docker network create testnet2
+^[[A8dd8f76e32801513fa70ffbdbd8f1be85cf97fdf277603ab9a7aed174e44ba0e
+[user@docker1 ~]$ docker network create testnet3
+e9e26264a3c4633334eacd7524a3a62c125d3c6dd62d6b6e794d9169786cc028
+만든네트워크 조회
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME       DRIVER    SCOPE
+04a258d754d0   bridge     bridge    local
+9ba8e179ff40   host       host      local
+9beab07f55d4   none       null      local
+a47154ae3e5f   testnet1   bridge    local
+8dd8f76e3280   testnet2   bridge    local
+e9e26264a3c4   testnet3   bridge    local
+
+새로 컨테이너도 실행한다
+[user@docker1 ~]$ docker container run -dt --network testnet3 --name rocky9-net3a rockylinux:9
+5cd29674863e54dec09ff9d51018cae701c4d9710715cc0ce7b019c9b712c231
+
+사용하지 않는 컨테이너 네트워크를 삭제한다.  
+[user@docker1 ~]$ docker network prune 
+WARNING! This will remove all custom networks not used by at least one container.
+Are you sure you want to continue? [y/N] y
+Deleted Networks:
+testnet2
+testnet1
+
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME       DRIVER    SCOPE
+04a258d754d0   bridge     bridge    local
+9ba8e179ff40   host       host      local
+9beab07f55d4   none       null      local
+e9e26264a3c4   testnet3   bridge    local
+>>prune을 사용하면 기본 네트워크 bridge, null, host를 제외하고 모두 삭제가된다.
+테스트넷3마저 삭제해보자. 우선 연결을 해제한다.
+[user@docker1 ~]$ docker network disconnect testnet3 rocky9-net3a 
+[user@docker1 ~]$ docker network prune 
+WARNING! This will remove all custom networks not used by at least one container.
+Are you sure you want to continue? [y/N] y
+Deleted Networks:
+testnet3
+
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME      DRIVER    SCOPE
+04a258d754d0   bridge    bridge    local
+9ba8e179ff40   host      host      local
+9beab07f55d4   none      null      local
+
+# 외부네트워크로 통신되지 않도록 설정하기(null이외 방법)
+ docker network create --internal 옵션을 사용한다.
+인터널옵션으로 네트워크를 생성해보자.
+[user@docker1 ~]$ docker network create -d bridge --subnet 172.18.0.0/16 --internal net-internal
+989675376cc94f6cbd305ae6c5cb134c51b220e1e042b19e7425bde216e36917
+[user@docker1 ~]$ docker network ls	
+NETWORK ID     NAME           DRIVER    SCOPE
+04a258d754d0   bridge         bridge    local
+9ba8e179ff40   host           host      local
+989675376cc9   net-internal   bridge    local
+9beab07f55d4   none           null      local
+
+이 내부네트워크에 사용할 컨테이너를 두개 실행해준다. (centos7a, centos7b)
+[user@docker1 ~]$ docker container run -dt --network net-internal --name centos7a centos:7
+008020d04b4f8c718db570d5d702d67ae4b9bc317768f47885f9232bd021c672
+[user@docker1 ~]$ docker container run -dt --network net-internal --name centos7b centos:7
+429a50a2465afe6c501bf5379179257fd0fa218965cff24c1d3495ba90f24a01
+
+각각 컨테이너로 진입해서 확인해본다.
+(centos7a)
+[user@docker1 ~]$ docker container exec -it centos7a bash
+[root@008020d04b4f /]# 
+[root@008020d04b4f /]# ping -c 3 172.18.0.3
+PING 172.18.0.3 (172.18.0.3) 56(84) bytes of data.
+From 172.18.0.1 icmp_seq=1 Packet filtered
+From 172.18.0.1 icmp_seq=2 Packet filtered
+From 172.18.0.1 icmp_seq=3 Packet filtered
+
+(centos7b)
+[user@docker1 ~]$ docker container exec -it centos7b bash
+[root@429a50a2465a /]# 
+[root@429a50a2465a /]# ping -c 3 172.18.0.2
+PING 172.18.0.2 (172.18.0.2) 56(84) bytes of data.
+From 172.18.0.1 icmp_seq=1 Packet filtered
+From 172.18.0.1 icmp_seq=2 Packet filtered
+From 172.18.0.1 icmp_seq=3 Packet filtered
+>>packet filtered라는 것이 출력된다. 지우고 다시해본다
+[user@docker1 ~]$ docker container stop centos7{a,b}
+centos7a
+centos7b
+[user@docker1 ~]$ docker container rm centos7{a,b}
+centos7a
+centos7b
+
+컨테이너들도 다 지워준다.
+[user@docker1 ~]$ docker container ls -a
+CONTAINER ID   IMAGE          COMMAND       CREATED          STATUS                        PORTS     NAMES
+5cd29674863e   rockylinux:9   "/bin/bash"   36 minutes ago   Up 36 minutes                           rocky9-net3a
+cabd7ff412e5   rockylinux:9   "/bin/bash"   56 minutes ago   Exited (137) 39 minutes ago             rocky9-net31
+[user@docker1 ~]$ docker container rm -f rocky9-net31 rocky9-net3a
+rocky9-net31
+rocky9-net3a
+
+[user@docker1 ~]$ docker network rm net-internal 
+net-internal
+
+# 내부통신할 네트워크를 다시 생성한다.
+[user@docker1 ~]$ docker network create -d bridge --subnet 172.18.0.0/16 --internal net-internal
+a19363342385cae35332f4502c10f9a2948d94bb5c838028e2a6c86912e25d54
+[user@docker1 ~]$ docker network ls
+NETWORK ID     NAME           DRIVER    SCOPE
+04a258d754d0   bridge         bridge    local
+9ba8e179ff40   host           host      local
+a19363342385   net-internal   bridge    local
+9beab07f55d4   none           null      local
+
+컨테이너 실행
+[user@docker1 ~]$ docker container run -dt --network net-internal --name centos7a centos:7
+78e3ebaa74196b62588856e47387f4c63138ab68d0475c771ed1a61591bcb0a4
+[user@docker1 ~]$ docker container run -dt --network net-internal --name centos7b centos:7
+e718dc2043e4974f61003897f9446bf626b9c2e854b30560b73b11a3251fb0b4
+
+재접속
+[user@docker1 ~]$ docker container exec -it centos7a /bin/bash
+[root@78e3ebaa7419 /]# 
+[root@429a50a2465adocker container exec -it centos7a /bin/bash
+[root@78e3ebaa7419 /]# 
+
+내부네트워크 통신용으로 웹을 생성
+[user@docker1 ~]$ docker container run -d --network net-internal --name internal-web httpd:2.4
+네트워크를 조회해본다
+[user@docker1 ~]$ docker network inspect net-internal 
+       "Containers": {
+            "17212e4dcd1d5e351e34499045e07037febcf772bf0868b5824d723041255561": {
+                "Name": "internal-web",
+                "EndpointID": "3b847b3743662d0ddc3259564db711f004d59de4ab6e410b63442401760ee0ab",
+                "MacAddress": "02:42:ac:12:00:04",
+                "IPv4Address": "172.18.0.4/16",
+                "IPv6Address": ""
+            },
+            "78e3ebaa74196b62588856e47387f4c63138ab68d0475c771ed1a61591bcb0a4": {
+                "Name": "centos7a",
+                "EndpointID": "6d2f2b5266a1d9bcf9effd736daef262aab362e0e6452a8fb78f2c87679a27d6",
+                "MacAddress": "02:42:ac:12:00:02",
+                "IPv4Address": "172.18.0.2/16",
+                "IPv6Address": ""
+            },
+            "e718dc2043e4974f61003897f9446bf626b9c2e854b30560b73b11a3251fb0b4": {
+                "Name": "centos7b",
+                "EndpointID": "ec34e389b814e21ecaefe04d6f2781b4bc4626261cf4c5659b5341124047e964",
+                "MacAddress": "02:42:ac:12:00:03",
+                "IPv4Address": "172.18.0.3/16",
+                "IPv6Address": ""
+
+(첫번째 컨테이너 a에서) 
+[root@78e3ebaa7419 /]# curl http://172.18.0.4/
+curl: (7) Failed connect to 172.18.0.4:80; No route to host
+웹에 접속시도를 해보면 실패로 나온다.
+같은 네트워크끼리 핑, 웹 접속이 안되는 것이 이상하다. <다시오기>
+
+(트러블슈팅)
+[user@docker1 ~]$ docker logs internal-web  로그를 살펴보니
+AH00558: httpd: Could not reliably determine the server&apos;s fully qualified domain name, using 172.18.0.4. Set the &apos;ServerName&apos; directive globally to suppress this message
+AH00558: httpd: Could not reliably determine the server&apos;s fully qualified domain name, using 172.18.0.4. Set the &apos;ServerName&apos; directive globally to suppress this message
+[Thu Dec 21 01:31:12.661236 2023] [mpm_event:notice] [pid 1:tid 139677313935232] AH00489: Apache/2.4.58 (Unix) configured -- resuming normal operations
+[Thu Dec 21 01:31:12.661396 2023] [core:notice] [pid 1:tid 139677313935232] AH00094: Command line: &apos;httpd -D FOREGROUND&apos;
+ 
+>>이부분은단순히 경고로, 큰 상관은 없다고한다.
+
+
+#도커 네트워크 포트포워딩
+[user@docker1 ~]$ docker container run -d --name web0 httpd:2.4
+4da5f6e6a6119f100ecb182c9279c43575487a5670a8e817281579569588ec91 
+            "IPAddress": "172.17.0.2", 가 조회된다.
+[user@docker1 ~]$ curl http://172.17.0.2/
+<html><body><h1>It works!</h1></body></html>
+웹을 조회해봤다.
+컨테이너가 외부에서 요청을 받아 처리를 해주려면, 호스트로 접근해 전달된 패키지가 전달될 수 있도록 포트포워딩을 해야 한다.
+
+*포트포워딩 방법
+Docker Host의 포트를 Docker Container의 포트와 포트포워딩(Port Forwarding)
+-p 옵션에 해당한다.  열고싶은만큼 포트를 -p 를 추가해서 열 수 있다.
+$ docker container run -d -p HOST_PORT:CONTAINER_PORT --name CONTAINER IMAGE_REPO:TAG
+
+[user@docker1 ~]$ docker container run -d -p 8081:80 --name web1 httpd:2.4
+68f3fddc28d27fa6520b6c1dece1080a2446f086657cd25356c4a1cf1be99c38
+아까에 이어서 web1을 생성했다.
+[user@docker1 ~]$ curl http://localhost:8081/
+<html><body><h1>It works!</h1></body></html>
+web1의 8081포트로 접근하니 잘 접속됐다.
+ 
+
+enp0s8: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.56.116  netmask 255.255.255.0  broadcast 192.168.56.255
+        inet6 fe80::a00:27ff:fefc:245a  prefixlen 64  scopeid 0x20<link>
+        ether 08:00:27:fc:24:5a  txqueuelen 1000  (Ethernet)
+        RX packets 261  bytes 37807 (36.9 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 101  bytes 14983 (14.6 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+ 
+enp0s8 ip로 접속해도 웹브라우저에 접속이 되는 것을 알 수 있다.(8081포트를 listen하고있는상태)
+
+-container ls 로 포트연결 조회하기
+[user@docker1 ~]$ docker container ls
+CONTAINER ID   IMAGE       COMMAND              CREATED          STATUS          PORTS                                   NAMES
+68f3fddc28d2   httpd:2.4   "httpd-foreground"   7 minutes ago    Up 6 minutes    0.0.0.0:8081->80/tcp, :::8081->80/tcp   web1
+4da5f6e6a611   httpd:2.4   "httpd-foreground"   15 minutes ago   Up 15 minutes   80/tcp                                  web0
+17212e4dcd1d   httpd:2.4   "httpd-foreground"   28 minutes ago   Up 28 minutes                                           internal-web
+e718dc2043e4   centos:7    "/bin/bash"          31 minutes ago   Up 31 minutes                                           centos7b
+78e3ebaa7419   centos:7    "/bin/bash"          31 minutes ago   Up 31 minutes   
+>web1이 8081포트를 수신하고있음을 알 수 있다.
+
+
+# 도커 컨테이너 데이터 저장 (도커 저장소 개념) 
+Docker Container의 데이터 저장방법
+ 
+1. Bind Mount (바인드 마운트) 
+ Docker Host의 Filesystem 저장공간을 제공
+2. Docker Volume (도커 볼륨) 
+ Docker Container에 저장공간을 제공하는 Docker의 Object
+
+# Bind Mount (바인드 마운트) 실습
+(1.	BInd Mount 사용 이전, 컨테이너에 데이터를 전송하는 방법)
+[user@dockerhost ~]$ echo "hello apache" > index.html
+[user@dockerhost ~]$ cat index.html
+hello apache
+[user@dockerhost ~]$ docker container run -d -p 8080:80 --name web0 httpd:2.4
+d33ec0d9018d59041a11ae7f56ce6a6dfc0c228bc84bf677d5c23215806c3fea
+이 컨테이너로 파일을 복사해본다
+
+도큐먼트 폴더를 찾아보자
+[user@dockerhost ~]$ docker container exec -it web0 bash
+root@d33ec0d9018d:/usr/local/apache2# ls
+bin  build  cgi-bin  conf  error  htdocs  icons  include  logs	modules
+root@d33ec0d9018d:/usr/local/apache2# ls conf/httpd.conf 
+conf/httpd.conf
+root@d33ec0d9018d:/usr/local/apache2# grep -i DocumentRoot conf/httpd.conf 
+# DocumentRoot: The directory out of which you will serve your
+DocumentRoot "/usr/local/apache2/htdocs"
+    # access content that does not live under the DocumentRoot.
+DocumentRoot 디렉터리가 "/usr/local/apache2/htdocs"에 있다고한다
+파일을 복사해보겠다.
+[user@dockerhost ~]$ docker container cp index.html web0:/usr/local/apache2/htdocs/
+Successfully copied 2.05kB to web0:/usr/local/apache2/htdocs/
+웹에 접속해보자
+[user@dockerhost ~]$ curl http://localhost:8080/
+hello apache
+
+(2.	Bind Mount로 데이터를 전달하는 방법) 
+우선 바인드마운트 이전에 컨테이너로 공유할 Docker host내에 디렉터리를 생성한다.
+[user@dockerhost ~]$ mkdir -p /home/user/data/web 을 생성했다.
+[user@dockerhost ~]$ cp index.html /home/user/data/web/  고대로 복사
+
+이제 포트포워딩해준다
+*주의할점은, 포트포워딩할 포트가 달라야한다는것을 유의하자! 
+[user@dockerhost ~]$ docker container run -d -p 8081:80 --volume /home/user/data/web:/usr/local/apache2/htdocs/ --name web1 httpd:2.4
+6d258d909750c6307befbd3113ded188dc2d1c2240da6164a0d8a318030056f1
+
+새로 web2도 만듬
+[user@dockerhost ~]$ docker container run -d -p 8082:80 --volume /home/user/data/web:/usr/local/apache2/htdocs/ --name web2 httpd:2.4
+efdf25c5b289da5d9801d37025a293f365c569e0623d672a4714c8bfdb7cb5be
+
+둘다 웹에 접근해본다.
+[user@dockerhost ~]$ curl http://localhost:8081/
+hello apache
+[user@dockerhost ~]$ curl http://localhost:8082/
+hello apache
+>>바인드마운트로 잘 접근했다.
+
+웹에접근해볼 용으로 파일을 생성해보자. (htdocs는 웹을 보여주는 디렉터리이다)
+[user@dockerhost ~]$ docker container exec -it web1 /bin/bash
+root@6d258d909750:/usr/local/apache2# ls
+bin  build  cgi-bin  conf  error  htdocs  icons  include  logs	modules
+root@6d258d909750:/usr/local/apache2# cd htdocs
+root@6d258d909750:/usr/local/apache2/htdocs# ls
+index.html
+root@6d258d909750:/usr/local/apache2/htdocs# cat index.html
+hello apache
+root@6d258d909750:/usr/local/apache2/htdocs# echo "test page" > test.html
+root@6d258d909750:/usr/local/apache2/htdocs# cat test.html 
+test page
+
+확인을 해보자. 
+[user@dockerhost ~]$ curl http://localhost:8081/
+hello apache
+[user@dockerhost ~]$ curl http://localhost:8082/
+hello apache
+[user@dockerhost ~]$ curl http://localhost:8081/test.html
+test page
+[user@dockerhost ~]$ curl http://localhost:8082/test.html
+test page
+>>echo로 만든 testpage가 잘 확인된다.
+
+도커호스트에서도 확인할수있는데 
+[user@dockerhost ~]$ ls -l ~/data/web/
+total 8
+-rw-r--r--. 1 user user 13 Dec 21 11:44 index.html
+-rw-r--r--. 1 root root 10 Dec 21 11:59 test.html 
+[user@dockerhost ~]$ cat ~/data/web/test.html 
+test page
+이렇게 확인도 가능하다.
+ 
+# 바인드마운트로 연결된 상태에서 확인해본다. (inspect)
+[user@dockerhost ~]$ docker container inspect web1  를 입력하고 살펴볼곳은 
+        "HostConfig": {
+            "Binds": [
+                "/home/user/data/web:/usr/local/apache2/htdocs/"
+이 부분이다. 또한 
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/user/data/web",
+                "Destination": "/usr/local/apache2/htdocs",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+이 부분에서도 바인드마운트된 디렉터리를 확인할 수 있다.
+
+# 도커 볼륨 
+Docker Volume 목록 확인
+$ docker volume ls
+Docker Volume 생성
+$ docker volume create  VOLUME
+Docker Volume 상세 정보 확인
+$ docker volume inspect  VOLUME
+Docker Volume으로 Docker Colntainer에 저장공간을 제공하여 Container 실행
+$ docker container run -d  --volume DOCKER_VOLUME:CONTAINER_PATH  --name CONTAINER IMAGE_REPO:TAG
+
+#실습
+목록확인 
+[user@dockerhost ~]$ docker volume ls
+DRIVER    VOLUME NAME
+local     2aeef992c5865a360ac9bd768a56405893e162c72ef519e9bb5430594b810c9c
+local     7eaeb4f47b55cdd520bf397bf91712dddb355b9aa4fb4176f8fc0f8f9af18bba
+local     72dc19e4e3166c402e5f1786fc9db8a0afb3487946efbb64bcea846290eeccc3
+local     dff1a1d20d85982aa611d433558e530c15c21dabb9978c4e08bd2806d4a1586e
+생성
+[user@dockerhost ~]$ docker volume create testvol
+testvol
+정보확인
+[user@dockerhost ~]$ docker volume inspect testvol
+[
+{
+"CreatedAt": "2023-12-21T12:30:21+09:00",
+"Driver": "local",
+"Labels": null,
+"Mountpoint": "/var/lib/docker/volumes/testvol/_data",
+"Name": "testvol",
+"Options": null,
+"Scope": "local"
+}
+]
+
+도커볼륨 생성하기(종합실습) 
+우선 컨테이너 두개를 실행한다
+[user@dockerhost ~]$ docker container run -d -p 8083:80 --volume testvol:/usr/local/apache2/htdocs/ --name web3 httpd:2.4
+96a83ebdbac23ea743716ca806b72bf462fa5bb8175e1a52f36d6b44bc35c217
+[user@dockerhost ~]$ docker container run -d -p 8084:80 --volume testvol:/usr/local/apache2/htdocs/ --name web4 httpd:2.4
+2ef176559d23592f04ec78d4e5ce247937e96ebfebce41d2f4c0ec2faae5d320
+[user@dockerhost ~]$ curl http://localhost:8083/
+<html><body><h1>It works!</h1></body></html>
+[user@dockerhost ~]$ curl http://localhost:8084/
+<html><body><h1>It works!</h1></body></html>
+
+web3의 배쉬쉘로 접근 
+[user@dockerhost ~]$ docker container exec -it web3 /bin/bash
+root@96a83ebdbac2:/usr/local/apache2# cd htdocs 
+index와 test html파일을 생성해둔다
+root@96a83ebdbac2:/usr/local/apache2/htdocs# echo " Docker Volume testvol index.html " > index.html
+root@96a83ebdbac2:/usr/local/apache2/htdocs# echo " Docker Volume testvol test.html " > test.html
+root@96a83ebdbac2:/usr/local/apache2/htdocs# exit
+exit
+
+작업으로 방금 위에서 실행한 내용을 확인해본다
+[user@dockerhost ~]$ docker container exec  web3 ls -l /usr/local/apache2/htdocs/
+total 8
+-rw-r--r--. 1  504 staff 35 Dec 21 03:37 index.html
+-rw-r--r--. 1 root root  34 Dec 21 03:37 test.html
+[user@dockerhost ~]$ docker container exec  web4 ls -l /usr/local/apache2/htdocs/
+total 8
+-rw-r--r--. 1  504 staff 35 Dec 21 03:37 index.html
+-rw-r--r--. 1 root root  34 Dec 21 03:37 test.html
+>> web3에서만 했는데도 web4에도 생성되어있다.
+조회해보면
+[user@dockerhost ~]$ curl http://localhost:8083/
+ Docker Volume testvol index.html 
+[user@dockerhost ~]$ curl http://localhost:8084/
+ Docker Volume testvol index.html 
+[user@dockerhost ~]$ curl http://localhost:8084/test.html
+ Docker Volume testvol test.html 
+[user@dockerhost ~]$ curl http://localhost:8083/test.html
+ Docker Volume testvol test.html 
+>잘 된다.
+
+# 도커볼륨 연결 확인하기
+[user@dockerhost ~]$ docker container inspect web3
+ 
+ 
+>> 
+ "HostConfig": "Binds": 와
+ "Mounts": 에서 확인이 가능하다.
+
+볼륨을 하나 만들어보자 
+[user@dockerhost ~]$ docker volume create mydata-vol
+mydata-vol
+[user@dockerhost ~]$ docker volume ls
+DRIVER    VOLUME NAME
+local     2aeef992c5865a360ac9bd768a56405893e162c72ef519e9bb5430594b810c9c
+local     7eaeb4f47b55cdd520bf397bf91712dddb355b9aa4fb4176f8fc0f8f9af18bba
+local     72dc19e4e3166c402e5f1786fc9db8a0afb3487946efbb64bcea846290eeccc3
+local     dff1a1d20d85982aa611d433558e530c15c21dabb9978c4e08bd2806d4a1586e
+local     mydata-vol
+local     testvol
+
+컨테이너 하나를 실행한다 (volume 연결) rw권한부여(없어도 기본으로 권한rw가 존재)
+[user@dockerhost ~]$ docker container run -dt -v mydata-vol:/work:rw --name worker rockylinux:9
+f2b20c3aa4162abbe947db02dd7e20083f51dbfd19a7d04d723840dda433aba2
+>/work폴더 rw권한을 가진 worker 컨테이너 만듦
+[user@dockerhost ~]$ docker container run -dt -v mydata-vol:/apps/data:ro --name reader rockylinux:9
+c419170ff4dfbefa64da3f12ef0ce08ba88863a86d324eb484818ffb131f567a
+>/apps/data 읽기만 가능한 reader 컨테이너 만듦
+
+ (worker 컨테이너에서)
+[user@dockerhost ~]$ docker container exec -it worker /bin/bash
+[root@f2b20c3aa416 /]# 
+[root@f2b20c3aa416 /]# cd work
+[root@f2b20c3aa416 work]# ls -l
+total 0
+[root@f2b20c3aa416 work]# echo "test file 1 - work " > testfile1-worker
+[root@f2b20c3aa416 work]# ls -l
+total 4
+-rw-r--r--. 1 root root 20 Dec 21 05:25 testfile1-worker
+[root@f2b20c3aa416 work]# cat testfile1-worker 
+test file 1 - work 
+>>Read, Write 모두 가능하게 등장했다.
+
+(reader 컨테이너에서)
+[user@dockerhost ~]$ docker container exec -it reader /bin/bash
+[root@c419170ff4df /]# 
+[root@c419170ff4df /]# ls -l
+total 4
+dr-xr-xr-x.   2 root root    6 May 16  2022 afs
+drwxr-xr-x.   3 root root   18 Dec 21 05:22 apps
+[root@c419170ff4df /]# cd /apps/data/
+[root@c419170ff4df data]# ll
+bash: ll: command not found
+[root@c419170ff4df data]# echo "test file 2 - reader " > testfile2-reader
+bash: testfile2-reader: Read-only file system
+Write권한이 없으므로 안만들어지는 것을 볼 수 있다. 
+[root@c419170ff4df data]# cat testfile1-worker 
+test file 1 - work 
+기존 worker가 만든것을 Read할 권한이 있으므로 읽을수는 있다.
+
+
+#실습한 컨테이너 일괄 삭제하기
+
+[user@dockerhost ~]$ docker container stop $(docker container ls -a -q)
+c419170ff4df
+f2b20c3aa416
+2ef176559d23
+96a83ebdbac2
+efdf25c5b289
+6d258d909750
+d33ec0d9018d
+[user@dockerhost ~]$ docker container rm $(docker container ls -a -q)
+c419170ff4df
+f2b20c3aa416
+2ef176559d23
+96a83ebdbac2
+efdf25c5b289
+6d258d909750
+d33ec0d9018d
+
+# 컨테이너- 도커 볼륨에서 저장된 컨텐츠 위치 확인하기
+[user@dockerhost ~]$ sudo -i
+[sudo] password for user: 
+[root@dockerhost ~]# cd /var/lib/docker/
+[root@dockerhost docker]# ll
+total 12
+drwx--x--x.  4 root root  138 Dec 18 11:48 buildkit
+drwx--x---.  2 root root    6 Dec 21 14:35 containers
+-rw-------.  1 root root   36 Dec 18 11:48 engine-id
+drwx------.  3 root root   22 Dec 18 11:48 image
+drwxr-x---.  3 root root   19 Dec 18 11:48 network
+drwx--x---. 22 root root 4096 Dec 21 14:35 overlay2
+drwx------.  4 root root   32 Dec 18 11:48 plugins
+drwx------.  2 root root    6 Dec 21 08:55 runtimes
+drwx------.  2 root root    6 Dec 18 11:48 swarm
+drwx------.  2 root root    6 Dec 21 10:31 tmp
+drwx-----x.  8 root root 4096 Dec 21 14:14 volumes
+
+[root@dockerhost docker]# cd volumes/
+[root@dockerhost volumes]# ls
+2aeef992c5865a360ac9bd768a56405893e162c72ef519e9bb5430594b810c9c
+72dc19e4e3166c402e5f1786fc9db8a0afb3487946efbb64bcea846290eeccc3
+7eaeb4f47b55cdd520bf397bf91712dddb355b9aa4fb4176f8fc0f8f9af18bba
+backingFsBlockDev
+dff1a1d20d85982aa611d433558e530c15c21dabb9978c4e08bd2806d4a1586e
+metadata.db
+mydata-vol
+testvol
+[root@dockerhost volumes]# cd mydata-vol/
+[root@dockerhost mydata-vol]# ll
+total 0
+drwxr-xr-x. 2 root root 30 Dec 21 14:25 _data
+[root@dockerhost mydata-vol]# cd
+[root@dockerhost ~]# cd -
+/var/lib/docker/volumes/mydata-vol
+[root@dockerhost mydata-vol]# cd _data/
+[root@dockerhost _data]# pwd
+/var/lib/docker/volumes/mydata-vol/_data
+[root@dockerhost _data]# ls -l
+total 4
+-rw-r--r--. 1 root root 20 Dec 21 14:25 testfile1-worker
+[root@dockerhost _data]# cat testfile1-worker 
+test file 1 - work 
+>>위에서 실습했던 도커볼륨의 데이터들이 실제 경로로 저장됨을 알 수 있었다.
+
+# 도커볼륨의 삭제
+[root@dockerhost ~]# docker volume rm testvol mydata-vol 
+testvol
+mydata-vol
+으로 삭제했다.
+
+# 도커 컨테이너 이미지를 관리하는 방법
+Docker Container Image 생성방법
+-	명령어를 통한 이미지생성 (명령형)
+docker container commit _내가 사용하던 환경으로 image화
+-	DockerFile을 통한 이미지생성 (선언형)
+
+사용중인 Container 에서 명령어 기반으로 Docker Container Image 생성
+$ docker container commit  CONTAINER  IMAGE_REPO:TAG
+$ docker commit  CONTAINER  IMAGE_REPO:TAG
+>간단함이 장점이지만, 단점으로 기존 사용하던 상태로 이미지를 만드는것이므로 호환이 되는경우나 호환되지 않는경우도 있을 수 있음(불안정)
+
+#실습
+우선 컨테이너를 하나 만듦.
+[root@dockerhost ~]# docker container run -dt --name rocky9 rockylinux:9
+b7cd3ba92cbf7c41a8d6cb7adf548c02d3a581a7cfe58e5638ef5b7ffb32a2ff
+[root@dockerhost ~]# docker container exec -it rocky9 bash
+[root@b7cd3ba92cbf /]# yum install net-tools iputils vim -y
+
+[root@b7cd3ba92cbf /]# echo "root file 1 " > rootfile1.txt
+[root@b7cd3ba92cbf /]# echo "root file 2 " > rootfile2.txt
+
+[root@b7cd3ba92cbf /]# cd etc
+[root@b7cd3ba92cbf etc]# vim /etc/motd
+[root@b7cd3ba92cbf etc]# cat /etc/motd
+Hello Docker Custom Image!
+
+( 다른 도커호스트 탭에서 )
+도커이미지를 생성한다(commit)
+[user@dockerhost ~]$ docker container commit rocky9 rocky9-custom:v0.1
+sha256:16710e289d5d4f90360a77a4aab79b3b6fabcbd13d5935618bb8021e93b15897 
+[user@dockerhost ~]$ docker image ls
+REPOSITORY      TAG       IMAGE ID       CREATED          SIZE
+rocky9-custom   v0.1      16710e289d5d   19 seconds ago   249MB
+mysql           latest    df8662dadd4f   2 days ago       619MB
+busybox         latest    f5fb98afcf9f   2 weeks ago      4.26MB
+rockylinux      9         b72d2d915008   2 weeks ago      176MB
+httpd           2.4       6fd77d7e5eb7   2 months ago     167MB
+centos          7         eeb6ee3f44bd   2 years ago      204MB
+>조회해보면 rocky9-custom 이라는 이미지가 생성되었다.
+이 이미지로 컨테이너를 실행해보자. 
+[user@dockerhost ~]$ docker container run -dt --name rocky9-new rocky9-custom:v0.1 
+befefbeb832053e67cc40d4b608ee41b73e9ee368dfc3bcdf836814775dc44cd
+>방금 만든 로키9커스텀:v0.1 (로컬안에 있으므로 pull하지 않음)으로 실행했다.
+
+이제 도커 컨테이너를 조회해보면 
+[user@dockerhost ~]$ docker container ls
+CONTAINER ID   IMAGE                COMMAND       CREATED          STATUS          PORTS     NAMES
+befefbeb8320   rocky9-custom:v0.1   "/bin/bash"   54 seconds ago   Up 53 seconds             rocky9-new
+b7cd3ba92cbf   rockylinux:9         "/bin/bash"   4 minutes ago    Up 4 minutes              rocky9
+두개의 컨테이너가 조회된다.
+
+이제 새로만든 컨테이너로 들어가서 설정해둔 패키지가 있는지 확인해본다.
+[user@dockerhost ~]$ docker container exec -it rocky9-new bash
+[root@befefbeb8320 /]# ifconfig
+[root@befefbeb8320 /]# ping -c 3 8.8.8.8 
+[root@befefbeb8320 /]# ls
+afs  dev  home	lib64	    media  opt	 root		rootfile2.txt  sbin  sys  usr
+bin  etc  lib	lost+found  mnt    proc  rootfile1.txt	run	       srv   tmp  var
+[root@befefbeb8320 /]# cat /rootfile1.txt
+root file 1 
+[root@befefbeb8320 /]# cat /rootfile2.txt
+root file 2 
+>>명령어도 실행되며, 만든 rootfile 모두 조회된다.
+
+#Docker Container Image 관리 관련 명령어들 
+-Docker Container Image를 Layer 단위로 tar 파일에 저장
+$ docker image save -o TAR_FILE  IMAGE_REPO:TAG
+$ docker save -o TAR_FILE  IMAGE_REPO:TAG
+
+-Docker Container Image를 불러오기
+$ docker image load  -i TAR_FILE
+$ docker load  -i TAR_FILE
+
+-Docker Container의 데이터를 추출하여 tar 아카이브로 저장
+$ docker container export  -o  TAR_FILE  CONTAINER
+$ docker export  -o  TAR_FILE  CONTAINER
+
+-Docker Container의 추출한 데이터가 있는 tar 파일을 사용하여 도커이미지 생성하기
+$ docker image import TAR_FILE IMAGE_REPO:TAG
+$ docker import TAR_FILE IMAGE_REPO:TAG
+
+
+#실습
+도커이미지를 조회해보자.
+[root@dockerhost ~]# docker image ls
+REPOSITORY      TAG       IMAGE ID       CREATED          SIZE
+rocky9-custom   v0.1      16710e289d5d   31 minutes ago   249MB
+mysql           latest    df8662dadd4f   2 days ago       619MB
+busybox         latest    f5fb98afcf9f   2 weeks ago      4.26MB
+rockylinux      9         b72d2d915008   2 weeks ago      176MB
+httpd           2.4       6fd77d7e5eb7   2 months ago     167MB
+centos          7         eeb6ee3f44bd   2 years ago      204MB
+[root@dockerhost ~]# 
+도커이미지를 저장해본다 (tar형식)
+[root@dockerhost ~]# docker image save -o centos7-save.tar centos:7
+[root@dockerhost ~]# ls
+anaconda-ks.cfg  centos7-save.tar  Desktop  Documents  Downloads  Music  Pictures  Public  Templates  Videos
+빨간색으로 tar파일이 저장되어있는것을 알수있다. tar파일을 확인해보자  (tar tvf :확인)
+[root@dockerhost ~]# tar tvf centos7-save.tar 
+drwxr-xr-x 0/0               0 2021-09-16 03:20 c53e75c6a0b3ad7564ccaa15f7a88502b533925ef48197329040f7256319384f/
+-rw-r--r-- 0/0               3 2021-09-16 03:20 c53e75c6a0b3ad7564ccaa15f7a88502b533925ef48197329040f7256319384f/VERSION
+-rw-r--r-- 0/0            1952 2021-09-16 03:20 c53e75c6a0b3ad7564ccaa15f7a88502b533925ef48197329040f7256319384f/json
+-rw-r--r-- 0/0       211685376 2021-09-16 03:20 c53e75c6a0b3ad7564ccaa15f7a88502b533925ef48197329040f7256319384f/layer.tar
+-rw-r--r-- 0/0            2754 2021-09-16 03:20 eeb6ee3f44bd0b5103bb561b4c16bcb82328cfe5809ab675bb17ab3a16c517c9.json
+-rw-r--r-- 0/0             197 1970-01-01 09:00 manifest.json
+-rw-r--r-- 0/0              84 1970-01-01 09:00 repositories
+
+#도커 이미지 로드하기 (불러오기)
+이미지를 확인하고, 삭제해본다
+[root@dockerhost ~]# docker image ls
+REPOSITORY      TAG       IMAGE ID       CREATED          SIZE
+rocky9-custom   v0.1      16710e289d5d   39 minutes ago   249MB
+mysql           latest    df8662dadd4f   2 days ago       619MB
+busybox         latest    f5fb98afcf9f   2 weeks ago      4.26MB
+rockylinux      9         b72d2d915008   2 weeks ago      176MB
+httpd           2.4       6fd77d7e5eb7   2 months ago     167MB
+centos          7         eeb6ee3f44bd   2 years ago      204MB
+[root@dockerhost ~]# docker image rm centos:7 
+Untagged: centos:7
+Untagged: centos@sha256:be65f488b7764ad3638f236b7b515b3678369a5124c47b8d32916d6487418ea4
+Deleted: sha256:eeb6ee3f44bd0b5103bb561b4c16bcb82328cfe5809ab675bb17ab3a16c517c9
+Deleted: sha256:174f5685490326fc0a1c0f5570b8663732189b327007e47ff13d2ca59673db02
+
+이번엔 이미지를 로드해보자 
+[root@dockerhost ~]# docker image load -i centos7-save.tar 
+174f56854903: Loading layer [==================================================>]  211.7MB/211.7MB
+Loaded image: centos:7
+[root@dockerhost ~]# docker image ls
+REPOSITORY      TAG       IMAGE ID       CREATED          SIZE
+rocky9-custom   v0.1      16710e289d5d   40 minutes ago   249MB
+mysql           latest    df8662dadd4f   2 days ago       619MB
+busybox         latest    f5fb98afcf9f   2 weeks ago      4.26MB
+rockylinux      9         b72d2d915008   2 weeks ago      176MB
+httpd           2.4       6fd77d7e5eb7   2 months ago     167MB
+centos          7         eeb6ee3f44bd   2 years ago      204MB
+>다시 centos  container image가 불러와졌다.
+
+#컨테이너 export 로 tar아카이브에 저장
+일단 실행시켜주자
+[root@dockerhost ~]# docker container run -dt --name rocky9-run rockylinux:9
+4e8c6a48d54f8c8587125f558af881d7c98d71950467f06f358b5c408009c361
+[root@dockerhost ~]# docker container exec -it rocky9-run 
+
+아카이빙으로 추출해두자.
+[root@dockerhost ~]# docker container export -o rocky9-run-export.tar rocky9-run
+[root@dockerhost ~]# ls
+anaconda-ks.cfg   Desktop    Downloads  Pictures  rocky9-run-export.tar  Videos
+centos7-save.tar  Documents  Music      Public    Templates
+확인해보면
+[root@dockerhost ~]# tar tvf rocky9-run-export.tar | more
+>>최상위디렉터리부터 파일들이 저장되어 있음을 확인할 수 있었다.
+이제 다시 import해보자
+[root@dockerhost ~]# docker image import rocky9-run-export.tar rocky9-import:v0.1
+sha256:1257af70228bdc3bb7616193331d4c956a98088fd00178ee1d0f8d0208bef369
+
+이미지를 확인해보자.
+[root@dockerhost ~]# docker image ls
+REPOSITORY      TAG       IMAGE ID       CREATED          SIZE
+rocky9-import   v0.1      1257af70228b   55 seconds ago   176MB
+rocky9-custom   v0.1      16710e289d5d   58 minutes ago   249MB
+mysql           latest    df8662dadd4f   2 days ago       619MB
+busybox         latest    f5fb98afcf9f   2 weeks ago      4.26MB
+rockylinux      9         b72d2d915008   2 weeks ago      176MB
+httpd           2.4       6fd77d7e5eb7   2 months ago     167MB
+centos          7         eeb6ee3f44bd   2 years ago      204MB
+>import된 이미지 rocky9-import가 생성됐다.
+
+
+
