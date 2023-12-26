@@ -1,0 +1,181 @@
+19주차 월요일 메모 ( Kubernetes _ vagrant, 쿠버네티스 설치 )
+2023 12 26 
+kubernetes , vagrant 
+
+이번시간은 쿠버네티스 첫 시간이다.
+Kubernetes
+   구글에서 개발하여 CNCF에서 관리하는 오픈소스 컨테이너 오케스트레이션 도구
+Kubernetes의 주요 기능
+ - Container Platform
+ - Microservice  
+ - 이식성 있는 Cloud Platform 
+
+Kubernetes에서 제공하지 않는 기능
+ - CI/CD 파이프라인 기능 미제공
+ - 애플리케이션 레벨의 서비스 미제공
+ - 로깅, 모니터링, 경고 솔루션 미제공
+Kubernetes Architecture
+ - Kubernetes Cluster 구성요소 : Control Plane, Nodes, Add-on
+https://kubernetes.io/ko/docs/concepts/overview/components/
+
+ 
+Control Plane : Kubernetes Cluster를 제어하는 서버
+Node :  Container를 실행하기 위한 Computing Resource를 제공하는 머신
+
+
+Vagrant
+쿠버네티스 가상환경 구성 
+•	가상 머신 기반 개발 환경을 관리하는 도구, Hashicorp에서 개발함.
+•	사용자의 요구에 맞게 시스템 자원을 할당, 배치, 배해 두었다가 필요할 때 시스템을 사용할 수 있는 상태로 만들어줌.
+vagrant 파일을 다운받고, 이를 notepad++로 열어보면 컨트롤노드,각 노드를 볼 수 있다.
+ 
+루비언어로 생성되었으며 이를 cmd에서 호출해본다.
+
+-vagrant 플러그인 인스톨
+Vagrant 설정
+C:\> mkdir C:\Users\user\kube
+C:\> cd C:\Users\user\kube
+C:\Users\user\kube> vagrant plugin install vagrant-hostmanager
+C:\Users\user\kube> vagrant plugin install vagrant-disksize
+ 
+
+*문제가 있어서 지워야 할 때
+C:\Users\user\kube> vagrant destroy -f
+
+Vagrant를 이용한 가상머신 생성
+C:\Users\user\kube> vagrant up
+ 
+버추얼박스에서 열어본다.
+ 
+백그라운드 상태로 실행되고있다.
+kube-control1
+
+-패스워드로 접근할 수 있도록 설정하기
+C:\Users\USER\kube>vagrant ssh kube-control1
+Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-91-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  System information as of Tue Dec 26 07:33:09 UTC 2023
+
+  System load:  0.0               Processes:               98
+  Usage of /:   3.7% of 38.70GB   Users logged in:         0
+  Memory usage: 6%                IPv4 address for enp0s3: 10.0.2.15
+  Swap usage:   0%                IPv4 address for enp0s8: 192.168.56.11
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+0 updates can be applied immediately.
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+The list of available updates is more than a week old.
+To check for new updates run: sudo apt update
+
+vagrant@kube-control1:~$
+>>로 바뀐다.
+
+vagrant@kube-control1:~$ sudo -i
+root@kube-control1:~# vi /etc/ssh/sshd_config
+57 PasswordAuthentication yes로 변경후 저장
+root@kube-control1:~# systemctl restart ssh.service
+>다시 로그인한다(node 1, node 2, node 3도 동일하게 설정)
+>>C:\Users\USER\kube>vagrant ssh kube-node1,2,3 하고 위 내용을 그대로 반복설정하기
+
+
+윈도우 cmd (powershell)을 모든 노드에서 실행할것이다.
+ssh vagrant@192.168.56.11  - control1
+ssh vagrant@192.168.56.21  - node1
+ssh vagrant@192.168.56.22  - node2
+ssh vagrant@192.168.56.23  - node3 
+vagrant - pw
+
+스왑연결 해제하기
+sudo swapoff -a
+sudo vim /etc/fstab
+ 확인을 해보면 swap 부분이 보이지 않기때문에 따로 주석처리할 필요가 없다.
+만약 스왑영역이 등록되어있다면, 주석처리를 꼭 해야함.(안쓰도록)
+
+Ubuntu APT Repository 추가를 위한 패키지 설치
+sudo apt-get update -y
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release -y
+
+Docker Repository 추가(검증 키를 추가하는 과정임)
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+echo \
+> "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+>  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update -y
+
+Docker Engine 및 containerd.io Container Runtime 설치
+sudo apt-get install docker-ce docker-ce-cli containerd.io -y
+
+>>이 모든 과정이 끝났다면, 도커와 쿠버네티스를 사용할 준비가 된 것이다. 
+ 
+
+# 쿠버네티스 설치 이전에 해야하는 과정
+
+$ sudo docker info | grep -i cgroup
+현: Cgroup Driver: systemd   ///   Cgroup Driver: cgroupfs가 나와야 한다고한다.
+버전이 바뀌어서 다시 새버전으로 다운로드한다.
+
+Kubernetes APT Repository 추가
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+sudo apt-get update
+
+sudo apt-get install -y kubelet kubeadm kubectl
+
+sudo apt-mark hold kubelet kubeadm kubectl
+>패키지를 고정해주는 작업이다.
+>>여기까지는 모든 가상노드들에서 작업을 동일하게 해줬다. 이후부터는 각각 조금씩 다르다.
+
+(kube-control1) - Control Plane에서
+
+
+vagrant@kube-control1:~$ sudo vim /etc/containerd/config.toml
+>15 disabled_plugins = ["cri"] 이 부분을 주석처리해준다.
+vagrant@kube-control1:~$ sudo systemctl restart containerd
+
+Kubernetes Cluster 생성
+sudo kubeadm init --control-plane-endpoint 192.168.56.11 --pod-network-cidr 192.168.0.0/16 --apiserver-advertise-address 192.168.56.11
+
+Kubernetes Cluster 관리를 위한 인증 정보 추가
+vagrant@kube-control1:~$ mkdir -p $HOME/.kube
+vagrant@kube-control1:~$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+vagrant@kube-control1:~$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Kubernetes Cluster 네트워크 구성을 위한 Calico CNI 설치 (Calico Operator)
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.3/manifests/tigera-operator.yaml
+
+wget https://raw.githubusercontent.com/projectcalico/calico/v3.26.3/manifests/custom-resources.yaml
+
+vim custom-resources.yaml
+...
+    nodeAddressAutodetectionV4:
+      interface: enp0s8
+...
+
+kubectl create -f custom-resources.yaml
+
+
+[kube-node1 ~ kube-node3(Worker Nodes)에서만 진행]
+
+Kubernetes Cluster에 Nodes 가입 (kube-control1에서 2번째 kubeadm 명령어 복사 후 실행)
+
+sudo kubeadm join 192.168.56.11:6443 --token XXXXXXX \
+    --discovery-token-ca-cert-hash sha256:XXXXXX
+
+
+
+
+
