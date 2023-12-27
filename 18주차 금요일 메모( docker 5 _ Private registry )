@@ -1,0 +1,838 @@
+18주차 금요일 메모( Docker 5_Private registry )
+
+1. 도커 개요
+2. 도커 기본 명령어   
+3. 도커 네트워크
+4. 도커 볼륨
+5. 도커 이미지 관리
+6. 도커 Private Registry v
+
+# 도커 컨테이너 데이터 저장 (도커 저장소 개념) 
+Docker Container의 데이터 저장방법
+ 
+1. Bind Mount (바인드 마운트) 
+ Docker Host의 Filesystem 저장공간을 제공
+2. Docker Volume (도커 볼륨) 
+ Docker Container에 저장공간을 제공하는 Docker의 Object
+>> 자주 접근 및 편집해야한다면 바인드마운트, 간편한것은 볼륨마운트
+
+#도커볼륨 복기 
+도커 바인드마운트를 해본다
+[user@dockerhost ~]$ docker container create -it -v /home/user/data/:/work --name worker rockylinux:9
+273a94a678ab1306c2e4990674da8abd85a6a5b6ae91183eafd1fb4ef43ff605
+
+inspect로 worker의 상세정보를 조회해보자.
+[user@dockerhost ~]$ docker container inspect worker  
+~~
+        "HostConfig": {
+            "Binds": [
+                "/home/user/data/:/work"
+~~
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/user/data",
+                "Destination": "/work",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+>> /home/user/data 에서 /work 로의 바인드가 되어있음을 확인가능하다.
+worker 컨테이너를 시작하고, 명령을 내려보자
+[user@dockerhost ~]$ docker container start worker
+worker
+[user@dockerhost ~]$ docker container exec worker ls -lR /work 
+/work:
+total 0
+drwxr-xr-x. 2 1000 1000 41 Dec 21 02:59 web
+
+/work/web:
+total 8
+-rw-r--r--. 1 1000 1000 13 Dec 21 02:44 index.html
+-rw-r--r--. 1 root root 10 Dec 21 02:59 test.html
+
+>>BindMount 도커볼륨이 된것을 확인할 수 있었다.
+
+#도커 컨테이너 이미지 관리방법 복기
+Docker Container Image 생성 방법
+ - 명령어를 통한 이미지 생성
+   - docker container commit
+ - Dockerfile을 통한 이미지 생성
+
+-사용중인 Container에서 명령어 기반으로 Docker Container Image 생성
+$ docker container commit  CONTAINER  IMAGE_REPO:TAG
+$ docker commit  CONTAINER  IMAGE_REPO:TAG
+>>commit 이전에 1.’컨테이너를 실행’하고, 2.’사용하고자하는 환경을 구성(설치 및 생성)’한다음에 이것을 3.’이미지로서 생성’하고 그 다음 4.’Commit을 통해 사용’하는 방법임을 유의하자.
+
+-Docker Container Image 관리 관련 명령어
+Docker Container Image를 Layer 단위로 tar 파일에 저장 // save & load 
+$ docker image save  -o TAR_FILE  IMAGE_REPO:TAG
+$ docker save  -o TAR_FILE  IMAGE_REPO:TAG
+~~
+$ docker image load  -i TAR_FILE
+$ docker load  -i TAR_FILE
+
+-Docker Container의 데이터를 추출하여 tar 아카이브로 저장 // export & import 
+$ docker container export  -o  TAR_FILE  CONTAINER
+$ docker export  -o  TAR_FILE  CONTAINER
+
+추출한 데이터가 있는 tar 파일로 Docker Container Image 생성
+$ docker image import  TAR_FILE  IMAGE_REPO:TAG
+$ docker import  TAR_FILE  IMAGE_REPO:TAG
+
+Docker Container Image 생성 방법 (두번째- Dockerfile 이용)
+ - 명령어를 통한 이미지 생성
+   - docker container commit
+ - Dockerfile을 통한 이미지 생성
+
+Dockerfile
+  - Docker Container Image 생성을 위한 코드 형태의 정의 파일 (선언형)
+
+Dockerfile 명령어/지시어 정리
+https://docs.docker.com/engine/reference/builder/
+
+명령어	설명	비고
+FROM  이미지[:태그]	Base Image 지정	
+RUN  명령어	명령어 실행	
+CMD 명령어	컨테이너 실행시 실행 명령어	
+LABEL KEY=VALUE	레이블 지정	
+EXPOSE  포트
+EXPOSE 포트/프로토콜	포트를 공개	
+ENV  KEY=VALUE	환경변수 지정	
+ADD	파일/디렉터리 추가  //추가적인 기능이 있음. 	
+COPY 	파일 (단순)복사	
+ENTRYPOINT	컨테이너 시작시 기본 실행 명령어 *cmd명령어와 관련(두개가 같이쓰이면, 역할에 차이가있음-하나만 쓰일때는 지시어// )	
+VOLUME 컨테이너_내부경로	볼륨 연결	
+USER 사용자
+USER UID	사용자 지정(컨테이너에서 특정 사용자 권한으로 실행 필요시)	
+WORKDIR 디렉터리	작업 디렉터리	
+ARG NAME
+ARG NAME=VALUE	Dockerfile argument
+빌드하는과정에서 필요한 변수를 지정하는것(값을 전달)	
+ONBUILD 명령어	빌드 완료시 실행 작업	
+STOPSIGNAL	종료 시그널 지정	
+HEALTHCHECK	컨테이너 헬스체크	
+SHELL	기본 쉘 지정	
+
+>>엔트리포인트 추가설명 
+ 
+[user@dockerhost ~]$ ls -l  에서 
+엔트리포인트는 ls 이고  // CMD는 -l 의 형태로 나타난다. 
+# 도커파일 생성 및 빌드 
+Docker Container Image 빌드 명령어
+$ docker image build  -t IMAGE_REPO:TAG  BUILD_PATH
+$ docker build  -t IMAGE_REPO:TAG  BUILD_PATH
+
+Dockerfile을 통한 Docker Container Image 빌드 방법
+1. Image 빌드를 위한 작업 디렉터리 생성 및 해당 디렉터리로 이동
+   $ mkdir DIR
+   $ cd DIR
+2. Dockerfile 작성
+   $ vim Dockerfile
+3. 이미지 빌드 명령어 실행
+   $ docker image build -t IMAGE_REPO:TAG  .
+
+
+#도커파일 실습
+0. work폴더를 우선 생성하자
+[user@localhost ~]$ mkdir work
+[user@localhost ~]$ mkdir work/my_webserver
+[user@localhost ~]$ cd work/my_webserver/
+
+1.  도커파일을 작성한다.
+[user@localhost my_webserver]$ vim Dockerfile
+ 
+FROM rockylinux:9
+MAINTAINER "Hong Gil Dong <hong@example.com>"
+RUN yum install -y httpd
+CMD /usr/sbin/httpd -D FOREGROUND
+EXPOSE 80
+COPY index.html /var/www/html/index.html
+
+>>코드 설명
+~~~~~
+from = 베이스 이미지를 rockylinux:9으로 지정하겠다를 선언
+maintainer = 이미지를 작성하고 누가 빌드했는지, 유지보수하는 사람에대한 정보를 넣는 곳이다.
+run = 컨테이너 이미지를 빌드할 때 실행할 작업을 선언하는곳. 실행할 명령어가 나오면 되는것으로 웹서비스를 제공하는 웹서버 컨테이너를 만드려고하므로, yum httpd 내용이 들어갔다. *여기서 유의할 것은 일괄적으로 적용되므로, 중간에 물어보는 yes or no에 대해서 반응할 수 없다. 따라서 뭔가를 묻지 않고 바로 진행할 수 있는 명령어 형태로 작성해야 한다.
+cmd = 컨테이너가 실행될 때 시작프로세스를 지정해 줄 수 있다. 컨테이너 안에서는 systemctl 명령어를 (일반적으로)사용할 수 없으므로, 해당하는 애플리케이션 서비스가 프로세스 형태로 실행되는 명령줄을 직접 입력해서 실행해주어야 한다.  
+expose = 어떤 포트를 수신하고, 연결해줄 지 지정해야한다. 이때 사용하는 지시어가 바로 expose이며 tcp80번 포트를 사용해서 웹서비스를 제공하겠다는 뜻이다.
+copy = 웹 페이지를 넣어주는 과정이다. copy라는 지시어로 index.html 원본파일(도커파일과 같은 위치에 있는 절대경로)을 우선, 그 다음경로를 복사될 경로로 지정하여 /var/www/html/index.html로 복사되게 지정했다.
+~~~~~~
+
+2. 선언을 해놨으니 index.html 파일을 만들어준다.
+[user@dockerhost my_webserver]$ echo "My_webserver v0.1 index.html" > index.html
+[user@dockerhost my_webserver]$ ls
+Dockerfile  index.html
+
+3. 그리고 다음단계로, 이미지 빌드를 한다.
+[user@dockerhost my_webserver]$ docker image build -t my_webserver:v0.1 .
+ 
+[+] Building 14.3s (8/8) FINISHED                                                                      docker:default
+ => [internal] load build definition from Dockerfile                                  0.1s
+ => => transferring dockerfile: 275B                               		  0.0s
+ => [internal] load .dockerignore                                  		  0.1s
+ => => transferring context: 2B                                                       0.0s
+ => [internal] load metadata for docker.io/library/rockylinux:9   		   0.0s
+ => [1/3] FROM docker.io/library/rockylinux:9                     		   0.0s
+ => [internal] load build context                                                  0.1s
+ => => transferring context: 125B                                   	           0.0s
+ => [2/3] RUN yum install -y httpd                                                 13.2s
+ => [3/3] COPY index.html /var/www/html/index.html                    	          0.2s
+ => exporting to image                                                            0.6s 
+ => => exporting layers                                                           0.6s 
+ => => writing image sha256:da98123edd53ba6e8aec07cb776fc62a070aa1a4ed7eb860d52f1f491143edea               0.0s 
+ => => naming to docker.io/library/my_webserver:v0.1     
+>>실행을 하게되면 각 과정단계를 보여준다.
+
+[user@dockerhost my_webserver]$ docker image ls
+REPOSITORY      TAG       IMAGE ID       CREATED         SIZE
+my_webserver    v0.1      da98123edd53   3 minutes ago   226MB
+rocky9-import   v0.1      1257af70228b   20 hours ago    176MB
+rocky9-custom   v0.1      16710e289d5d   21 hours ago    249MB
+mysql           latest    df8662dadd4f   3 days ago      619MB
+busybox         latest    f5fb98afcf9f   2 weeks ago     4.26MB
+rockylinux      9         b72d2d915008   3 weeks ago     176MB
+httpd           2.4       6fd77d7e5eb7   2 months ago    167MB
+centos          7         eeb6ee3f44bd   2 years ago     204MB
+
+도커 컨테이너를 실행해본다.
+[user@dockerhost my_webserver]$ docker container run -d -p 8081:80 --name web1 my_webserver:v0.1
+e91a2c751c597f5a16d88a88e289fe15225503fb998fea86106a04e89ed9d531
+[user@dockerhost my_webserver]$ docker container ls -a
+CONTAINER ID   IMAGE                COMMAND                  CREATED         STATUS                      PORTS                                   NAMES
+e91a2c751c59   my_webserver:v0.1    "/bin/sh -c &apos;/usr/sb…"   6 seconds ago   Up 5 seconds                0.0.0.0:8081->80/tcp, :::8081->80/tcp   web1
+
+웹 조회를 해본다.
+[user@dockerhost my_webserver]$ curl http://localhost:8081/
+My_webserver v0.1 index.html
+>>컨테이너 이미지 빌드를 통해서 빌드를 생성하고, 이미지를 컨테이너에서 실행시켜 
+정상적으로 웹 서비스를 하는 컨테이너가 생성되고, 작동하는 것을 확인할 수 있었다.
+
+0.  테스트파일과 웹서버(업데이트) 를 생성해보자.
+[user@dockerhost my_webserver]$ echo "my_webserver:v0.2 index.html" > index.html
+[user@dockerhost my_webserver]$ echo " test page test.html " > test.html
+[user@dockerhost my_webserver]$ cat index.html
+my_webserver:v0.2 index.html
+[user@dockerhost my_webserver]$ cat test.html 
+ test page test.html 
+
+1. 도커파일을 수정한다.
+[user@dockerhost my_webserver]$ vim Dockerfile 
+ 
+FROM rockylinux:9
+MAINTAINER "Hong Gil Dong <hong@example.com>"
+RUN yum install -y httpd
+CMD /usr/sbin/httpd -D FOREGROUND
+EXPOSE 80
+COPY index.html /var/www/html/
+COPY test.html /var/www/html/
+
+
+2.이미지를 빌드한다. 
+[user@dockerhost my_webserver]$ docker image build -t my_webserver:v0.2 .
+[+] Building 0.4s (9/9) FINISHED                                                                       docker:default
+=> [internal] load build definition from Dockerfile                                                             0.1s
+=> => transferring dockerfile: 295B                                                                             0.1s
+=> [internal] load .dockerignore                                                                                0.0s
+=> => transferring context: 2B                                                                                  0.0s
+=> [internal] load metadata for docker.io/library/rockylinux:9                                                  0.0s
+=> [1/4] FROM docker.io/library/rockylinux:9                                                                    0.0s
+=> [internal] load build context                                                                                0.0s
+=> => transferring context: 244B                                                                                0.0s
+=> CACHED [2/4] RUN yum install -y httpd                                                                        0.0s
+=> [3/4] COPY index.html /var/www/html/                                                                         0.0s
+=> [4/4] COPY test.html /var/www/html/                                                                          0.1s
+=> exporting to image                                                                                           0.1s
+=> => exporting layers                                                                                          0.1s
+=> => writing image sha256:08f9003a90a7dbbaee1b829a85ec7f80568471c3f5de096673d275ac5774951b                     0.0s
+=> => naming to docker.io/library/my_webserver:v0.2                                                             0.0s
+>>과정이 상당히 빨라졌음이 체감되는데, 그 이유는 뭘까?
+작업이 되는 부분중에서 패키지설치가 진행되지 않았고, copy 로 파일 복사하는 과정만 추가되었기에 빨라졌음.
+
+[user@dockerhost my_webserver]$ docker image ls
+REPOSITORY      TAG       IMAGE ID       CREATED          SIZE
+my_webserver    v0.2      08f9003a90a7   2 minutes ago    226MB
+이미지를 확인해보면 잘 생성되어있다.
+상세정보도 확인해보자
+[user@dockerhost my_webserver]$ docker image inspect my_webserver:v0.2
+            "Layers": [
+                "sha256:c4bc4a1387e82c199a05c950a61d31aba8e1481a94c63196b82e25ac8367e5d1",
+                "sha256:23a947f6a0de041f14685a993a8a8d8b5737ee4e3d4b024f2162fbf1d1b768e5",
+                "sha256:8ba80539a8d079c85391500801275ef14b2c1b61c23710c9a4376a7e6ed6a806",
+                "sha256:b7256d2f1648c1e0e74148733a823f0b79295860d85a38d49e42120ce1b259cd"
+
+(비교용 v0.1 파일 inspect)
+            "Layers": [
+                "sha256:c4bc4a1387e82c199a05c950a61d31aba8e1481a94c63196b82e25ac8367e5d1",
+                "sha256:23a947f6a0de041f14685a993a8a8d8b5737ee4e3d4b024f2162fbf1d1b768e5",
+                "sha256:70b1931800a74ffc96e4519037496c8592a34e433f002fc83860ab63fb83875f"
+>보면 버전0.2의 layer가 좀더 생성되어있는 것을 확인 할 수 있다.
+
+3. 컨테이너를 실행한다
+[user@dockerhost my_webserver]$ docker container run -d -p 8082:80 --name web2 my_webserver:v0.2
+fcc7cd124f8adfecf67c328df0d57f8fe8e28783619a735e1c259f9a848a69cc
+>8082포트로 web2 를 실행했다.
+
+4. 웹페이지를 조회해보자. 
+[user@dockerhost my_webserver]$ curl http://localhost:8082/
+my_webserver:v0.2 index.html
+[user@dockerhost my_webserver]$ curl http://localhost:8082/test.html
+ test page test.html 
+[user@dockerhost my_webserver]$ curl http://localhost:8082/index.html
+my_webserver:v0.2 index.html
+ >>변경된 부분에 대해서 확인할 수 있었다. 
+[user@dockerhost my_webserver]$ curl http://localhost:8081/test.html
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<html><head>
+<title>404 Not Found</title>
+</head><body>
+<h1>Not Found</h1>
+<p>The requested URL was not found on this server.</p>
+</body></html>
+>>참고로 8081포트는 test.html이 없었기에 이런 코드가 뜬다.
+
+다시 폴더와 도커파일에 넣을 파일을 생성한다. 
+[user@dockerhost my_webserver]$ pwd
+/home/user/work/my_webserver
+[user@dockerhost my_webserver]$ cd ..
+[user@dockerhost work]$ mkdir example1
+[user@dockerhost work]$ cd example1/
+[user@dockerhost example1]$ pwd
+/home/user/work/example1
+[user@dockerhost example1]$ echo "Hello Docker" > message.txt
+
+도커파일도 생성해주자
+[user@dockerhost example1]$ vim Dockerfile
+ 
+FROM alpine:latest
+RUN apk update && apk add figlet
+ADD message.txt /
+CMD cat message.txt | figlet
+
+
+이미지파일을 생성한다.
+[user@dockerhost example1]$ docker image build -t hello:greeting .
+이미지를 확인해본다.
+[user@dockerhost example1]$ docker image ls                                                                           
+REPOSITORY      TAG        IMAGE ID       CREATED          SIZE
+hello           greeting   92959bc32c82   22 seconds ago   10.2MB
+>여기에 사용한 alpine linux 패키지는 특히나 사이즈가 작은 특징을 가지고 있다.
+이미지 경량화를 하려면 alpine 이미지를 사용하는 것이 좋겠다.
+이미지를 일회성으로 실행해보자  (--rm 옵션)
+ 
+[user@dockerhost example1]$ docker container run --rm --name hello hello:greeting
+ _   _      _ _         ____             _             
+| | | | ___| | | ___   |  _ \  ___   ___| | _____ _ __ 
+| |_| |/ _ \ | |/ _ \  | | | |/ _ \ / __| |/ / _ \ &apos;__|
+|  _  |  __/ | | (_) | | |_| | (_) | (__|   <  __/ |   
+|_| |_|\___|_|_|\___/  |____/ \___/ \___|_|\_\___|_|   
+                                                       
+>>이 결과로, hello docker라는 글자형태로(figlet) 도출해주는 컨테이너를 만들어 실행했다.
+
+Debian 이미지를 가지고 만들어보자.
+[user@dockerhost example1]$ cd ..
+[user@dockerhost work]$ mkdir webserver2-debian1
+[user@dockerhost work]$ cd webserver2-debian1
+[user@dockerhost webserver2-debian1]$ pwd
+/home/user/work/webserver2-debian1
+
+도커파일을 작성한다
+[user@dockerhost webserver2-debian1]$ vim Dockerfile
+ 
+FROM debian:bookworm
+MAINTAINER Hong Gildong <hong@example.com>
+
+RUN apt-get update
+RUN apt-get install -y tzdata
+RUN apt-get install -y apache2
+
+EXPOSE 80/tcp
+
+CMD ["/usr/sbin/apachectl", "-D", "FOREGROUND"]
+
+COPY index.html /var/www/html/index.html
+
+>>코드설명
+tzdata는 타임존 데이터를 불러오는 데몬이다.
+apache2는 데비안 웹 데몬이다.
+80/tcp 포트를 이용할것이며
+CMD 표기법이 살짝 특이한데, 도커파일작성에는 두가지 방법이 있다. 
+하나는 SHELL 방식인데, 컨테이너가 실행이되었을 때 shell이 먼저 뜨게되고 shell 밑에서 명령어작업이 실행된다.  
+다른하나는 LIST방식이다. shell이 실행되지 않고, 명령어 자체만 실행되는 방식으로 명령어 작업을 수행한다.(shell보다 조금더 빠르게 작업된다). 위의 경우 LIST형태로 작성되었다.
+>프로세스 실행결과는 차이가 없으나 실행되는 방식에는 차이가 있음.
+>>cmd /usr/sbin/apachectl -D FOREGROUND 로 실행한것과 동일한 방법이다.
+
+다음으로 웹 index파일을 생성하고 이미지를 빌드해보자
+[user@dockerhost webserver2-debian1]$ echo "webserver2 index.html" > index.html
+[user@dockerhost webserver2-debian1]$ 
+[user@dockerhost webserver2-debian1]$ docker image build -t webserver2:v0.1 .
+[+] Building 34.8s (10/10) FINISHED       
+
+컨테이너를 실행해보자.
+[user@dockerhost webserver2-debian1]$ docker container run -d -p 8083:80 --name web3 webserver2:v0.1
+1ffcac0983fcef6295fa34224acd1cb5350a614d94859f6f48443d09cf6a8afd
+웹을 조회해보면 잘 나타난다. 
+[user@dockerhost webserver2-debian1]$ curl http://localhost:8083/
+webserver2 index.html
+
+
+# [ONBUILD 실습]
+-Dockerfile 이 없을때 따로 지정하는 방법 (도커파일의 특정 위치를 지정하기)
+ -f 옵션을 사용한다.
+[user@dockerhost webserver2-debian1]$ cd ..
+[user@dockerhost work]$ mkdir webserver3-onbuild
+[user@dockerhost work]$ cd webserver3-onbuild/
+[user@dockerhost webserver3-onbuild]$ pwd
+/home/user/work/webserver3-onbuild
+
+>구글드라이브 공유문서함에서(외부) webcontent.tar을 받아온다.
+ 
+host의 웹브라우저로 다운로드받고, 이를 온빌드폴더에 넣어주자.
+ 
+[user@dockerhost webserver3-onbuild]$ cp ~/Downloads/webcontent.tar  .
+[user@dockerhost webserver3-onbuild]$ ls
+Dockerfile.web-golden  webcontent.tar
+
+도커파일 생성한다
+[user@dockerhost webserver3-onbuild]$ vim Dockerfile.web-golden
+ 
+FROM ubuntu:18.04
+
+RUN apt-get update
+RUN apt-get install -y nginx
+
+EXPOSE 80
+
+ONBUILD ADD webcontent.tar /var/www/html/
+
+CMD ["nginx", "-g", "daemon off;"]
+
+
+도커파일을 생성했으니, 이미지를 빌드해본다.
+[user@dockerhost webserver3-onbuild]$ docker image build -t webserver3-onbuild:1.0-goldenweb -f Dockerfile.web-golden .
+>>여기서 특이사항은, Dockerfile이 없다면 이미지빌드에 에러가 발생한다. dockerfile 자체가 아니면 인식하지 못하므로, dockerfile.web-golden과 같이 다른형식의 도커파일을 따로 지정해줘야 함. 그러므로 -f Dockerfile.web-golden 을 사용해서 특정해줬다.
+
+도커이미지를 조회해보자.
+[user@dockerhost webserver3-onbuild]$ docker image ls
+REPOSITORY           TAG             IMAGE ID       CREATED              SIZE                                         
+webserver3-onbuild   1.0-goldenweb   068bafc3e33c   About a minute ago   169MB
+>잘 생성되었다.
+상세정보도 보자.
+[user@dockerhost webserver3-onbuild]$ docker image ls
+REPOSITORY           TAG             IMAGE ID       CREATED              SIZE                                         
+webserver3-onbuild   1.0-goldenweb   068bafc3e33c   About a minute ago   169MB
+ 
+ 
+>>
+[user@dockerhost webserver3-onbuild]$ docker image inspect webserver3-onbuild:1.0-goldenweb 로 찾아보면, “OnBuild” 항목을 찾을 수 있다. 도커파일에서 ADD webcontent.tar /var/www/html/ 을 선언해줬으므로 경로를 확인가능하다. 
+
+Webserver의 Golden Image에서 웹컨텐츠 확인하기
+[user@dockerhost webserver3-onbuild]$ docker container run -d -p 80:80 --name web-golden-test webserver3-onbuild:1.0-goldenweb
+e6e15008bc985c2eecc17890baa401e714ce12632d06c6cfd69092f14e951c46
+먼저 도커 컨테이너를 실행시켜줬다.
+그러고 웹으로가서 확인을 하면 ( localhost:80 ) 
+ 
+>>nginx 기본 웹이 등장한다.
+이 웹을 중지하고 삭제하자
+[user@dockerhost webserver3-onbuild]$ docker container stop  web-golden-test 
+web-golden-test
+[user@dockerhost webserver3-onbuild]$ docker container rm  web-golden-test 
+web-golden-test
+또다른 도커파일하나를 작성한다.
+크게 작성할 필요 없이 한줄만 작성해준다
+[user@dockerhost webserver3-onbuild]$ vim Dockerfile
+ 
+FROM webserver3-onbuild:1.0-goldenweb
+
+
+도커이미지를 빌드한다.
+[user@dockerhost webserver3-onbuild]$ docker image build -t webserver3-onbuild:1.0 .
+[user@dockerhost webserver3-onbuild]$ docker image ls
+REPOSITORY           TAG             IMAGE ID       CREATED          SIZE
+webserver3-onbuild   1.0             e0b7ba54c5e7   13 seconds ago   169MB
+
+컨테이너를 실행한다
+[user@dockerhost webserver3-onbuild]$ docker container run -d -p 80:80 --name web01 webserver3-onbuild:1.0
+6db2e5ec3e5e0b6b9b00e00d049377bfb5a2c3f13327a1625b05ddb6c8e0ea13
+
+그리고 웹을 다시 조회해보면?
+[user@dockerhost webserver3-onbuild]$ curl http://localhost/
+<html>
+<head>
+<title>Simple Webcontent</title>
+</head>
+<body>
+
+<h1>Simple Webcontent</h1>
+
+<img src="images/earth01.png" width="200px;" height="200px;">
+
+</body>
+</html>
+ 
+>>심플웹컨텐츠가 나타나게된다.
+
+# Multi-Stage 기법 (이미지 크기 경량화 기법-최적화) 
+ - Docker Container Image를 최적화하기 위한 기법 중 하나로 Application Container의 불필요한 파일을 제거하고 간소화하여 최종 Container Image를 빌드하는 기법
+ - Container Image 빌드 과정을 여러 단계를 거쳐서 수행함
+
+[user@dockerhost webserver3-onbuild]$ cd ..
+[user@dockerhost work]$ mkdir multi-stage
+[user@dockerhost work]$ cd multi-stage/
+[user@dockerhost multi-stage]$ pwd
+/home/user/work/multi-stage
+
+도커파일을 작성해주자
+[user@dockerhost multi-stage]$ vim Dockerfile
+ 
+FROM golang:1.21 as build
+WORKDIR /src
+COPY <<EOF /src/main.go
+package main
+
+import "fmt"
+
+func main() {
+  fmt.Println("hello, world")
+}
+EOF
+RUN go build -o /bin/hello ./main.go
+
+FROM scratch
+COPY --from=build /bin/hello /bin/hello
+CMD ["/bin/hello"]
+>>코드내용 설명
+현재 도커파일 코드내용을 보면 FROM golang, FROM scratch 문단 총 두개로 구성되어있다.
+고랭 이미지를 사용할수 있는 환경을 컨테이너 이미지를, as build- 컨테이너 이미지부분을 build라고 부르겠다는 의미이다. 
+/src라는 디렉터리를 작업디렉터리로 지정하고,
+COPY <<EOF /src/main.go = main.go라는 내용을 가진 파일을 컨테이너 안에 넣겠다를 넣는것인데 ‘EOF라는것이 나오기 전까지’ 파일을 작성하겠다는 내용이다. 잘 보면 RUN지시어 바로위에 EOF가 존재하는것을 볼 수 있다. 
+RUN /bin/hello 를 실행파일로 빌드하겠다는 내용이다.
+>고랭 애플리케이션을 빌드하고 실행할 수 있는 부분까지를 하나의 이미지로 둔 것이다.
+
+다음 FROM이미지는 Scratch이고
+scratch는 백지상태의 아무것도없는 이미지를 스크래치 이미지로 부른다. 스크래치이미지같은 경우에는 아무것도 없는 상태에서 파일이나 환경을 수동으로 갖추어서 이미지를 만드는 그런 환경을 나타내는것이다(수고가 많이 드므로, scratch이미지보다는 다른 이미지를 쓰게된다.) 이를
+COPY 하려는데 --from-build_ 이 도커파일의 이미지를 만드는과정에서 컨테이너가 만들어지는데 그 컨테이너에 있는것을 뒤 파일에서 복사해오겠다는것이다. /bin/hello를 뒷 /bin/hello에 복사해오겠다는것.
+CMD - 내용을 실행하겠다는 지시어이다.
+~~
+이 이미지를 빌드해보자. 
+[user@dockerhost multi-stage]$ docker image build -t hello-multi:v1.0 .
+ 
+도커허브로부터 이미지를 받아오고, 하나하나 실행이 완료된다.
+
+ => [internal] load build definition from Dockerfile                                                             0.1s
+ => => transferring dockerfile: 353B                                                                             0.0s
+ => [internal] load .dockerignore                                                                                0.1s
+ => => transferring context: 2B                                                                                  0.0s
+ => [internal] load metadata for docker.io/library/golang:1.21                                                   2.7s
+ => [build 1/4] FROM docker.io/library/golang:1.21@sha256:672a2286da3ee7a854c3e0a56e0838918d0dbb1c186529929302  29.8s
+ => => resolve docker.io/library/golang:1.21@sha256:672a2286da3ee7a854c3e0a56e0838918d0dbb1c18652992930293312de  0.0s
+ => => sha256:672a2286da3ee7a854c3e0a56e0838918d0dbb1c18652992930293312de898a6 2.13kB / 2.13kB                   0.0s
+ => => sha256:e11dfa2443761d3f249b53c1873935d77151f3d151cd1660e184987081d84459 5.95kB / 5.95kB                   0.0s
+ => => sha256:135ba6c2ae2a9a022f53f3eee24ef213bc62e876811cd9582b91045168206873 1.58kB / 1.58kB                   0.0s
+ => => sha256:b5de22c0f5cd2ea2bb6c0524478db95bff5a294c99419ccd4a9d3ccc9873bad9 24.05MB / 24.05MB                 3.4s
+ => => sha256:bed956b3d08c0b1903d9af3e6850930eacf865b23f62bd8cf46eb1de1325c39b 92.36MB / 92.36MB                10.3s
+ => => sha256:917ee5330e73737d6095a802333d311648959399ff2c067150890162e720f863 64.13MB / 64.13MB                 7.1s
+ => => sha256:76a498520fee85f05c762d5075ba3814f09ee1c123f14a54dc68c2f14652ec12 66.98MB / 66.98MB                10.4s
+ => => extracting sha256:b5de22c0f5cd2ea2bb6c0524478db95bff5a294c99419ccd4a9d3ccc9873bad9                        4.9s
+ => => sha256:49fe8346018f3c4b4a77420527e6ea9e36e332519ade61067af355526d85b4db 156B / 156B                       7.4s
+ => => extracting sha256:917ee5330e73737d6095a802333d311648959399ff2c067150890162e720f863                        6.0s
+ => => extracting sha256:bed956b3d08c0b1903d9af3e6850930eacf865b23f62bd8cf46eb1de1325c39b                        6.4s
+ => => extracting sha256:76a498520fee85f05c762d5075ba3814f09ee1c123f14a54dc68c2f14652ec12                        7.3s
+ => => extracting sha256:49fe8346018f3c4b4a77420527e6ea9e36e332519ade61067af355526d85b4db                        0.0s
+ => [internal] preparing inline document                                                                         0.0s
+ => [build 2/4] WORKDIR /src                                                                                     0.5s
+ => [build 3/4] COPY <<EOF /src/main.go                                                                          0.2s
+ => [build 4/4] RUN go build -o /bin/hello ./main.go                                                            11.5s
+ => [stage-1 1/1] COPY --from=build /bin/hello /bin/hello                                                        0.0s
+ => exporting to image                                                                                           0.1s
+ => => exporting layers                                                                                          0.1s
+ => => writing image sha256:0909ebe1c846c5d4b143e9ead1da95eff6af4d19c01ee450e5b0e593b10da016                     0.0s
+ => => naming to docker.io/library/hello-multi:v1.0  
+
+>>내용이 참 긴데, 중요한 작업부분을 볼드표기했다.
+실행내용은 위에 서술한 코드내용과 일치함.
+최종적으로 만들고자하는 이미지파일이 빌드되었다.
+
+# 원래 이미지와 멀티스테이지로 만든 이미지의 차이를 확인하기
+도커이미지를 확인해보자.
+[user@dockerhost multi-stage]$ docker image ls
+REPOSITORY           TAG             IMAGE ID       CREATED             SIZE
+hello-multi          v1.0            0909ebe1c846   3 minutes ago       1.8MB
+golang               1.21            e11dfa244376   34 hours ago        815MB
+
+고랭 이미지는 815MB의 큰 용량을 가진 컨테이너 이미지인 반면, hello-multi라는 방금 만든 고랭기반 이미지는 같은 부류의 이미지임에도 굉장히 경량화되었는데 이런 멀티스테이지기법은 크게 두가지 의미를 가진다.
+>개발할때 소스코드로 고랭이미지를 개발하겠으나 실제 운용환경에서는 완성된 파일이 잘 실행만 되면 되므로, 디버깅할 도구등이 필요치 않다. 따라서 개발환경에서 불필요한 부분을 다 빼고 최소한의 파일만 실행파일에 넣어둔게 multi-stage기법이라고 할 수 있겠다.(경량화&최적화의 관점)
+>>또다른 의미는, 개발환경에서 디버깅할 여러가지 도구들이 앱에 포함이 되나,  최종제품에 디버깅 도구등이 포함되었을 경우 최종사용자들이 이것에 접근해서 사용할 가능성도 있다. 따라서 기술유출이나, 앱의 개조를 막고, 개발자의 작업흔적들을 없애는 등 여러가지를 미연에 방지하기 위해서 사용되기도 한다. (기술유출&디버깅접근을 방지)
+
+
+# Private Registry
+프라이빗 레지스트리는 바로 도커 허브에서 확인할 수 있다. ( https://hub.docker.com/ )
+계정을 생성하고, 레포지토리를 만드는방식이다.
+ 
+이미지 이름 및 태그 지정
+$ docker image tag   SOURCE_IMAGENAME:TAG   NEW_IMAGENAME:TAG
+
+도커 허브 로그인
+$ docker login 
+   Username: xxxx
+   Password: xxxx
+도커 허브 로그아웃
+$ docker logout
+
+이미지 업로드(push)
+$ docker image push IMAGE_REPO:TAG
+$ docker push IMAGE_REPO:TAG
+이미지 태그 지정
+$ docker image tag  SOURCE_IMAGE_REPO:TAG  NEW_IMAGE_REPO:TAG
+$ docker tag  SOURCE_IMAGE_REPO:TAG  NEW_IMAGE_REPO:TAG
+
+사설 레지스트리
+ Docker registry v2 API : https://docs.docker.com/registry/spec/api/
+ 
+사설 레지스트리 이미지 다운로드
+# docker image pull registry:2 (latest는 3.0.0-alpha.1버전인데, 불안정하다)
+
+사설 레지스트리 컨테이너 실행( 웬만하면 5000번 포트가 고정_기본값이다)
+# docker container run -d -p 5000:5000 --name registry registry:latest
+이미지 태그 지정
+# docker image tag  SOURCE_IMAGE:TAG  localhost:5000/IMAGE:TAG
+$ docker image tag my_webserver:0.1 localhost:5000/my_webserver:0.1
+$ docker image ls
+REPOSITORY                     TAG       IMAGE ID       CREATED        SIZE
+my_webserver                   0.1       5889c2282d4e   3 hours ago    402MB
+localhost:5000/my_webserver    0.1       5889c2282d4e   3 hours ago    402MB
+
+사설 레지스트리의 레포지토리 목록 확인
+# curl -X GET http://localhost:5000/v2/_catalog
+{"repositories":[]}
+
+ 이미지를 사설 레지스트리에 업로드
+# docker image push localhost:5000/my_webserver:0.1 
+
+사설 레지스트리에서 이미지 목록(레포지토리) 확인
+# curl -X GET http://localhost:5000/v2/_catalog
+{"repositories":["my_webserver"]}
+
+ 사설레지스리에서 특정 이미지 태그 목록(세부 이미지) 확인
+# curl -X GET http://localhost:5000/v2/IMAGE/tags/list
+# curl -X GET http://localhost:5000/v2/my_webserver/tags/list
+
+실행중인 컨테이너 종료 및 삭제, 이미지 삭제
+docker image prune -a
+
+$ docker image pull localhost:5000/my_webserver:0.1
+$ docker container run -d -p 80:80 --name web11 localhost:5000/my_webserver:0.1 
+
+
+#도커 레지스트리 실습
+이미지 업로드를 시도하자
+[user@dockerhost multi-stage]$ docker image push hello-multi:v1.0 
+The push refers to repository [docker.io/library/hello-multi]
+433591d4e6b7: Preparing 
+denied: requested access to the resource is denied
+>>내가만든 이미지가 바로 push(업로드)되지 않는다. 도커허브에 일반사용자가 올리기 위해서는 다음방법을 사용한다. (tag)
+[user@dockerhost multi-stage]$ docker image tag hello-multi:v1.0 mozzidocker/hello-multi:v1.0
+[user@dockerhost multi-stage]$ docker image ls
+REPOSITORY                TAG             IMAGE ID       CREATED             SIZE
+hello-multi               v1.0            0909ebe1c846   23 minutes ago      1.8MB
+mozzidocker/hello-multi   v1.0            0909ebe1c846   23 minutes ago      1.8MB
+>이러면 도커허브 계정ID로 태그되는데, 두가지 이미지의 ID도 동일하다. 물리적인 이미지에 이름(계정명)만 추가된것이다.
+이제 업로드해보자.
+[user@dockerhost multi-stage]$ docker image push mozzidocker/hello-multi:v1.0
+The push refers to repository [docker.io/mozzidocker/hello-multi]
+433591d4e6b7: Preparing 
+denied: requested access to the resource is denied
+>>그래도 안되는데, 이때는 docker host에서 도커 허브에 로그인해줘야 한다.
+
+-도커 로그인&로그아웃
+ 
+[user@dockerhost multi-stage]$ docker login
+Username: 
+Password:
+를 잘 입력하면 login Succeeded가 뜨고, 이제 다시 업로드를하면 진행된다. 
+
+[user@dockerhost multi-stage]$ docker image push mozzidocker/hello-multi:v1.0
+The push refers to repository [docker.io/mozzidocker/hello-multi]
+433591d4e6b7: Pushed 
+
+업로드한 이미지를 확인하려면, 웹에서 도커허브를 새로고침해보자.
+( https://hub.docker.com/repositories/mozzidocker )
+ 
+hello-multi 로 들어가서, tags탭으로 가면 v1.0이 보여진다.
+ 
+우선 로컬에 있는 컨테이너 이미지를 삭제해본다
+
+[user@dockerhost multi-stage]$ docker rmi mozzidocker/hello-multi:v1.0 
+Untagged: mozzidocker/hello-multi:v1.0
+Untagged: mozzidocker/hello-multi@sha256:f291e98e5e1f6b3d9870a3a9e5e35f917bb584404432a2baab4a08c20960b90c
+[user@dockerhost multi-stage]$ docker rmi hello-multi:v1.0 
+Untagged: hello-multi:v1.0
+Deleted: sha256:0909ebe1c846c5d4b143e9ead1da95eff6af4d19c01ee450e5b0e593b10da016
+물리적으로 데이터를 지우려면 전에 있던 이미지를 다 삭제해야한다.
+
+이전의 이미지가 다 삭제되었으면, 이미지를 다운로드한다(pull) -일회성으로 --rm옵션을 붙였다.
+[user@dockerhost multi-stage]$ docker container run --rm --name hello-multi mozzidocker/hello-multi:v1.0
+Unable to find image &apos;mozzidocker/hello-multi:v1.0&apos; locally
+v1.0: Pulling from mozzidocker/hello-multi
+9058553ee21c: Already exists 
+Digest: sha256:f291e98e5e1f6b3d9870a3a9e5e35f917bb584404432a2baab4a08c20960b90c
+Status: Downloaded newer image for mozzidocker/hello-multi:v1.0
+hello, world
+>>일회성으로 컨테이너가 잘 출력되었다.
+
+# 레포지토리를 public에서 private로 전환하기
+아까 만든 레포지토리의 settings 탭으로 이동한다.
+ 
+Visibility Settings에서 Public이라고 되어있는것이 보일 것이다. make private 버튼을 눌러본다
+ 
+여기서 개인용으로 전환하게되면(무료플랜은 하나만 사용할 수 있다)
+
+이렇게 전환한 뒤 이미지를 삭제후 로그아웃하고, 
+다시 받아보면, pull이 불가능하다. 
+[user@dockerhost multi-stage]$ docker rmi mozzidocker/hello-multi:v1.0 
+Untagged: mozzidocker/hello-multi:v1.0
+Untagged: mozzidocker/hello-multi@sha256:f291e98e5e1f6b3d9870a3a9e5e35f917bb584404432a2baab4a08c20960b90c
+Deleted: sha256:0909ebe1c846c5d4b143e9ead1da95eff6af4d19c01ee450e5b0e593b10da016
+[user@dockerhost multi-stage]$ docker logout
+Removing login credentials for https://index.docker.io/v1/
+[user@dockerhost multi-stage]$ docker container run --rm --name hello-multi mozzidocker/hello-multi:v1.0
+Unable to find image &apos;mozzidocker/hello-multi:v1.0&apos; locally
+docker: Error response from daemon: pull access denied for mozzidocker/hello-multi, repository does not exist or may require &apos;docker login&apos;: denied: requested access to the resource is denied.
+See &apos;docker run --help&apos;.
+
+-도커허브에서 이미지 삭제하기
+ Delete repository를 하게되면 만들었던 hello-multi 레포지토리를 삭제할 수 있다.
+
+#컨테이너 일괄 중지 및 삭제
+실습했던 컨테이너들이 많을건데, 
+[user@dockerhost multi-stage]$ docker container stop $(docker container ls -aq) 
+[user@dockerhost multi-stage]$ docker container rm $(docker container ls -aq)
+으로 모두 날려주자.
+
+[user@dockerhost ~]$ docker image ls
+REPOSITORY     TAG       IMAGE ID       CREATED        SIZE
+my_webserver   v0.2      08f9003a90a7   5 hours ago    226MB
+my_webserver   v0.1      da98123edd53   5 hours ago    226MB
+golang         1.21      e11dfa244376   35 hours ago   815MB
+mysql          latest    df8662dadd4f   3 days ago     619MB
+busybox        latest    f5fb98afcf9f   2 weeks ago    4.26MB
+rockylinux     9         b72d2d915008   3 weeks ago    176MB
+httpd          2.4       6fd77d7e5eb7   2 months ago   167MB
+centos         7         eeb6ee3f44bd   2 years ago    204MB
+
+
+#사설 레지스트리 실습
+우선 레지스트리를 받는다.
+[user@dockerhost ~]$ docker image pull registry:2
+2: Pulling from library/registry
+c926b61bad3b: Pull complete 
+5501dced60f8: Pull complete 
+e875fe5e6b9c: Pull complete 
+21f4bf2f86f9: Pull complete 
+98513cca25bb: Pull complete 
+Digest: sha256:0a182cb82c93939407967d6d71d6caf11dcef0e5689c6afe2d60518e3b34ab86
+Status: Downloaded newer image for registry:2
+docker.io/library/registry:2
+[user@dockerhost ~]$ docker image ls
+REPOSITORY     TAG       IMAGE ID       CREATED        SIZE
+my_webserver   v0.2      08f9003a90a7   5 hours ago    226MB
+my_webserver   v0.1      da98123edd53   5 hours ago    226MB
+golang         1.21      e11dfa244376   35 hours ago   815MB
+mysql          latest    df8662dadd4f   3 days ago     619MB
+busybox        latest    f5fb98afcf9f   2 weeks ago    4.26MB
+registry       2         909c3ff012b7   3 weeks ago    25.4MB
+rockylinux     9         b72d2d915008   3 weeks ago    176MB
+httpd          2.4       6fd77d7e5eb7   2 months ago   167MB
+centos         7         eeb6ee3f44bd   2 years ago    204MB
+
+그리고 컨테이너를 실행시켜준다
+[user@dockerhost ~]$ docker container run -d -p 5000:5000 --name registry registry:2
+be72e6a9638bdde17236f954531c8663b563a55f5dece2f4338eb19975499b28
+[user@dockerhost ~]$ docker container ls
+CONTAINER ID   IMAGE        COMMAND                  CREATED          STATUS          PORTS                                       NAMES
+be72e6a9638b   registry:2   "/entrypoint.sh /etc…"   17 seconds ago   Up 16 seconds   0.0.0.0:5000->5000/tcp, :::5000->5000/tcp   registry
+
+이제 이미지태그를 생성(지정)해줘야 한다. docker image tag
+my_webserver   v0.1      da98123edd53   5 hours ago    226MB  라는 이미지를 프라이빗레지스트리에 업로드를 하고싶다면 태그를 지정해준다.
+
+[user@dockerhost ~]$ docker image tag my_webserver:v0.1 localhost:5000/my_webserver:v0.1
+[user@dockerhost ~]$ docker image tag my_webserver:v0.2 localhost:5000/my_webserver:v0.2
+태그를 지정해주고 확인해본다.
+[user@dockerhost ~]$ docker image ls
+REPOSITORY                    TAG       IMAGE ID       CREATED        SIZE
+my_webserver                  v0.2      08f9003a90a7   5 hours ago    226MB
+localhost:5000/my_webserver   v0.2      08f9003a90a7   5 hours ago    226MB
+my_webserver                  v0.1      da98123edd53   5 hours ago    226MB
+localhost:5000/my_webserver   v0.1      da98123edd53   5 hours ago    226MB
+>>로컬호스트 5000번대 포트를이용해서 사설레지스트리를 생성했다.
+레포지토리 목록을 확인해보자. 
+[user@dockerhost ~]$ curl -X GET http://localhost:5050/v2/_catalog
+위 리소스 경로로 요청을 하게되면 결과값을 받을 수 있다. (메서드 요청으로 -X GET )
+{"repositories":[]}
+>>레포지토리가 비어있다는 내용을 표시하는 json파일형식으로 출력된다.
+그러면 이미지를 업로드해보자.
+ 
+그러면 이미지레이어별로 push된다. 
+[user@dockerhost ~]$ curl -X GET http://localhost:5000/v2/_catalog 
+{"repositories":["my_webserver"]}
+다시 curl -X GET 으로 조회해보면, my_webserver 이라는 레포지토리가 들어있는 것을 볼 수 있다.
+세부 이미지를 이미지태그별로 확인하는 방법은 다음과같다. 
+[user@dockerhost ~]$ curl -X GET http://localhost:5000/v2/my_webserver/tags/list 
+{"name":"my_webserver","tags":["v0.1"]}
+
+v0.2도 push해보자
+[user@dockerhost ~]$ docker image push localhost:5000/my_webserver:v0.2
+The push refers to repository [localhost:5000/my_webserver]
+b7256d2f1648: Pushed 
+8ba80539a8d0: Pushed 
+23a947f6a0de: Layer already exists 
+c4bc4a1387e8: Layer already exists 
+v0.2: digest: sha256:b41d193244a29c6f3b20b149af2e74bbe38e3bf8d52d8579e02aec0fa4cdfe84 size: 1155
+>>새로추가된 레이어가 나타난다.
+
+이제 호스트에 있는 이미지들을 지워본다
+[user@dockerhost ~]$ docker image rm localhost:5000/my_webserver:v0.1 localhost:5000/my_webserver:v0.2 my_webserver:v0.1 my_webserver:v0.2
+Untagged: localhost:5000/my_webserver:v0.1
+Untagged: localhost:5000/my_webserver@sha256:4a2b01a6907f76fb488c1c859589af45501c0bd926fc3da851fa0dc508511d9c
+Untagged: localhost:5000/my_webserver:v0.2
+Untagged: localhost:5000/my_webserver@sha256:b41d193244a29c6f3b20b149af2e74bbe38e3bf8d52d8579e02aec0fa4cdfe84
+Untagged: my_webserver:v0.1
+Deleted: sha256:da98123edd53ba6e8aec07cb776fc62a070aa1a4ed7eb860d52f1f491143edea
+Untagged: my_webserver:v0.2
+Deleted: sha256:08f9003a90a7dbbaee1b829a85ec7f80568471c3f5de096673d275ac5774951b
+
+그다음 이미지를 확인해보자. 
+[user@dockerhost ~]$ curl -X GET http://localhost:5000/v2/my_webserver/tags/list
+{"name":"my_webserver","tags":["v0.1","v0.2"]}
+[user@dockerhost ~]$ 
+[user@dockerhost ~]$ docker image pull localhost:5000/my_webserver:v0.1 
+v0.1: Pulling from my_webserver
+489e1be6ce56: Already exists 
+22fc6221b28d: Already exists 
+b71e3d94d257: Already exists 
+Digest: sha256:4a2b01a6907f76fb488c1c859589af45501c0bd926fc3da851fa0dc508511d9c
+Status: Downloaded newer image for localhost:5000/my_webserver:v0.1
+localhost:5000/my_webserver:v0.1
+
+컨테이너실행
+[user@dockerhost ~]$ docker container run -d -p 8080:80 --name web-test localhost:5000/my_webserver:v0.1
+0769912dc2b42701017f902c4ba20d94114541500bff3d054f5e53ea1f87c0be
+[user@dockerhost ~]$ 
+[user@dockerhost ~]$ curl http://localhost:8080/
+My_webserver v0.1 index.html
+>>기업에서는 도커허브에 서비스, 인증키, 민감데이터들이 있을 수 있으므로 올리지 않고 내부에 프라이빗 레지스트리를 따로 생성해서 사용하는 경우가 많다. 
+많이 쓰이는 오픈소스중에서는 ‘하버’라는 도구가 있다.
+또한 ECR https://gallery.ecr.aws/ 에서 퍼블릭한 이미지 레포지토리를 제공하기때문에 이용이 가능하다.
+
+사용례는 pull limit의 부담을 덜기위해서 aws에서 받아오는것으로 도커허브에서 받는것과 차이X.
+[user@dockerhost ~]$ docker image pull public.ecr.aws/docker/library/ubuntu:20.04
+20.04: Pulling from docker/library/ubuntu
+527f5363b98e: Pull complete 
+Digest: sha256:f2034e7195f61334e6caff6ecf2e965f92d11e888309065da85ff50c617732b8
+Status: Downloaded newer image for public.ecr.aws/docker/library/ubuntu:20.04
+public.ecr.aws/docker/library/ubuntu:20.04
+ 
+
+
+
