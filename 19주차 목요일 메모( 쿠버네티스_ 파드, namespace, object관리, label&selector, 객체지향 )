@@ -1,0 +1,820 @@
+19주차 목요일 메모 ( Kubernetes _ 3 파드, 네임스페이스, 오브젝트 관리, 레이블_셀렉터, 객체지향 )
+
+지난시간까지는 쿠버네티스의 설치과정과 방법, 그리고 yaml에 대해서 알아봤다.
+이번시간에는 파드와 같은 오브젝트를 다루는 방법을 알아본다.
+
+ 
+
+- 파드(Pod)
+Kubernetes 기본 Object로 Kubernetes에서 컨테이너를 실행하는 기본 실행 단위
+# Kubernetes Object
+API Version
+  Kubernetes Object가 사용하는 API 버전 접근 방식
+  Core API
+    API 명명방식 :   v1
+  Group API
+    API 명명방식 :   API_GROUP/v1
+
+   API Version 구분
+     Alpha Version API
+       버전 이름에 alpha가 포함됨. (예:  v1alpha1 )
+       Alpha Version은 불안정하며 버그의 가능성이 높으므로 기본적으로 비활성화됨
+       Alpha Version을 사용하려면 별도로 활성화해야함
+       기능에 대한 기술지원 등이 별도의 공지 없이 중단될 수 있음
+       다음 릴리즈 시 별도의 공지 없이 API 호환성이 깨지는 방식으로 변경될 수 있음
+
+     Beta Version API
+       버전 이름에 beta가 포함됨.   (예:  v1beta1 )
+       비교적 코드가 잘 정리되어있고 활성화해도 안전함
+       구체적인 내용이 변경될 수는 있으나 갑자기 기술지원이 중단되지는 않음
+       다름 릴리즈 또는 안정화 버전에서 호환이 되지 않는 형태로 변경될 수 있지만 이전을 위한 가이드를 제시함
+        API 오브젝트의 삭제, 편집 재생성이 필요할 수 있어 다운타임이 발생할 수 있음
+
+     Stable Version API
+       정수 형태의 버전 이름을 사용 (예:  v1, v2)
+       이후 Kubernetes 버전에서 여러 버전에 거쳐 포함됨
+
+Kubernetes Object Manifest File 구조
+apiVersion: v1
+kind: OBJECT_TYPE
+metadata:
+name: OBJECT_NAME
+spec:
+  SPEC_FIELDS
+
+#오늘의 실습
+
+vagrant@kube-control1:~$ mkdir work/20231228
+vagrant@kube-control1:~$ cd work/20231228/
+
+vim example-pod.yaml 작성
+
+ 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod
+spec:
+  containers:
+    - name: example-container
+      image: k8s.gcr.io/echoserver:1.4
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+
+$ kubectl delete pod example-pod (전에있던것을 삭제함
+
+팟을 새로 생성한다.
+vagrant@kube-control1:~/work/20231228$ kubectl create -f example-pod.yaml
+pod/example-pod created
+
+~~~
+
+파드 오브젝트 생성
+kubectl create -f POD_MANIFEST.yaml
+
+파드 목록 확인
+kubectl get pods
+NAME          READY   STATUS    RESTARTS   AGE
+example-pod   1/1     Running   0          53s
+
+파드 상세 정보 확인
+kubectl describe pods POD_NAME
+
+~~~~~
+
+example-pod 의 상세정보를 확인해봄 
+vagrant@kube-control1:~/work/20231228$ kubectl describe pods example-pod
+Name:             example-pod
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             kube-node1/192.168.56.21
+Start Time:       Thu, 28 Dec 2023 01:04:57 +0000
+Labels:           <none>
+Annotations:      cni.projectcalico.org/containerID: bd4bc717066e87542f07cec16f358d064cf0f1cdbb3b444faf2f73ebf0f517ef
+                  cni.projectcalico.org/podIP: 10.233.73.71/32
+                  cni.projectcalico.org/podIPs: 10.233.73.71/32
+Status:           Running
+IP:               10.233.73.71
+IPs:
+IP:  10.233.73.71
+Containers:
+  example-container:
+    Container ID:   docker://7ee1c34e226e7db1d942d5c6a1afa7bd404dc5e6bd6cc5b41beb37bb78dcae73
+    Image:          k8s.gcr.io/echoserver:1.4
+    Image ID:       docker-pullable://k8s.gcr.io/echoserver@sha256:5d99aa1120524c801bc8c1a7077e8f5ec122ba16b6dda1a5d3826057f67b9bcb
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Thu, 28 Dec 2023 01:05:10 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-tn6rq (ro)
+Conditions:
+  Type              Status
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
+Volumes:
+  kube-api-access-tn6rq:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  14m   default-scheduler  Successfully assigned default/example-pod to kube-node1
+  Normal  Pulling    14m   kubelet            Pulling image "k8s.gcr.io/echoserver:1.4"
+  Normal  Pulled     14m   kubelet            Successfully pulled image "k8s.gcr.io/echoserver:1.4" in 11.402011079s (11.402022231s including waiting)
+  Normal  Created    14m   kubelet            Created container example-container
+  Normal  Started    14m   kubelet            Started container example-container
+
+
+IP:  10.233.73.71
+위의 상세정보에서 본 아이피주소를 가지고 웹에 접근해본다.
+
+vagrant@kube-control1:~/work/20231228$ curl http://10.233.73.71:8080
+CLIENT VALUES:
+client_address=10.233.70.0
+command=GET
+real path=/
+query=nil
+request_version=1.1
+request_uri=http://10.233.73.71:8080/
+
+SERVER VALUES:
+server_version=nginx: 1.10.0 - lua: 10001
+
+HEADERS RECEIVED:
+accept=*/*
+host=10.233.73.71:8080
+user-agent=curl/7.81.0
+BODY:
+>> pod 오브젝트가 정상적으로 실행되었다면 이런 화면을 도출한다.
+‘status’ 와 ‘state’에서 pod의 상태를 파악이 가능하다.
+이 스테이터스, 컨디션에 대해서는 아래에서 후술한다.
+
+
+# pod의 생명주기 (LIFE CYCLE)
+*쿠버네티스입문 p.128을 참고한다
+
+Pending > Running > Succeeded > Failed 
+
+Pending
+-	Pod 가 아직 실행되기 전 상태
+-	Pod 가 스케쥴링 되기 전 상태
+-	Image pulling
+Running
+-	실행 중
+Succeeded
+-	정상 종료
+Failed
+-	비정상 종료
+Unknown
+-	Pod의 상태를 확인할 수 없는 상태
+>>pod가 실행되는데 노드와 문제가 있다는것을 대개 의미한다.
+
+~~
+# 컨테이너 상태
+Waiting , Running , Terminated 
+
+Waiting
+-	컨테이너가 Running 상태이거나 Terminated 상태가 아닌 경우의 상태
+Running
+-	컨테이너가 실행중인 상태
+Terminated
+-	컨테이너가 실행이 완료됨
+-	혹은 실패한 상태 // terminated에 대한 Reason(이유)를 가지게 된다.
+
+# 컨테이너 Conditions (Type)
+Initialized : 모든 초기화 컨테이너가 성공적으로 실행 완료됨
+Ready : 파드의 컨테이너 애플리케이션이 준비됨
+ContainersReady : 파드 내의 모든 컨테이너가 준비된 상태 
+PodScheduled : 파드가 스케쥴링 됨
+Unschedulable : 파드가 스케쥴 될 수 없는 상태임 
+
+>>이 모든것은 Pod를 생성하고 kubectl describe pods [ POD NAME ] 으로 확인이 가능함.
+
+
+# 네임스페이스Namespace
+(p.115, Ch4.3.1)
+
+‘네임스페이스는 쿠버네티스 클러스터 하나를 여러개의 논리적 단위로 나눠서 사용하는 것’이다. 컨테이너라는 개념에서 매우 중요한 개념에 해당하는 핵심기술이다. 
+
+-쿠버네티스의 Namespace 목록 확인
+$ kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   20h
+ingress-nginx     Active   20h
+kube-node-lease   Active   20h
+kube-public       Active   20h
+kube-system       Active   20h
+metallb-system    Active   20h
+
+-	default :  기본 네임스페이스로, kubectl 명령 실행시 별도로 네임스페이스를 지정하지 않는 경우 이 네임스페이스가 사용된다.
+-	kube-system : kubernetes Cluster를 운영하기 위해 필요한 핵심 Object가 존재하는 네임스페이스이다.
+-	kube-public :  kubernetes Cluster의 모든 사용자가 읽기전용으로 접근이 가능한 네임페이스이다.
+-	kube-node-lease : kubernetes lease Object 들을 관리하기 위한 네임스페이스이다. 
+
+-Kubernetes  파드 목록 확인 (default Namespace)
+$ kubectl get pods
+$ kubectl get pods -n default
+
+
+-특정 네임스페이스에 있는 파드 목록 확인
+$ kubectl get pods -n NAMESPACE
+
+-특정 네임스페이스에 오브젝트 생성
+$ kubectl create OBJECT ROSOURCE_NAME -n NAMESPACE
+
+네임스페이스 생성
+  방법1) 명령어를 통해서 생성하기
+$ kubectl create namespace NAMESPACE
+
+  방법2) Manifest File 정의 및 생성
+$ kubectl create -f NAMESPACE_MANIFEST.yaml
+
+
+
+~~~~
+#네임스페이스 실습
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -n default
+NAME                    READY   STATUS    RESTARTS      AGE
+example-pod             1/1     Running   0             55m
+myapp-fdd54f569-6llzt   1/1     Running   1 (98m ago)   19h
+
+-명령어로 네임스페이스 생성하기
+vagrant@kube-control1:~/work/20231228$ kubectl create namespace test1
+namespace/test1 created
+vagrant@kube-control1:~/work/20231228$ kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   20h
+ingress-nginx     Active   20h
+kube-node-lease   Active   20h
+kube-public       Active   20h
+kube-system       Active   20h
+metallb-system    Active   20h
+test1             Active   2s
+
+-Manifest 파일로 네임스페이스 정의 및 생성하기
+vagrant@kube-control1:~/work/20231228$ vim test2-ns.yaml
+
+test2-ns.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test2
+
+vagrant@kube-control1:~/work/20231228$ kubectl create -f test2-ns.yaml
+namespace/test2 created
+
+vagrant@kube-control1:~/work/20231228$ kubectl get namespace
+NAME              STATUS   AGE
+default           Active   20h
+ingress-nginx     Active   20h
+kube-node-lease   Active   20h
+kube-public       Active   20h
+kube-system       Active   20h
+metallb-system    Active   20h
+test1             Active   10m
+test2             Active   3m56s
+
+>>이렇게 두개의 test네임스페이스를 생성했다.
+
+~~~
+
+# 실습
+vagrant@kube-control1:~/work/20231228$ ls
+example-pod.yaml  test2-ns.yaml
+vagrant@kube-control1:~/work/20231228$ cp example-pod.yaml example-pod-test1.yaml
+vagrant@kube-control1:~/work/20231228$ ls
+example-pod-test1.yaml  example-pod.yaml  test2-ns.yaml
+vagrant@kube-control1:~/work/20231228$ vim example-pod-test1.yaml
+$ vim example-pod-test1.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+   name: example-pod-test1
+   namespace: test1
+spec:
+  containers:
+    - name: example-container
+      image: k8s.gcr.io/echoserver:1.4
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+>>네임스페이스 란을 추가해준다.
+그리고 실행한다
+vagrant@kube-control1:~/work/20231228$ kubectl create -f example-pod-test1.yaml
+pod/example-pod-test1 created
+확인도 해본다
+vagrant@kube-control1:~/work/20231228$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS       AGE
+example-pod             1/1     Running   0              94m
+myapp-fdd54f569-6llzt   1/1     Running   1 (137m ago)   19h
+>>네임스페이스를 별도로 지정하지 않아서 default의 네임스페이스가 출력되므로, 
+우리가 만든 목록을 보려면
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -n test1
+test1 네임스페이스를 특정해서 불러와야 한다.
+
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -n test1
+NAME                READY   STATUS    RESTARTS   AGE
+example-pod-test1   1/1     Running   0          82s
+>>그러면 잘 출력된다. 2번째 방법에 해당하는 것으로, 네임스페이스 필드를 추가하고, 거기에 네임스페이스를 정의해주면 되는것이다.
+
+test1이라는 네임스페이스에 하나의 pod를 더 추가해본다.
+vagrant@kube-control1:~/work/20231228$ kubectl create -f example-pod.yaml -n test1
+pod/example-pod created
+이후 조회를 하려면 다시 옵션을 붙여준다
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -n test1
+NAME                READY   STATUS    RESTARTS   AGE
+example-pod         1/1     Running   0          17s
+example-pod-test1   1/1     Running   0          3m55s
+>>그럼 test1 네임스페이스에 해당하는 두개의 팟을 출력해준다.
+ 
+
+	참고로, 같은 이름의 yaml파일로 pod를 만드는것은 불가능하다.
+vagrant@kube-control1:~/work/20231228$ kubectl create -f example-pod.yaml -n test1
+Error from server (AlreadyExists): error when creating "example-pod.yaml": pods "example-pod" already exists
+이미 있는 팟이라고 에러를 내보낸다.
+>>결론: namespace라는 컨테이너의 핵심기술로 파드를 ‘격리’할 수 있다는 사실을 꼭 알아야 한다. 이 namespace 내에서 동일한 이름을 가진 pod를 두개 이상 가질 수 없지만, 다른 namespace에 동일한 이름을 가진 pod를 만드는것은 컨테이너가 격리되어있으므로 가능하다는 사실을 위 실습들을 통해서 알아봤다. 
+>>또다른 컨테이너 핵심 기술로는
+cgroup (자원의 양을 제한)이 있다.// namespace (자원의 종류를 제한)
+
+
+
+
+#실습한 자원들( OBJECT ) 삭제하기
+생성 못지않게 자원들을 제때 삭제하는것도 리소스 관리의 효율을 도모하는 길이다.
+
+-파드 삭제 실습
+delete pods로 파드를 삭제 가능하다. 따로 지정하지 않으면 namespace는 default.
+vagrant@kube-control1:~/work/20231228$ kubectl delete pods
+error: resource(s) were provided, but no name was specified
+vagrant@kube-control1:~/work/20231228$ kubectl delete pods
+example-pod            myapp-fdd54f569-6llzt
+vagrant@kube-control1:~/work/20231228$ kubectl delete pods example-pod
+pod "example-pod" deleted
+vagrant@kube-control1:~/work/20231228$ kubectl delete pods myapp-fdd54f569-6llzt
+pod "myapp-fdd54f569-6llzt" deleted
+>default namespace의 팟을 모두 지웠다.
+이번에는 다른 namespace를 가지는 팟을 삭제하도록 하자.
+vagrant@kube-control1:~/work/20231228$ kubectl delete pods -n test1 example-pod
+example-pod        example-pod-test1
+vagrant@kube-control1:~/work/20231228$ kubectl delete pods -n test1 example-pod
+example-pod        example-pod-test1
+vagrant@kube-control1:~/work/20231228$ kubectl delete pods -n test1 example-pod-test1 example-pod
+pod "example-pod-test1" deleted
+pod "example-pod" deleted
+
+-네임스페이스 삭제 실습
+네임스페이스또한 삭제가 가능하다.
+지울 타겟은 실습한 test1, test2 네임스페이스이다.
+vagrant@kube-control1:~/work/20231228$ kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   21h
+ingress-nginx     Active   21h
+kube-node-lease   Active   21h
+kube-public       Active   21h
+kube-system       Active   21h
+metallb-system    Active   21h
+test1             Active   48m
+test2             Active   42m
+vagrant@kube-control1:~/work/20231228$ kubectl delete namespaces test1 test2
+namespace "test1" deleted
+namespace "test2" deleted
+vagrant@kube-control1:~/work/20231228$ kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   21h
+ingress-nginx     Active   21h
+kube-node-lease   Active   21h
+kube-public       Active   21h
+kube-system       Active   21h
+metallb-system    Active   21h
+>>확인을 하니, 네임스페이스가 지워진것을 확인할 수 있었다.
+
+
+# Kubernetes의 Object 관리
+
+$ kubectl  SUBCOMMAND  [OBJECT_TYPE]  [RESOURCE_NAME]  [OPTION]
+
+Kubernetes Object 관리 명령어 실행 방식
+ - 명령형 커맨드
+    - kubectl 명령어에 인수 또는 옵션을 사용해서 애플리케이션을 관리하는 명령어 실행 방식
+    - 일회성 작업에 주로 사용
+    - Kubernetes Object 생성을 위한 가장 간단한 방법
+
+     $ kubectl run nginx --image nginx:latest
+     $ kubectl create deployment nginx --image nginx:latest
+
+ - 명령형 오브젝트 구성
+   - Kubernetes Object를 YAML 또는 JSON 형식으로 정의함.
+   - Manifest File은 Object에 대한 완전한 정의를 포함해야 함.
+
+    $ kubectl create -f nginx.yaml
+    $ kubectl delete -f nginx.yaml
+
+ - 선언형 오브젝트 구성
+    - 특정 디렉터리에 모든 Object 정의 파일을 배치하고 kubectl 명령어에서 인수로 디렉터리를 지정하여 Kubernetes Object를 관리함.
+
+     $ kubectl create -f configs/
+     $ kubectl apply -f configs/
+
+
+# 오브젝트 실습
+vagrant@kube-control1:~/work/20231228$ kubectl run nginx --image nginx:latest
+pod/nginx created
+vagrant@kube-control1:~/work/20231228$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+myapp-fdd54f569-4r2h9   1/1     Running   0          39m
+nginx                   1/1     Running   0          7s
+
+vagrant@kube-control1:~/work/20231228$ mkdir configs
+vagrant@kube-control1:~/work/20231228$ cd configs/
+vagrant@kube-control1:~/work/20231228$ cp example-pod.yaml example-pod2.yaml
+vagrant@kube-control1:~/work/20231228$ vim example-pod2.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod2
+spec:
+  containers:
+    - name: example-container
+      image: k8s.gcr.io/echoserver:1.4
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+
+vagrant@kube-control1:~/work/20231228$ cp example-pod.yaml example-pod2.yaml configs/
+vagrant@kube-control1:~/work/20231228$ kubectl create -f configs/
+pod/example-pod created
+pod/example-pod2 created
+
+
+# 레이블 Label 
+p.240  ch 9.1
+
+레이블이란?
+  - Kubernetes Cluster의 Object에 부가적인 정보를 붙여주는 방식 중 하나
+  - Key-Value 쌍으로 Kubernetes의 오브젝트를 식별하는데 사용함
+
+Label 예시
+   release: stable
+   release: testing
+
+   environment: production
+   environment: development
+
+Label 지정 규칙
+  - 63 글자 이하
+  - 시작 문자와 끝 문자는 영문자 대소문자, 숫자여야 함.
+- 중간에는 대시(-), 언더바(_), 점(.), 숫자 등이 올 수 있음.
+
+일치성 기준 레이블 셀렉터 (Equality Based)
+  =
+  ==   
+  !=    (~를 제외하고&~가 아닌)
+
+집합성 기준 레이블 셀렉터 (Set Based)
+   in
+   notin
+   exists
+
+# 일치성 레이블 셀렉터를 사용하여 Kubernetes Object 검색
+$ kubectl get  OBJECT_TYPE --show-labels -l  LABEL_SELECTOR_EXPRESSION
+
+-env 키가 포함된 레이블
+$ kubectl get pods --show-labels -l env
+NAME                READY   STATUS    RESTARTS   AGE    LABELS
+example-pod            1/1     Running   0                    167m    env=production
+example-pod-label   1/1     Running   0                      54m    env=dev
+
+-env 키가 없는 레이블 (해당 키만 제외)
+$ kubectl get pods --show-labels -l '!env'
+NAME           READY   STATUS    RESTARTS   AGE    LABELS
+example-pod2   1/1     Running   0          169m   <none>
+nginx          1/1     Running   0          176m   run=nginx
+
+-Label의 키가 env이고 값이 dev인 레이블검색 (특정값 찾기)
+$ kubectl get pods --show-labels -l 'env=dev'
+NAME                READY   STATUS    RESTARTS   AGE   LABELS
+example-pod-label   1/1     Running   0          58m   env=dev
+
+-Label의 키가 env이고 값이 dev이 아닌 레이블검색 (특정값 제외하고 찾기)
+$ kubectl get pods --show-labels -l 'env!=dev'
+
+
+# 집합성 기준 레이블 셀렉터를 사용하여 Kubernetes Object 검색
+ 
+- Label의 키가 env에 값이 dev인 레이블
+$ kubectl get pods --show-labels -l 'env in (dev)'
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels -l 'env in (dev)'
+NAME                READY   STATUS    RESTARTS   AGE   LABELS
+example-pod-label   1/1     Running   0          64m   env=dev
+
+- Label의 키가 env에 값이 dev 또는 debug인 레이블
+$ kubectl get pods --show-labels -l 'env in (dev,debug)'
+example-pod2에 env=debug값을 주고 검색해본다.
+vagrant@kube-control1:~/work/20231228$ kubectl label pods example-pod2 env=debug
+pod/example-pod2 labeled
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels -l 'env in (dev,debug)'
+NAME                READY   STATUS    RESTARTS   AGE    LABELS
+example-pod-label   1/1     Running   0          67m    env=dev
+example-pod2        1/1     Running   0          179m   env=debug
+
+#레이블 실습
+vagrant@kube-control1:~/work/20231228$ vim example-pod-label.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-label
+  labels:
+    env: dev
+spec:
+  containers:
+  - name: example
+    image: devops2341/go-myweb:alpine
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+
+
+vagrant@kube-control1:~/work/20231228$ kubectl create -f example-pod-label.yaml
+pod/example-pod-label created
+vagrant@kube-control1:~/work/20231228$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+example-pod             1/1     Running   0          112m
+example-pod-label       1/1     Running   0          9s
+example-pod2            1/1     Running   0          112m
+myapp-fdd54f569-4r2h9   1/1     Running   0          158m
+nginx                   1/1     Running   0          119m
+
+여기에 붙은 레이블을 확인하려고 한다.
+>>이때 이용할 옵션은 -o 옵션이다
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -o wide
+NAME                    READY   STATUS    RESTARTS   AGE    IP              NODE         NOMINATED NODE   READINESS GATES
+example-pod             1/1     Running   0          113m   10.233.118.72   kube-node3   <none>           <none>
+example-pod-label       1/1     Running   0          69s    10.233.74.8     kube-node2   <none>           <none>
+example-pod2            1/1     Running   0          113m   10.233.73.74    kube-node1   <none>           <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          159m   10.233.73.73    kube-node1   <none>           <none>
+nginx                   1/1     Running   0          120m   10.233.74.7     kube-node2   <none>           <none>
+ 
+여기서 확인하면 
+레이블이 딱히 나오지는 않는데
+이때 -o옵션에 추가해줄 내용이 있다.
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels
+ 
+NAME                    READY   STATUS    RESTARTS   AGE     LABELS
+example-pod             1/1     Running   0          114m    <none>
+example-pod-label       1/1     Running   0          2m41s   env=dev
+example-pod2            1/1     Running   0          114m    <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          161m    app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   0          122m    run=nginx
+
+>>이 두개의 옵션들을 합치게 되면 다음과 같은 화면도 도출할 수 있다.
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -o wide --show-labels
+ 
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -o wide --show-labels
+NAME                    READY   STATUS    RESTARTS   AGE    IP              NODE         NOMINATED NODE   READINESS GATES   LABELS
+example-pod             1/1     Running   0          115m   10.233.118.72   kube-node3   <none>           <none>            <none>
+example-pod-label       1/1     Running   0          3m     10.233.74.8     kube-node2   <none>           <none>            env=dev
+example-pod2            1/1     Running   0          115m   10.233.73.74    kube-node1   <none>           <none>            <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          161m   10.233.73.73    kube-node1   <none>           <none>            app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   0          122m   10.233.74.7     kube-node2   <none>           <none>            run=nginx
+
+# 특정 레이블 키의 레이블을 별도의 필드로 출력하기
+$ kubectl get pods --show-labels -L LABEL_KEY
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels -L env
+NAME                    READY   STATUS    RESTARTS   AGE     ENV   LABELS
+example-pod             1/1     Running   0          118m          <none>
+example-pod-label       1/1     Running   0          6m30s   dev   env=dev
+example-pod2            1/1     Running   0          118m          <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          165m          app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   0          125m          run=nginx
+>>env라는 레이블키를 보여줬다.
+
+# 내가 보고싶은 레이블만 보고싶다면 --show-label없이 -L 옵션만 사용하면 된다.
+vagrant@kube-control1:~/work/20231228$ kubectl get pods -L env
+NAME                    READY   STATUS    RESTARTS   AGE     ENV
+example-pod             1/1     Running   0          119m
+example-pod-label       1/1     Running   0          7m21s   dev
+example-pod2            1/1     Running   0          119m
+myapp-fdd54f569-4r2h9   1/1     Running   0          166m
+nginx                   1/1     Running   0          126m
+>>example-pod-label 오브젝트만 dev값을 가지는 라벨값을 출력했다.
+
+
+# 실행중인 Kubernetes Object의 Manifest 확인하기
+$ kubectl get OBJECT RESOURCE_NAME -o yaml
+$ kubectl get pods example-pod-label -o yaml
+
+    #매니페스트 확인 실습
+vagrant@kube-control1:~/work/20231228$ kubectl get pods example-pod-label -o yaml
+ 
+>>잘보면 매니페스트(정의한 파일내용)가 도출되며, 특히나 labels필드로 어떤 레이블이 붙었는 지 확인이 가능하다.
+
+# Kubernetes Object에 Label 지정
+$ kubectl label OBJECT_TYPE  RESOURCE_NAME   LABEL_KEY=LABEL_VALUE
+$ kubectl label     pods      example-pod        env=dev
+
+레이블을 붙여본다.
+vagrant@kube-control1:~/work/20231228$ kubectl label pods example-pod env=dev
+pod/example-pod labeled
+확인해보자.
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels
+NAME                    READY   STATUS    RESTARTS   AGE    LABELS
+example-pod             1/1     Running   0          129m   env=dev
+example-pod-label       1/1     Running   0          16m    env=dev
+example-pod2            1/1     Running   0          129m   <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          175m   app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   0          136m   run=nginx
+레이블을 하나 더붙여본다
+vagrant@kube-control1:~/work/20231228$ kubectl label pods example-pod release=stable
+pod/example-pod labeled
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels
+NAME                    READY   STATUS    RESTARTS   AGE    LABELS
+example-pod             1/1     Running   0          130m   env=dev,release=stable
+example-pod-label       1/1     Running   0          18m    env=dev
+example-pod2            1/1     Running   0          130m   <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          176m   app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   0          137m   run=nginx
+>> 여기서 알 수 있는 사실은, 레이블을 여러개 붙이면 이전 레이블이 사라지는것이 아니라 새로운 레이블이 ‘추가’되는 형식으로, 여러개의 레이블이 하나의 오브젝트(여기선 파드)에 붙을 수 있다는 것을 알 수 있다.
+
+# Kubernetes Object에 기존 Label(값) 수정
+$ kubectl label OBJECT_TYPE  RESOURCE_NAME   LABEL_KEY=LABEL_VALUE  --overwrite
+$ kubectl label pods example-pod env=production --overwrite
+
+레이블을 재지정하기 위해서는 옵션 --overwrite를 사용하면 된다.!
+vagrant@kube-control1:~/work/20231228$ kubectl label pods example-pod env=production --overwrite
+pod/example-pod labeled
+확인을 해보자.
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels
+NAME                    READY   STATUS    RESTARTS   AGE    LABELS
+example-pod             1/1     Running   0          135m   env=production,release=stable
+example-pod-label       1/1     Running   0          23m    env=dev
+example-pod2            1/1     Running   0          135m   <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          3h1m   app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   0          142m   run=nginx
+
+
+# Kubernetes Object의 Label 삭제
+레이블을 지우기 위해서는 간단하다. 
+$ kubectl label  OBJECT_TYPE  RESOURCE_NAME   LABEL_KEY-
+단지 레이블_키 이름에 마이너스(-)만 붙여주면 레이블이 해제된다.
+
+vagrant@kube-control1:~/work/20231228$ kubectl label pods example-pod release-
+pod/example-pod unlabeled
+vagrant@kube-control1:~/work/20231228$ kubectl get pods --show-labels
+NAME                    READY   STATUS    RESTARTS   AGE    LABELS
+example-pod             1/1     Running   0          140m   env=production
+example-pod-label       1/1     Running   0          28m    env=dev
+example-pod2            1/1     Running   0          140m   <none>
+myapp-fdd54f569-4r2h9   1/1     Running   0          3h7m   app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   0          147m   run=nginx
+>>env=production,release=stable 레이블을 가지고 있던 것에서 release레이블이 떨어져나갔다.
+
+
+
+# 애너테이션 Annotation  //노테이션
+p.247 ch 9.2 
+
+Annotation
+  - Kubernetes Object에 부가적인 정보를 붙여줄 수 있는 방법
+  - Label과 달리 Kubernetes Object의 식별에 사용할 수 없음
+
+$ vim example-pod-annotations.yaml
+ 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-annotations
+  annotations:
+    dev-team/developer: "John"
+spec:
+  containers:
+  - name: example
+    image: devops2341/go-myweb:alpine
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+
+>>어노테이션 필드가 추가되었는데, 
+name과 같은 레벨임을 유의하자. dev-team/developer가 “john”이라는 부가정보가 들었다.
+
+
+# 실습
+파드를 생성해보자
+vagrant@kube-control1:~/work/20231228$ kubectl create -f example-pod-annotations.yaml
+pod/example-pod-annotations created
+
+파드를 확인해보자
+vagrant@kube-control1:~/work/20231228$ kubectl get pods
+NAME                      READY   STATUS              RESTARTS   AGE
+example-pod               1/1     Running             0          3h12m
+example-pod-annotations   0/1     ContainerCreating   0          5s
+example-pod-label         1/1     Running             0          79m
+example-pod2              1/1     Running             0          3h12m
+myapp-fdd54f569-4r2h9     1/1     Running             0          3h58m
+nginx                     1/1     Running             0          3h19m
+
+>>vagrant@kube-control1:~/work/20231228$ kubectl get pods -o wide라는 옵션을 써도 annotation이 나타나지는 않는다. 
+이 어노테이션을 보려면, 
+vagrant@kube-control1:~/work/20231228$ kubectl describe pods example-pod-annotations
+ 
+Annotations:      cni.projectcalico.org/containerID: 95581f2ad5c42e15202e0364fde2fa58251f8356c7f37e10c335081e4c08291a
+                  cni.projectcalico.org/podIP: 10.233.118.73/32
+                  cni.projectcalico.org/podIPs: 10.233.118.73/32
+                  dev-team/developer: John
+>>kubectl describe 명령어로  확인이 가능하며, annotations 필드에서 내가 추가한 john 항목을 볼 수 있다. 
+
+
+# Kubernetes Object에 Annotation 지정
+$ kubectl annotate OBJECT_TYPE  RESOURCE_NAME  ANNOTATION_KEY=VALUE
+$ kubectl annotate pods example-pod release=stable
+
+-Kubernetes Object에 지정한 Annotation 확인
+$ kubectl describe pods example-pod 
+
+**Q. tag와 label, annotation은 무슨차이가 있나요? >> A. 사실 용어를 달리하는 것일 뿐이다. 리소스에 태그를 붙이는것과, 쿠버네티스의 labeling이 비슷하다. 태그나 레이블이 붙은 대상을 따로 추려서 보거나 정리하기가 용이하기 때문에 둘의 쓰임새는 거의 같다고 보면 된다.
+
++ annotation같은경우는 debugging에 유용한것이며, 어떻게 움직이는지 동작을 정의하기 위한것으로도 생각할 수 있다.
+
+**Q. 쿠버네티스에서cgroup을 사용하나요? >> A. namespace와 약간 차이가 있는데, cgroup을 직접 제어할일은 딱히 없을것이다. 다만 기능 구현에 어느정도 그런 의미가 들어간 기능들을 사용하게 된다.
+
+
+자습 : 객체지향이라고 하는것에 대하여
+우선 객체라고 하는것에 대해서 설명해보자. 우리가 살고있는 세계를 리얼월드라고하며, 컴퓨터의 디지털 세계에서 ‘리얼월드를 표현하기 위한 것’을 [객체]라고 정의하고있는데, 객체는 사람,사물,동물을 베끼는(모사)해서 디지털화하는 것을 말한다.
+객체의 특징은 어떤 상태를 가진다라는 것이다. 어떤 행위를 할 수있고, 어떤 상태를 가진다. 이말인 즉슨, 동작을 할 수 있다는것임. 사람을 객체로 표현하면 사람에겐 특징이 있을텐데 (걷기, 앉기, 등등 행위) 라는 어떤 동작을 함에 있어서 컴퓨터로 구현하는것이 ‘메서드’이다. >>함수(어떤 기능을 실행키위해 만드는) 그 함수에 의해서 걸어다닌다고 하면, 걸어다님에 따른 체력의 소모(‘체력’은 사람의 속성이라고 할 수 있다) . 걸으면 사람의 위치가 달라지고 시간이 지나면 체력이 소모되는데, 컴퓨터에서 표현하고 구현함이 객체 라고 할 수 있겠다.
+요약하자면 실제세계의 무언가를 디지털세계에서 ‘모사’하는 것.
+
+다음으로, 객체지향이란 이런 객체를 중심으로, 프로그래밍을 하는것을 객체지향이라고 할 것이고 왜 객체지향인가?하면, 
+우선 프로그래밍 언어에서 프로그램을 구현하는 방식에는 객체지향과 절차지향이 있다. 
+절차지향은 어떠한 단계별 코드가 작성된다면 처음부터 끝까지 그 코드대로 실행하는게 절차지향이고
+객체지향은 단순히 코드 한줄 한줄 실행하는것이 아니라, 객체를 중심으로 객체의 행위( 메서드의 실행상태) 가 일어나면 객체 상태가 변하고, 그 속성에 따라서 달라지는 것에 집중하는 것이다. 
+그래서 객체를 표현하기위해 어떤 단위를 ‘클래스’화하여 타입을 정하고, 각각의 개별 개체, 상태를 가지는 어떤 사물등의 액티브한 상태를 가지는 객체들을 ‘인스턴스’라고 부르기도 한다. 클래스는 객체를 만들기 위한 일종의 틀이며, 객체를 클래스의 인스턴스로 생성한다. 이렇게 생성된 객체는 클래스에서 정의한 속성과 메서드를 공유하면서 각각 독립적인 상태를 가질 수 있다. 인간이라는 속성을 가진 우리가 뛴다는 메서드를 실행하면 갈증이 나는 상태를 가진다던가, 시간이 경과함에 따라 피로가 쌓인다던가 하는 것이 바로 독립적인 상태이다.
+
+-‘상속’과 ‘다형성’에 대해서 
+사람을 예로 들어 상속과 클래스의 개념을 설명한다. 부모자식을 가정해본다.
+1.	부모 클래스: 사람 (Person)
+•	속성: 이름, 나이
+•	메서드: 먹기, 걷기
+2.	자식 클래스: 학생 (Student)
+•	부모 클래스인 사람의 속성과 메서드를 상속 받음
+•	추가 속성: 학교 이름, 학년
+•	추가 메서드: 공부하기
+3.	자식 클래스: 직장인 (Employee)
+•	부모 클래스인 사람의 속성과 메서드를 상속 받음
+•	추가 속성: 직장 이름, 직책
+•	추가 메서드: 일하기
+이제 이를 통해 왜 상속이 유용한지 살펴보겠다.
+
+1. 코드 재사용성 (Reuse of Code):
+부모 클래스에서 정의한 사람의 속성과 메서드를 자식 클래스에서 그대로 활용할 수 있습니다. 예를 들어, "먹기"라는 행동은 모든 사람에게 해당하므로, 이를 부모 클래스에서 정의하고 자식 클래스에서 다시 작성하지 않아도 됩니다.
+class Person:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+    def eat(self):
+        print(f"{self.name} is eating.")
+
+    def walk(self):
+        print(f"{self.name} is walking.")
+
+2. 유지보수성 (Maintainability):
+만약 사람의 기본 특성이나 행동에 변화가 생겼다면, 이를 부모 클래스에서 수정하면 자식 클래스에서도 자동으로 반영됩니다. 예를 들어, 모든 사람에게 새로운 속성인 "성별"을 추가하고 싶다면, 부모 클래스에서만 수정하면 됩니다.
+class Person:
+    def __init__(self, name, age, gender):
+        self.name = name
+        self.age = age
+        self.gender = gender
+
+    def eat(self):
+        print(f"{self.name} is eating.")
+
+    def walk(self):
+        print(f"{self.name} is walking.")
+
+3. 다형성 (Polymorphism):
+자식 클래스에서 부모 클래스의 메서드를 재정의(오버라이딩)하거나 새로운 메서드를 추가할 수 있습니다. 이것이 다형성입니다. 예를 들어, 학생 클래스에서 "먹기" 메서드를 재정의하거나 "수업 듣기"라는 새로운 메서드를 추가할 수 있습니다
+class Student(Person):
+    def __init__(self, name, age, gender, school, grade):
+        super().__init__(name, age, gender)
+        self.school = school
+        self.grade = grade
+
+    def study(self):
+        print(f"{self.name} is studying.")
+이런식으로 상속을 통해 코드를 재사용하고 확장할 수 있습니다. 이는 객체지향 프로그래밍의 핵심 원칙 중 하나로, 클래스 간의 계층 구조를 통해 관련된 객체들을 조직화하고 관리하는 데에 도움을 줍니다.
+
+
