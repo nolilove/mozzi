@@ -1,0 +1,808 @@
+19주차 금요일 메모 ( Kubernetes _ 4 초기화 컨테이너, 파드인프라컨테이너,스태틱파드,컨트롤러 오브젝트  )
+
+2023.12.29 (fri)
+지난시간까지는 파드와 같은 오브젝트를 다루는 방법과, 네임스페이스, 레이블등에 대해배움.
+
+
+-API Version 구분
+Alpha Version API
+       버전 이름에 alpha가 포함됨. (예:  v1alpha1 )
+       Alpha Version은 불안정하며 버그의 가능성이 높으므로 기본적으로 비활성화됨
+       Alpha Version을 사용하려면 별도로 활성화해야함
+       기능에 대한 기술지원 등이 별도의 공지 없이 중단될 수 있음
+       다음 릴리즈 시 별도의 공지 없이 API 호환성이 깨지는 방식으로 변경될 수 있음
+
+Beta Version API
+       버전 이름에 beta가 포함됨.   (예:  v1beta1 )
+       비교적 코드가 잘 정리되어있고 활성화해도 안전함
+       구체적인 내용이 변경될 수는 있으나 갑자기 기술지원이 중단되지는 않음
+       다름 릴리즈 또는 안정화 버전에서 호환이 되지 않는 형태로 변경될 수 있지만 이전을 위한 가이드를 제시함
+        API 오브젝트의 삭제, 편집 재생성이 필요할 수 있어 다운타임이 발생할 수 있음
+
+Stable Version API
+       정수 형태의 버전 이름을 사용 (예:  v1, v2)
+       이후 Kubernetes 버전에서 여러 버전에 거쳐 포함됨
+
+vagrant@kube-control1:~$ kubectl api-versions
+vagrant@kube-control1:~$ kubectl api-resources 등으로 api현황을 볼 수 있다.
+
+# 오늘의 실습
+$ mkdir work/20231229/
+$ cd work/20231229/
+$ vim example-pod-multi1.yaml
+ 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-multi1
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.14
+    ports:
+    - containerPort: 80
+      protocol: TCP
+  - name: centos-container
+    image: centos:7
+    command: ["sleep", "10000"]
+
+
+우선 이전시간에 실습했던 파드를 지워보자
+
+vagrant@kube-control1:~/work/20231229$ vim example-pod-multi.yaml
+vagrant@kube-control1:~/work/20231229$ kubectl get pods
+NAME                      READY   STATUS    RESTARTS      AGE
+example-pod               1/1     Running   1 (16h ago)   20h
+example-pod-annotations   1/1     Running   1 (16h ago)   17h
+example-pod-label         1/1     Running   1 (16h ago)   19h
+example-pod2              1/1     Running   1 (16h ago)   20h
+myapp-fdd54f569-4r2h9     1/1     Running   1 (16h ago)   21h
+nginx                     1/1     Running   1 (16h ago)   21h
+vagrant@kube-control1:~/work/20231229$ kubectl delete pods example-pod example-pod-annotations example-pod-label example-pod2
+myapp-fdd54f569-4r2h9
+pod "example-pod" deleted
+pod "example-pod-annotations" deleted
+pod "example-pod-label" deleted
+pod "example-pod2" deleted
+pod "myapp-fdd54f569-4r2h9" deleted
+vagrant@kube-control1:~/work/20231229$ kubectl get pods
+NAME                    READY   STATUS              RESTARTS      AGE
+myapp-fdd54f569-86bpj   0/1     ContainerCreating   0             7s
+nginx                   1/1     Running             1 (16h ago)   21h
+
+
+vagrant@kube-control1:~/work/20231229$ kubectl create -f example-pod-multi.yaml
+pod/example-pod-multi1 created
+vagrant@kube-control1:~/work/20231229$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS      AGE
+example-pod-multi1      2/2     Running   0             56s
+myapp-fdd54f569-86bpj   1/1     Running   0             2m54s
+nginx                   1/1     Running   1 (16h ago)   21h
+
+>>파드 로그 설명
+READY : 2/2
+좌측의 2는 현재 실행된, 준비된 컨테이너의 갯수이다
+우측의 2는 파드 오브젝트에서 실행하는, 전체 컨테이너의 최대갯수이다.
+즉, 현재 2개의 컨테이너가 모두 준비되었고, 이 pod에는 2개의 컨테이너가 있음을 나타냄.
+STATUS: 
+팟의 현재상태이며, Running은 현재 실행중인 상태이다.
+RESTARTS:
+팟이 재시작된 횟수이며, 현재 0으로 재시작되지 않았음을 나타낸다.
+AGE:
+팟이 생성된 시간또는 현재까지 실행된 시간이며, 팟이 생성된후 56초가 지났음을 의미한다.
+~~
+
+방금 만든 파드를 자세히 보자.
+vagrant@kube-control1:~/work/20231229$ kubectl describe pod example-pod-multi1 
+ 
+컨테이너 nginx와 centos container를 각각 만들었는데, 이것이 어느 정보를 가지고 어느상태인지, 어느곳에 마운트되었는지 등을 알수 있다.
+
+각각 컨테이너에 접근해본다.
+vagrant@kube-control1:~/work/20231229$ kubectl exec -it pods/
+pods/example-pod-multi1     pods/myapp-fdd54f569-86bpj  pods/nginx
+
+
+(centos 컨테이너에 접근)
+vagrant@kube-control1:~/work/20231229$ kubectl exec -it pods/example-pod-multi1 -c centos-container /bin/bash
+kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
+
+[root@example-pod-multi1 /]#
+[root@example-pod-multi1 /]# mkdir /test1
+[root@example-pod-multi1 /]# touch /test1/container1.txt
+[root@example-pod-multi1 /]# ls -l test1
+total 0
+-rw-r--r-- 1 root root 0 Dec 29 01:00 container1.txt
+
+(nginx 컨테이너에 접근)
+vagrant@kube-control1:~/work/20231229$ kubectl exec -it pods/example-pod-multi1 -c nginx /bin/bash
+kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
+
+root@example-pod-multi1:/#
+root@example-pod-multi1:/# mkdir /test2
+root@example-pod-multi1:/# touch /test2/container2.txt
+root@example-pod-multi1:/# ls -l test2
+total 0
+-rw-r--r-- 1 root root 0 Dec 29 01:03 container2.txt
+
+
+# 레이블 실습(복기) Label
+
+…
+metadata:
+  labels:
+    LABEL_KEY1: VALUE1
+…
+
+레이블이란?
+  - Kubernetes Cluster의 Object에 부가적인 정보를 붙여주는 방식 중 하나
+  - Key-Value 쌍으로 Kubernetes의 오브젝트를 식별하는데 사용함
+
+-Kubernetes Object에 Label 지정
+$ kubectl label OBJECT_TYPE  RESOURCE_NAME   LABEL_KEY=LABEL_VALUE
+
+-Kubernetes Object의 Label 삭제
+$ kubectl label  OBJECT_TYPE  RESOURCE_NAME   LABEL_KEY-
+단지 레이블_키 이름에 마이너스(-)만 붙여주면 레이블이 해제된다.
+
+- 일치성 레이블 셀렉터를 사용하여 Kubernetes Object 검색
+$ kubectl get  OBJECT_TYPE --show-labels -l  LABEL_SELECTOR_EXPRESSION
+-env 키가 포함된 레이블
+$ kubectl get pods --show-labels -l env
+-env 키가 없는 레이블 (해당 키만 제외)
+$ kubectl get pods --show-labels -l '!env'
+-Label의 키가 env이고 값이 dev인 레이블검색 (특정값 찾기)
+$ kubectl get pods --show-labels -l 'env=dev'
+-Label의 키가 env이고 값이 dev이 아닌 레이블검색 (특정값 제외하고 찾기)
+$ kubectl get pods --show-labels -l 'env!=dev'
+
+- 집합성 기준 레이블 셀렉터를 사용하여 Kubernetes Object 검색
+- Label의 키가 env에 값이 dev인 레이블
+$ kubectl get pods --show-labels -l 'env in (dev)'
+- Label의 키가 env에 값이 dev 또는 debug인 레이블
+$ kubectl get pods --show-labels -l 'env in (dev,debug)'
+
+
+#실습
+백엔드가 아닌 팟의 라벨을 보려고 한다.
+vagrant@kube-control1:~/work/20231229$ kubectl get pods --show-labels -l 'tier notin (backend)'
+NAME                    READY   STATUS    RESTARTS      AGE   LABELS
+example-pod-multi1      2/2     Running   0             43m   tier=frontend
+myapp-fdd54f569-86bpj   1/1     Running   0             45m   app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   1 (16h ago)   21h   run=nginx
+vagrant@kube-control1:~/work/20231229$ kubectl get pods --show-labels -l 'tier notin (frontend)'
+NAME                    READY   STATUS    RESTARTS      AGE   LABELS
+myapp-fdd54f569-86bpj   1/1     Running   0             45m   app=myapp,pod-template-hash=fdd54f569
+nginx                   1/1     Running   1 (16h ago)   21h   run=nginx
+
+# 애너테이션 Annotation  //노테이션 Annotations
+
+…
+metadata:
+  annotations:
+    ANNOTATION_KEY: VALUE
+…
+
+annotation같은경우는 debugging에 유용한것이며, 어떻게 움직이는지 동작을 정의하기 위한것
+# Kubernetes Object에 Annotation 지정
+$ kubectl annotate OBJECT_TYPE  RESOURCE_NAME  ANNOTATION_KEY=VALUE
+
+
+#어노테이션 실습
+vagrant@kube-control1:~/work/20231229$ kubectl describe pod example-pod-multi1로 일단 
+상세정보를 먼저본다.
+ 
+별도로 붙이지 않았을 때의 어노테이션은
+Annotations:      cni.projectcalico.org/containerID: dfaf802adb64160d17f5f3901cd6259d2e93d5b2177c3c1c8652f4f761b56d9b
+                  cni.projectcalico.org/podIP: 10.233.118.79/32
+                  cni.projectcalico.org/podIPs: 10.233.118.79/32
+정도이다. 여기에 어노테이션을 붙여본다.
+vagrant@kube-control1:~/work/20231229$ kubectl annotate pods example-pod-multi1 description=Test-App
+pod/example-pod-multi1 annotate
+ 
+다시 describe로 확인해보면, annotations 필드에 내가 작성한 대로 추가된 것을 알 수 있다. 
+
+
+# 네임스페이스NameSpace
+
+명령어를 통해서, 또는 매니페스트 파일을 통해서 네임스페이스를 구성할 수 있다.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: NAMESPACE_NAME
+or
+$ kubectl create namespace NAMESPACE_NAME
+
+
+# 네임스페이스 확인하기
+네임스페이스 목록확인
+vagrant@kube-control1:~/work/20231229$ kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   44h
+ingress-nginx     Active   44h
+kube-node-lease   Active   44h
+kube-public       Active   44h
+kube-system       Active   44h
+metallb-system    Active   44h
+
+특정 팟에서 사용되는 네임스페이스 확인하기
+$ kubectl get pods -n NAMESPACE_NAME
+
+#실습
+vagrant@kube-control1:~/work/20231229$ kubectl create namespace test-ns
+namespace/test-ns created
+vagrant@kube-control1:~/work/20231229$ kubectl create -f example-pod-multi.yaml -n test-ns
+pod/example-pod-multi1 created
+vagrant@kube-control1:~/work/20231229$ kubectl get pods -n test-ns
+NAME                 READY   STATUS              RESTARTS   AGE
+example-pod-multi1   0/2     ContainerCreating   0          9s
+
+#실습한것 삭제하기
+vagrant@kube-control1:~/work/20231229$ kubectl delete -f example-pod-multi.yaml
+pod "example-pod-multi1" deleted
+vagrant@kube-control1:~/work/20231229$ kubectl delete -f example-pod-multi.yaml -n test-ns
+pod "example-pod-multi1" deleted
+
+~~
+
+vagrant@kube-control1:~/work/20231229$ kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   44h
+ingress-nginx     Active   44h
+kube-node-lease   Active   44h
+kube-public       Active   44h
+kube-system       Active   44h
+metallb-system    Active   44h
+test-ns           Active   3m9s
+vagrant@kube-control1:~/work/20231229$ kubectl delete namespaces test-ns
+namespace "test-ns" deleted
+vagrant@kube-control1:~/work/20231229$ kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   44h
+ingress-nginx     Active   44h
+kube-node-lease   Active   44h
+kube-public       Active   44h
+kube-system       Active   44h
+metallb-system    Active   44h
+>>네임스페이스까지도 각각 삭제했다.
+
+
+# 초기화 컨테이너 // pod의 응용&활용
+p.132 chapter 5.5
+
+이번챕터는 파드(pod)의 응용부분에 해당한다.
+
+# 초기화 컨테이너(Init Container)
+- 애플리케이션 컨테이너가 실행되기 전에 실행될 작업이 실행되는 컨테이너.
+- 애플리케이션 컨테이너가 실행되기 전에 실행된 후 애플리케이션 컨테이너가 실행되기 전에 종료됨.
+- 초기화 컨테이너는 여러 개를 실행할 수 있다.
+- Manifest file에 정의된 순서대로 진행된다.
+
+
+#초기화 컨테이너가 포함된 파드object 예제 작성
+$ vim pod-init.yaml
+ 
+>>코드설명
+커맨드 필드값으로는 해당 컨테이너를 실행할 때 2초 대기한 후, helloworld01,02를 출력하는 설정이다.
+그리고 세번째 실제로 생성할 파드의 커맨드 필드값으로는 해당 컨테이너를 실행할 때 The app is running 이라는 메세지를 출력하고 3600초간 대기하라고 설정되어있다.
+
+컨테이너를 생성한다.
+vagrant@kube-control1:~/work/20231229$ kubectl create -f pod-init.yaml
+pod/kubernetes-simple-pod created
+
+
+(다른탭 하나를 더 준비해서 본다.)
+PS C:\Users\USER> ssh vagrant@192.168.56.11
+vagrant@kube-control1:~$
+
+	watch 옵션을 사용하면 실시간 로그를 볼 수 있다.
+vagrant@kube-control1:~$ kubectl get pods --watch
+NAME                    READY   STATUS    RESTARTS      AGE
+kubernetes-simple-pod   1/1     Running   0             3m4s
+myapp-fdd54f569-86bpj   1/1     Running   0             114m
+nginx                   1/1     Running   1 (17h ago)   23h
+kubernetes-simple-pod   1/1     Terminating   0             3m39s
+kubernetes-simple-pod   1/1     Terminating   0             4m9s
+kubernetes-simple-pod   0/1     Terminating   0             4m10s
+kubernetes-simple-pod   0/1     Terminating   0             4m11s
+kubernetes-simple-pod   0/1     Terminating   0             4m11s
+kubernetes-simple-pod   0/1     Pending       0             0s
+kubernetes-simple-pod   0/1     Pending       0             0s
+kubernetes-simple-pod   0/1     Init:0/1      0             0s
+kubernetes-simple-pod   0/1     Init:0/1      0             1s
+kubernetes-simple-pod   0/1     Init:0/1      0             4s
+kubernetes-simple-pod   0/1     PodInitializing   0             6s
+kubernetes-simple-pod   1/1     Running           0             9s
+
+~~
+다시 돌아오면
+vagrant@kube-control1:~/work/20231229$ kubectl create -f pod-init.yaml
+pod/kubernetes-simple-pod created
+파드 오브젝트가 잘 생성되어있다.
+
+이번엔 상세정보를 알아보자.
+vagrant@kube-control1:~/work/20231229$ kubectl describe pods kubernetes-simple-pod
+16977d3c76011
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      sleep 2; echo helloworld02
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Fri, 29 Dec 2023 02:39:39 +0000
+      Finished:     Fri, 29 Dec 2023 02:39:41 +0000   (2초차이)
+
+kubernetes-simple-pod:
+    Container ID:  docker://3b34f1bbf6f047fe76df521d34a5428a1961341292b10fbcbca7ef5a9d54ebb2
+    Image:         arisu1000/simple-container-app:latest
+    Image ID:      docker-pullable://arisu1000/simple-container-app@sha256:18f5a0fb9d1faf26862eb7a301b5c2a8debe80f60e5db03ddeb16977d3c76011
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo The app is running! && sleep 3600
+    State:          Running
+      Started:      Fri, 29 Dec 2023 02:39:44 +0000
+    Ready:          True
+
+아까 만들었던 내용이 그대로 발견된다.
+
+
+# 파드 인프라 컨테이너 (Pod Infra Container)
+p.134   Ch 5.6
+
+-파드 인프라 컨테이너
+파드는 컨테이너를 포함하는 좀 더 큰 단위이고, 리소스를 컨테이너에서 연결해서 사용하는것이다. 파드 자체에서 어떤 연결이 되는것이 아니고, 사실 숨겨져있는 컨테이너가 있다. 그것이 바로 ‘팟 인프라 컨테이너’이다. 
+
+-팟에 네트워크나 외부의 저장공간(볼륨)들이 연결되기위해서 처리하는 무언가가 바로 인프라컨테이너이며
+-Pause 라고하는 인프라 컨테이너 이미지를 사용한다. 
+
+
+# 스태틱 파드 (Static Pod)
+p.134  Ch 5.7
+
+스태틱 파드
+본디 kubernetes api server들을 통해서 명령이 내려져 파드들이 실행되는데,
+api server를 통하지않고 kubelet이 직접 실행하는 파드들을 바로 스태틱 파드라고 말한다.
+-Kubernete의 Scheduler에 의해 노드에 배치되어 실행되는 파드가 아닌 특수한 파드.
+-kubectl명령어를 통해 동작을 제어할 수 없는 파드.
+-kubelet이 관리하는 경로에 스태틱파드의 Manifest file을 작성해두면, kubelet이 자동으로 이를 감지하고 파드를 생성한다.
+
+vagrant@kube-control1:~/work/20231229$ ls -ld /etc/kubernetes/manifests/
+drwxr-xr-x 2 kube root 4096 Dec 27 05:23 /etc/kubernetes/manifests/
+vagrant@kube-control1:~/work/20231229$ ls -l /etc/kubernetes/manifests/
+total 16
+-rw------- 1 root root 4516 Dec 27 05:23 kube-apiserver.yaml
+-rw------- 1 root root 3631 Dec 27 05:23 kube-controller-manager.yaml
+-rw------- 1 root root 1721 Dec 27 05:23 kube-scheduler.yaml
+>>매니페스트파일들이 모두 pod형태로 실행되는 공간이다.
+여기에 매니페스트파일을 작성해서 두면, 해당 노드에 파드가 생성되서 실행된다.
+kubelet이 이를 감지하기때문에 , apiserver와 통신하지 않아서 스태틱파드에 어떤명령을 실행할 수는 없다(잘 제어되지는 않는다). 보통 스태틱파드는 kube-apiserver라던가 etcd같은 시스템 파드를 실행하는 용도로 많이 사용된다.
+
+위의 매니페스트 디렉터리의 권한을 보면, drwxr-xr-x 인것이 확인된다.
+
+#스태틱 파드 실습
+vagrant@kube-control1:~/work/20231229$ kubectl get pods -o wide
+NAME                    READY   STATUS    RESTARTS      AGE    IP              NODE         NOMINATED NODE   READINESS GATES
+kubernetes-simple-pod   1/1     Running   0             44m    10.233.118.81   kube-node3   <none>           <none>
+myapp-fdd54f569-86bpj   1/1     Running   0             160m   10.233.73.79    kube-node1   <none>           <none>
+nginx                   1/1     Running   1 (18h ago)   23h    10.233.74.9     kube-node2   <none>           <none>
+
+(kube-node1에서)
+vagrant@kube-node1:~$ ls -ld /etc/kubernetes/manifests/
+drwxr-xr-x 2 kube root 4096 Dec 27 05:23 /etc/kubernetes/manifests/
+vagrant@kube-node1:~$ sudo -i
+root@kube-node1:~# cd /etc/kubernetes/manifests/
+root@kube-node1:/etc/kubernetes/manifests# ls -l
+total 4
+-rw-r----- 1 root root 889 Dec 27 05:23 nginx-proxy.yml
+root@kube-node1:/etc/kubernetes/manifests# vim example-pod-static.yaml
+ 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-static
+spec:
+  containers:
+  - name: static
+    image: arisu1000/simple-container-app:latest
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+
+다시 control1노드로 돌아와서, 만들기 전 파드목록과 만든 후 파드목록을 조회해본다
+vagrant@kube-control1:~/work/20231229$ kubectl get pods -o wide
+NAME                    READY   STATUS    RESTARTS      AGE    IP              NODE         NOMINATED NODE   READINESS GATES
+kubernetes-simple-pod   1/1     Running   0             44m    10.233.118.81   kube-node3   <none>           <none>
+myapp-fdd54f569-86bpj   1/1     Running   0             160m   10.233.73.79    kube-node1   <none>           <none>
+nginx                   1/1     Running   1 (18h ago)   23h    10.233.74.9     kube-node2   <none>           <none>
+vagrant@kube-control1:~/work/20231229$ kubectl get pods -o wide
+NAME                            READY   STATUS    RESTARTS      AGE    IP              NODE         NOMINATED NODE   READINESS GATES
+example-pod-static-kube-node1   1/1     Running   0             46s    10.233.73.82    kube-node1   <none>           <none>
+kubernetes-simple-pod           1/1     Running   0             50m    10.233.118.81   kube-node3   <none>           <none>
+myapp-fdd54f569-86bpj           1/1     Running   0             165m   10.233.73.79    kube-node1   <none>           <none>
+nginx                           1/1     Running   1 (18h ago)   23h    10.233.74.9     kube-node2   <none>           <none>
+ 
+>>kubectl 명령어로 실행하지 않았음에도 불구하고, 스태틱파드가 생성된 것을 알 수 있다.(뒤에 이 파드를 생성한 노드가 붙어서 등장한다 *kube-node1)
+
+컨트롤노드에서 kubectl로 이 파드를 지워본다.
+vagrant@kube-control1:~/work/20231229$ kubectl get pods -o wide
+NAME                            READY   STATUS    RESTARTS      AGE    IP              NODE         NOMINATED NODE   READINESS GATES
+example-pod-static-kube-node1   1/1     Running   0             46s    10.233.73.82    kube-node1   <none>           <none>
+kubernetes-simple-pod           1/1     Running   0             50m    10.233.118.81   kube-node3   <none>           <none>
+myapp-fdd54f569-86bpj           1/1     Running   0             165m   10.233.73.79    kube-node1   <none>           <none>
+nginx                           1/1     Running   1 (18h ago)   23h    10.233.74.9     kube-node2   <none>           <none>
+vagrant@kube-control1:~/work/20231229$ kubectl delete pods kubernetes-simple-pod
+pod "kubernetes-simple-pod" deleted
+vagrant@kube-control1:~/work/20231229$ kubectl delete pods example-pod-static-kube-node1
+pod "example-pod-static-kube-node1" deleted
+vagrant@kube-control1:~/work/20231229$ kubectl get pods -o wide
+NAME                            READY   STATUS    RESTARTS      AGE    IP             NODE         NOMINATED NODE   READINESS GATES
+example-pod-static-kube-node1   1/1     Running   0             16s    10.233.73.82   kube-node1   <none>           <none>
+myapp-fdd54f569-86bpj           1/1     Running   0             171m   10.233.73.79   kube-node1   <none>           <none>
+nginx                           1/1     Running   1 (18h ago)   23h    10.233.74.9    kube-node2   <none>           <none>
+>> 분명히 두개의 파드를 지웠는데, simple pod는 삭제된 반면 example pod static파드는 지워지지 않았다. 
+이 파드는 명령어로 삭제가 안되며, 다시 이 파드를 만든 노드로 이동해서 manifest디렉터리에서 정의한 static yaml파일을 없애야 한다.
+
+(node1에서 )
+root@kube-node1:/etc/kubernetes/manifests# rm example-pod-static.yaml
+
+컨트롤노드에 다시 돌아와서)
+vagrant@kube-control1:~/work/20231229$ kubectl get pods -o wide
+NAME                    READY   STATUS    RESTARTS      AGE    IP             NODE         NOMINATED NODE   READINESS GATES
+myapp-fdd54f569-86bpj   1/1     Running   0             173m   10.233.73.79   kube-node1   <none>           <none>
+nginx                   1/1     Running   1 (18h ago)   23h    10.233.74.9    kube-node2   <none>           <none>
+>> 따로 kubectl delete를 하지 않았음에도 스태틱파드가 제거되었다.
+
+
+# 파드의 리소스 관리
+
+최대 리소스 사용량(limits)
+  Kubernetes Pod(Container)에서 사용할 수 있는 최대 리소스 사용량 제한을 설정
+
+이는 Manifest file(yaml)을 정의할 때, spec 필드에서 정의할 수 있다. 바로 알아보자.
+spec:
+  containers:
+  - name: CONTAINER1
+    image: IMAGE_REPO:TAG
+    resources:
+      limits:
+     cpu: 200m
+     memory: 100Mi
+
+>> 바로 resources 필드밑에 limits 필드에서 설정이 가능하다.
+
+
+최소 리소스 사용량(requests)
+   Kubernetes Pod(Container)의 애플리케이션이 실행될 때 필요한 리소스의 양을 확보하기 위해 리소스를 요청하는 것
+
+이것도 마찬가지로 manifest file 정의시에 같이 설정이 가능하다.
+spec:
+containers:
+- name: CONTAINER1
+  image: IMAGE_REPO:TAG
+  resources:
+    requests:
+    cpu: 200m
+    memory: 100Mi
+
+>> resources 필드밑에 requests 필드에서 설정하면된다.
+
+
+#실습
+vagrant@kube-control1:~/work/20231229$ vim example-pod-req.yaml
+ 
+>>참고로 단위를 보면
+cpu :100m 에서 m 은 mili core를 의미한다. 1core당 1000 milicore를 의미함. (0.1코어)
+memory: 10Mi 에서 Mi 는 메비바이트(Mebibyte, MiB) 를 의미하며, 메비바이트는 2의 거듭제곱단위로 메모리크기를 나타내는 이진단위이다. 10 MiB는 약 10메가바이트에 해당.
+>core와 milicore은 어느사용량정도인가? 하나의 물리적 cpu안에 집적률을 높여놓은게 멀티코어인데, 간략하게 말한다면 1코어라는것은 한 코어의 사용량100%라는것을 말한다. 
+
+파드 실행
+vagrant@kube-control1:~/work/20231229$ kubectl create -f example-pod-req.yaml
+pod/example-pod-req created
+
+상세정보확인
+vagrant@kube-control1:~/work/20231229$ kubectl describe pods example-pod-req 
+ 
+컨테이너 정보를 보면, 
+Containers:
+  example:
+    Container ID:   docker://096c52dd197aa945a835dd06c0145db45dce904331a2528db3b3c271a323feae
+    Image:          k8s.gcr.io/echoserver:1.4
+    Image ID:       docker-pullable://k8s.gcr.io/echoserver@sha256:5d99aa1120524c801bc8c1a7077e8f5ec122ba16b6dda1a5d3826057f67b9bcb
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Fri, 29 Dec 2023 05:29:43 +0000
+    Ready:          True
+    Restart Count:  0
+    Requests:
+      cpu:        100m
+      memory:     10Mi
+>>매니페스트 파일에서 정의한 그대로 나타나는 것을 알 수 있다. 
+
+잘 만들었으면, 이번에는 최소가아니라 최대 리소스를 실습해본다.
+vagrant@kube-control1:~/work/20231229$ ls
+example-pod-multi.yaml  example-pod-req.yaml  pod-init.yaml
+
+이 req를 복사해주자.
+vagrant@kube-control1:~/work/20231229$ cp example-pod-req.yaml example-pod-req-huge.yaml
+vagrant@kube-control1:~/work/20231229$ ls
+example-pod-multi.yaml  example-pod-req-huge.yaml  example-pod-req.yaml  pod-init.yaml
+
+vagrant@kube-control1:~/work/20231229$ vim example-pod-req-huge.yaml
+ 
+apiVersion: v1
+kind: Pod
+metadata:
+ name: example-pod-req-huge
+spec:
+  containers:
+  - name: example
+    image: k8s.gcr.io/echoserver:1.4
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    resources:
+      requests:
+        cpu: 4000m
+        memory: 4000Mi
+
+생성
+vagrant@kube-control1:~/work/20231229$ kubectl create -f example-pod-req-huge.yaml
+pod/example-pod-req-huge created
+
+만들었으면 상세정보를 확인해보자.
+vagrant@kube-control1:~/work/20231229$ kubectl describe pods example-pod-req-huge 
+
+Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  47s   default-scheduler  0/4 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/master: }, 3 Insufficient cpu, 3 Insufficient memory. preemption: 0/4 nodes are available: 1 Preemption is not helpful for scheduling, 3 No preemption victims found for incoming pod..
+>>전체노드중에서 한개라도 실패한다면 뜨는것을 알 수 있는데, 특히나 insufficient cpu,memory로 리소스가 부족하다는것을 나타낸다
+
+
+이번에는 limit _ 최대 제한량을 작성해본다
+vagrant@kube-control1:~/work/20231229$ cp example-pod-req.yaml example-pod-limit.yaml
+vagrant@kube-control1:~/work/20231229$ vim example-pod-limit.yaml
+ 
+apiVersion: v1
+kind: Pod
+metadata:
+ name: example-pod-limit
+spec:
+  containers:
+  - name: example
+    image: k8s.gcr.io/echoserver:1.4
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    resources:
+      limits:
+        cpu: 300m
+        memory: 100Mi
+
+저장했으면 실행해보자.
+vagrant@kube-control1:~/work/20231229$ kubectl create -f example-pod-limit.yaml
+
+상세정보를 조회한다.
+vagrant@kube-control1:~/work/20231229$ kubectl describe pods example-pod-limit
+
+Containers:
+  example:
+    Container ID:   docker://6147b8804ea95ff4f92c758d5195775bd6c679be774bda3468f93d01df13bf3b
+    Image:          k8s.gcr.io/echoserver:1.4
+    Image ID:       docker-pullable://k8s.gcr.io/echoserver@sha256:5d99aa1120524c801bc8c1a7077e8f5ec122ba16b6dda1a5d3826057f67b9bcb
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Fri, 29 Dec 2023 05:49:56 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     300m
+      memory:  100Mi
+    Requests:
+      cpu:        300m
+      memory:     100Mi
+
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  23s   default-scheduler  Successfully assigned default/example-pod-limit to kube-node3
+  Normal  Pulled     22s   kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
+  Normal  Created    22s   kubelet            Created container example
+  Normal  Started    22s   kubelet            Started container example
+
+>>limits를 정의했는데, requests필드도 정의되어있는것이 확인된다.
+
+
+# 파드 환경변수 사용하기
+p.140 ch 5.9 
+
+컨테이너 사용의 장점중 하나는, 개발환경에서 만든 컨테이너 환경변수만 변경해서 실제환경에서 실행하더라도 개발환경에서 동작하던 그대로 동작한다는 점이다.
+
+환경변수를 작성하는 예시 (vi editor사용)
+우선 이전 실습 파드를 지운다.
+vagrant@kube-control1:~/work/20231229$ kubectl delete pods example-pod-limit  example-pod-req example-pod-req-huge
+pod "example-pod-limit" deleted
+pod "example-pod-req" deleted
+pod "example-pod-req-huge" deleted
+
+$ vim example-pod-env1.yaml
+
+vagrant@kube-control1:~/work/20231229$ cat example-pod-env1.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-env1
+spec:
+  containers:
+  - name: example-env
+    image: k8s.gcr.io/echoserver:1.4
+    env:
+    - name: TESTENV1
+      value: "1234"
+
+
+
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  25s   default-scheduler  Successfully assigned default/example-pod-env1 to kube-node1
+  Normal  Pulled     24s   kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
+  Normal  Created    24s   kubelet            Created container example-env
+  Normal  Started    24s   kubelet            Started container example-env
+
+상세정보로도 나오나, 직접 실행해서 확인해보자.
+vagrant@kube-control1:~/work/20231229$ kubectl exec -it example-pod-env1 /bin/bash
+kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
+
+    앤서블 실행명령으로 실행해보자.
+    env 환경변수명령어를 입력하면 변수들이 뜬다.
+root@example-pod-env1:/# env
+HOSTNAME=example-pod-env1
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT=tcp://10.233.0.1:443
+TERM=xterm
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_SERVICE_HOST=10.233.0.1
+TESTENV1=1234
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PWD=/
+SHLVL=1
+HOME=/root
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+KUBERNETES_SERVICE_PORT_HTTPS=443
+KUBERNETES_PORT_443_TCP_ADDR=10.233.0.1
+KUBERNETES_PORT_443_TCP=tcp://10.233.0.1:443
+_=/usr/bin/env
+>>아까 지정해준 TESTENV1 = 1234 값이 도출됐다. 
+
+~~~~
+
+# 컨트롤러 오브젝트 ( Controller Object )
+
+-컨트롤러 : 파드들을 관리하는 역할을 맡는다. 쿠버네티스에는 다양한 목적에 맞게 사용할 수 있는 컨트롤러들이 있다. >> Kubernetes Object
+
+Controller object의 종류
+- 레플리케이션 컨트롤러 (Replication Controller)
+- 레플리카세트 (ReplicaSet)
+- 디플로이먼트 (Deployment)
+- 데몬세트 (DaemonSet)
+- 스테이트풀세트 (StatefulSet)
+- 잡 (Job)
+- 크론잡 (CronJob)
+
+
+# ReplicationController
+-	동일한 파드 복제본을 여러 개 실행(유지)할 수 있는 컨트롤러이다
+-	다른 컨트롤러중에서도 가장 먼저 나온 , kubernetes에서 가장 기본적인 컨트롤러
+-	컨트롤러가 관리하는 Pod가 종료된 경우, 새로운 Pod 를 생성해서 Pod 복제본의 갯수를 유지한다. 
+
+레플리케이션컨트롤러 목록 확인
+vagrant@kube-control1:~/work/20231229$ kubectl get replicationcontrollers
+$ kubectl get replicationcontrollers
+NAME       DESIRED   CURRENT   READY   AGE
+rc-nginx      2         2         2       15s
+	>>	N      / 현재파드개수 / 준비된 파드 / 가 각각 desired,current,ready에 속함. 
+
+ReplicationController
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: RC_NAME
+spec:
+  replicas: N
+  selector:
+    LABEL_KEY1: VALUE1
+  template:
+      metadata:
+        labels:
+          LABEL_KEY1: VALUE1
+        spec:
+          containers:
+          - name: CONTAINER_NAME
+            image: IMAGE_REPO:TAG
+
+>>  replicas: 라는 필드는 파드 복제본을 몇개 가질 지(갯수)를 N개로 표현한다.
+selector라는 필드는 키 밸류값을, 나머지는 레이블 필드와 스펙 필드에서 나타내준다. 
+
+  DESIRED : Controller가 실행을 원하는 파드 복제본의 개수(replicas)
+  CURRENT : 현재 실행된 파드 복제본의 개수
+  READY : 준비된 파드 복제본의 개수
+
+
+레플리케이션 컨트롤러 예제
+vagrant@kube-control1:~/work/20231229$ vim rc-nginx.yaml
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: rc-nginx
+spec:
+  replicas: 2
+  selector:
+    app: rc-nginx
+  template:
+    metadata:
+      labels:
+        app: rc-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+
+$ kubectl describe replicationcontrollers rc-nginx
+Name:         rc-nginx
+Namespace:    default
+Selector:     app=rc-nginx
+Labels:       app=rc-nginx
+Annotations:  <none>
+Replicas:     2 current / 2 desired
+Pods Status:  2 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=rc-nginx
+  Containers:
+   nginx:
+    Image:        nginx:1.14
+    Port:         80/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age   From                    Message
+  ----    ------            ----  ----                    -------
+  Normal  SuccessfulCreate  16m   replication-controller  Created pod: rc-nginx-x24gw
+  Normal  SuccessfulCreate  16m   replication-controller  Created pod: rc-nginx-xlj59
+
+-Replication Controller의 파드 스케일링 (2개에서 3개로 늘려보자.
+$ kubect	l scale CONTROLLER_TYPE CONTROLLER_NAME --replicas=3
+replicationcontroller/rc-nginx scaled
+
+vagrant@kube-control1:~/work/20231229$ kubectl scale replicationcontrollers rc-nginx --replicas=3    >>3개로 변경
+replicationcontroller/rc-nginx scaled
+vagrant@kube-control1:~/work/20231229$
+vagrant@kube-control1:~/work/20231229$ kubectl get replicationcontrollers
+NAME       DESIRED   CURRENT   READY   AGE
+rc-nginx   3         3         3       30m
+
+vagrant@kube-control1:~/work/20231229$
+vagrant@kube-control1:~/work/20231229$ kubectl get pods
+NAME               READY   STATUS    RESTARTS   AGE
+example-pod-env1   1/1     Running   0          73m
+rc-nginx-pjz98     1/1     Running   0          29s
+rc-nginx-x24gw     1/1     Running   0          30m
+rc-nginx-xlj59     1/1     Running   0          30m
+
+>> 레플리케이션 컨트롤러까지 진행했다 이후에 레플리카세트,디플로이먼트,데몬세트 등 컨트롤러 오브젝트를 계속해서 진행함
+bye 2023, Hello 2024!    - 23.12.29(fri) -
+
