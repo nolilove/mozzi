@@ -1,0 +1,638 @@
+20주차 화요일 메모( Kubernetes _ 5 ContainerProbe, startupProbe, 파드 구성 패턴, ReplicationController , ReplicaSet )
+
+2024.01.02(tue) happy new year!!!
+
+지난시간 파드를 다루는 방법중 [컨트롤러]를 다루는것을 알아봤다.
+>>초기화 컨테이너, 파드인프라컨테이너,스태틱파드,컨트롤러 오브젝트
+
+초기화 컨테이너(Init Container) (p.132, Ch5.5)
+  - 애플리케이션 컨테이너가 실행되기 전에 실행될 작업이 실행되는 컨테이너
+  - 애플리케이션 컨테이너가 실행되기 전에 실행된 후 애플리케이션 컨테이너가 실행되기 전에 종료됨
+ - 초기화 컨테이너는 여러개를 실행할 수 있음.
+
+파드 인프라 컨테이너(p.134, Ch5.6)
+  - 파드의 컨테이너에 인프라(Network, 외부의 저장 공간(Volume) 등)를 제공하는 숨겨진 컨테이너
+  - 파드 인프라 컨테이너에서는 pause 컨테이너 이미지가 사용됨
+
+스태틱 파드(Static Pod)
+  - Kubernetes의 Scheduler에 의해 노드에 배치되어 실행되는 파드가 아닌 특수한 파드
+  - kubectl 명령어를 통해 동작을 제어할 수 없는 파드
+  - kubelet이 관리하는 경로(/etc/kubernetes/manifests/)에 스태틱 파드의 Manifest File을 작성하여 두면 kubelet이 자동으로 감지하고 파드가 생성됨
+
+파드의 리소스 관리- yaml파일에서 정의 
+-최대 리소스 사용량 제한(limits)
+  Kubernetes Pod(Container)에서 사용할 수 있는 최대 리소스 사용량 제한을 설정
+-최소 리소스 사용량 요청(requests)
+   Kubernetes Pod(Container)의 애플리케이션이 실행될 때 필요한 리소스의 양을 확보하기 위해 리소스를 요청하는 것
+~~~  
+Controller
+  - 하나 이상의 파드를 관리할 수 있는 Kubernetes Object
+
+Controller 종류
+ - ReplicationController
+ - ReplicaSet
+ - Deployment
+ - DaemonSet
+ - Job
+ - CronJob
+ - StatefulSet
+
+ReplicationController
+ - 동일한 파드 복제본을 여러개 실행할 수 있는 컨트롤러
+ - Kubernetes 초기부터 존재하는 컨트롤러로 가장 기본적인 컨트롤러
+ - Controller가 관리하는 파드가 종료된 경우 새로운 파드를 생성하여 파드 복제본의 개수를 유지함.
+
+ReplicationController 목록 확인
+$ kubectl get replicationcontrollers
+NAME       DESIRED   CURRENT   READY   AGE
+rc-nginx          2                   2                 2       15s
+
+  DESIRED : Controller가 실행을 원하는 파드 복제본의 개수(replicas)
+  CURRENT : 현재 실행된 파드 복제본의 개수
+  READY : 준비된 파드 복제본의 개수
+
+~~~~
+
+#오늘의 복기실습
+새해 첫 디렉터리를 만들자.
+vagrant@kube-control1:~/work/20240102$
+매니페스트파일 하나를 생성한다.
+vagrant@kube-control1:~/work/20240102$ vim example-pod-resources.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-resources
+  labels:
+    app: example-pod-resources
+spec:
+  containers:
+  - name: example-pod-resources
+    image: k8s.gcr.io/echoserver:1.4
+    resources:
+      requests:
+        cpu: 100m
+        memory: 10Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+vagrant@kube-control1:~/work/20240102$ kubectl create -f example-pod-resources.yaml
+pod/example-pod-resources created
+
+상세확인을 해본다
+vagrant@kube-control1:~/work/20240102$ kubectl describe pods example-pod-resources
+Name:             example-pod-resources
+~~~
+Containers:
+  example-pod-resources:
+Limits:
+      cpu:     500m
+      memory:  256Mi
+    Requests:
+      cpu:        100m
+      memory:     10Mi
+~~~
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  28s   default-scheduler  Successfully assigned default/example-pod-resources to kube-node1
+  Normal  Pulled     27s   kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
+  Normal  Created    26s   kubelet            Created container example-pod-resources
+  Normal  Started    26s   kubelet            Started container example-pod-resources
+>이렇게 나옴을 살펴볼 수 있었다.
+
+Kubernetes Object Manifest File 구조 참조
+$ kubectl explain  OBJECT
+$ kubectl explain pod
+$ kubectl explain pod.spec
+
+$ vim pod-env.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kubernetes-simple-pod
+  labels:
+    app: kubernetes-simple-pod
+spec:
+  containers:
+  - name: kubernetes-simple-pod
+    image: arisu1000/simple-container-app:latest
+    ports:
+    - containerPort: 8080
+    env:
+    - name: TESTENV01
+      value: "testvalue01"
+    - name: HOSTNAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    - name: CPU_REQUEST
+      valueFrom:
+        resourceFieldRef:
+          containerName: kubernetes-simple-pod
+          resource: requests.cpu
+    - name: CPU_LIMIT
+      valueFrom:
+        resourceFieldRef:
+          containerName: kubernetes-simple-pod
+          resource: limits.cpu
+
+
+vagrant@kube-control1:~/work/20240102$ kubectl create -f pod-env.yaml
+
+vagrant@kube-control1:~/work/20240102$ kubectl describe pods kubernetes-simple-pod
+Name:             kubernetes-simple-pod
+Containers:
+kubernetes-simple-pod:
+Environment:
+        TESTENV01:    testvalue01
+        HOSTNAME:      (v1:spec.nodeName)
+        POD_NAME:     kubernetes-simple-pod (v1:metadata.name)
+        POD_IP:        (v1:status.podIP)
+        CPU_REQUEST:  0 (requests.cpu)
+        CPU_LIMIT:    node allocatable (limits.cpu)
+
+vagrant@kube-control1:~/work/20240102$ kubectl exec -it kubernetes-simple-pod /bin/sh
+kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
+~ #
+>>컨테이너 이미지에 따라서 본셸로 진입했다.(배쉬셸 아님)
+~ # env 를 입력해서 조회를 해보면
+POD_IP=10.233.73.90
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_PORT=tcp://10.233.0.1:443
+CPU_REQUEST=0
+HOSTNAME=kube-node1
+TESTENV01=testvalue01
+SHLVL=1
+HOME=/root
+TERM=xterm
+POD_NAME=kubernetes-simple-pod
+KUBERNETES_PORT_443_TCP_ADDR=10.233.0.1
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+CPU_LIMIT=1
+KUBERNETES_SERVICE_PORT_HTTPS=443
+KUBERNETES_PORT_443_TCP=tcp://10.233.0.1:443
+KUBERNETES_SERVICE_HOST=10.233.0.1
+PWD=/root
+
+여기서 각각 값만 따로 출력도 가능하다
+~ # echo $TESTENV01
+testvalue01
+~ # echo $HOSTNAME
+kube-node3
+~ # echo $POD_NAME
+kubernetes-simple-pod
+~ # echo $POD_IP
+10.233.118.88
+~ # echo $CPU_REQUEST
+0
+~ # echo $CPU_LIMIT
+1
+
+-------------------------
+
+# Container Probe // 컨테이너 프로브 _진단파드(health Check)
+프로브에는 세 가지 종류가 있다
+
+프로브(Probe)는, 컨테이너에서 kubelet에 의해 주기적으로 수행되는 진단(diagnostic)이다.
+
+
+Container Probe 종류
+ - livenessProbe
+     - 컨테이너의 실행 여부를 점검하는 프로브
+     - livenessProbe 실패시 컨테이너 종료 후 재시작
+
+ - readinessProbe
+      - 컨테이너가 실행된 후 애플리케이션에 요청에 응답할 준비가 되었는지 점검하는 프로브
+      - readinessProbe 실패시 모든 서비스를 대상으로 엔드포인트에서 제거됨. (요청이 전달되지않도록 처리)
+      - 첫 readinessProbe 진행 전의 기본 상태값은 Failure이고 readinessProbe를 지원하지 않는 컨테이너의 경우 Success
+
+ - startupProbe
+      - 컨테이너의 애플리케이션이 시작되었는지 점검하는 점검하는 프로브
+      - startupProbe가 성공하지 못한 경우 다른 Probe를 비활성화
+      - startupProbe의 진단 실패시 컨테이너가 종료되며 재시작 정책에 따라 재시작됨.
+
+>> Liveness probe와 차이점은 Liveness probe는 컨테이너의 상태가 비정상이라고 판단하면, 해당 Pod를 재시작하는데 반해, Readiness probe는 컨테이너가 비정상일 경우에는 해당 Pod를 사용할 수 없음으로 표시하고, 서비스등에서 제외한다. 
+
+Probe Handler 방식 
+- HTTPGetAction	 : 컨테이너 안에 지정된 IP와 포트로 HTTP GET 요청을 보냈을 때 200 ~ 400 사이의 Status Code를 받으면 Success로 진단
+    
+- TCPSocketAction : 컨테이너 안에 지정된 IP와 포트로 TCP상태를 확인하고, 포트가 열려있는 경우 Success로 진단
+
+  - ExecAction : 컨테이너 안에서 지정된 명령을 실행하고 종료코드가 0인지 확인. 명령어 상태 코드 0으로 종료되면 진단이 성공한 것으로 간주한다.
+
+Probe 상태
+ - Success : 진단 결과가 성공인 상태
+ - Failure : 진단 결과가 실패인 상태
+ - Unknown : 진단 자체가 실패해서 컨테이너 상태를 알수 없음
+
+…
+spec:
+  containers:
+  - name: CONTAINER
+    image: IMAGE_REPO:TAG
+    PROBE_TYPE:
+      PROBE_HANDLER:
+        FIELD: VALUE
+…
+
+
+…
+spec:
+  containers:
+  - name: CONTAINER
+    image: IMAGE_REPO:TAG
+    livenessProbe:
+      httpGet:
+        path: PATH
+        port: PORT
+…
+
+
+#라이브니스 프로브 실습 (livenessProbe)
+vagrant@kube-control1:~/work/20240102$ vim example-pod-liveness.yaml
+매니페스트 파일을 생성해본다.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-liveness
+spec:
+  containers:
+  - name: example
+    image: devops2341/go-myweb:alpine
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+
+
+vagrant@kube-control1:~/work/20240102$ kubectl create -f example-pod-liveness.yaml
+pod/example-pod-liveness created
+
+상세확인해본다
+vagrant@kube-control1:~/work/20240102$ kubectl describe pods example-pod-liveness 
+Containers:
+example:
+Liveness:       http-get http://:8080/health delay=0s timeout=1s period=10s #success=1 #failure=3
+
+이제 웹을 테스트해보자.
+vagrant@kube-control1:~/work/20240102$ curl http://10.233.118.86:8080/health
+Health Check: OK
+vagrant@kube-control1:~/work/20240102$ curl http://10.233.118.86:8080
+Hello World!
+example-pod-liveness
+>>실제로 /health라는 파일이 있어야 헬스체크의 결과를 확인할 수 있다.
+
+
+하나를 더 생성해보자
+vagrant@kube-control1:~/work/20240102$ cp example-pod-liveness.yaml example-pod-liveness-404.yaml
+이파일을 수정한다
+vagrant@kube-control1:~/work/20240102$ vim example-pod-liveness-404.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-liveness-404
+spec:
+  containers:
+  - name: example
+    image: devops2341/go-myweb:alpine
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /health?code=404
+        port: 8080
+>>위에서 했던 수정파일에서 고대로 이름과 path필드만 바꿔준다.
+생성
+vagrant@kube-control1:~/work/20240102$ kubectl create -f example-pod-liveness-404.yaml
+pod/example-pod-liveness-404 created 
+목록확인
+vagrant@kube-control1:~/work/20240102$ kubectl get pods
+NAME                       READY   STATUS    RESTARTS   AGE
+example-pod-liveness       1/1     Running   0          13m
+example-pod-liveness-404   1/1     Running   0          15s
+다시확인해보자
+vagrant@kube-control1:~/work/20240102$ kubectl get pods
+NAME                       READY   STATUS    RESTARTS     AGE
+example-pod-liveness       1/1     Running   0            14m
+example-pod-liveness-404   1/1     Running   1 (5s ago)   36s
+
+vagrant@kube-control1:~/work/20240102$ kubectl get pods
+NAME                       READY   STATUS    RESTARTS     AGE
+example-pod-liveness       1/1     Running   0            14m
+example-pod-liveness-404   1/1     Running   2 (2s ago)   63s
+
+계속확인해보면 restarts 횟수가 늘어간다!
+상세확인을 해보자
+vagrant@kube-control1:~/work/20240102$ kubectl describe pods example-pod-liveness-404 
+Containers:
+  example:
+Liveness:       http-get http://:8080/health%3Fcode=404 delay=0s timeout=1s period=10s #success=1 #failure=3
+>>200번을 받으면 정상응답인데, 코드가 현재 404 에러코드를 받으므로 failure하는 상태에 놓인다.
+vagrant@kube-control1:~/work/20240102$ curl http://10.233.73.91:8080/health?code=404
+Health Check: Client Error
+
+에러가 나오는 예제를 진행해봤다.
+
+
+#startupProbe 실습
+
+$ vim example-pod-startup.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod-startup
+spec:
+  containers:
+  - name: example
+    image: devops2341/go-myweb:alpine
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    startupProbe:
+      httpGet:
+        path: /health
+        port: 8080
+vagrant@kube-control1:~/work/20240102$ kubectl create -f example-pod-startup.yaml
+pod/example-pod-startup created
+vagrant@kube-control1:~/work/20240102$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+example-pod-liveness    1/1     Running   0          121m
+example-pod-startup     0/1     Running   0          3s
+myapp-fdd54f569-fb2wn   1/1     Running   0          4h22m
+
+vagrant@kube-control1:~/work/20240102$ kubectl describe pods example-pod-startup
+Containers:
+  example:
+Startup:        http-get http://:8080/health delay=0s timeout=1s period=10s #success=1 #failure=3
+>> startup - liveness - readiness 순으로 진행된다.
+
+# 파드 구성 패턴
+p.144  ch 5-11 
+
+사이드카 패턴(Sidecar Pattern)
+ - 원래 사용하던 기본 컨테이너의 기능을 확장하거나 보조 컨테이너를 추가하는 컨테이너 패턴
+
+앰배서더 패턴(Ambassador Pattern)
+ - 파드 내에서 프록시 역할을 수행하는 컨테이너를 추가하는 패턴
+
+어댑터 패턴(Adaptor Pattern)
+ - 파드 외부에 노출되는 정보를 표준화하는  어댑터 컨테이너를 사용하는 컨테이너 패턴
+   
+# Controller
+ - 하나 이상의 파드를 관리할 수 있는 Kubernetes Object이다.
+
+Controller 종류
+ - ReplicationController
+ - ReplicaSet
+ - Deployment
+ - DaemonSet
+ - Job
+ - CronJob
+ - StatefulSet
+
+ReplicationController
+ - 동일한 파드의 파드 복제본을 여러개 실행할 수 있는 컨트롤러
+ - Kubernetes 초기부터 존재하는 Kubernetes의 Controller Object
+ - Controller가 관리하는 파드가 종료된 경우 새로운 파드를 생성하여 파드 복제본의 개수를 유지함
+
+# 레플리케이션컨트롤러 실습
+vagrant@kube-control1:~/work/20240102$ vim example-rc.yaml
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: example-rc
+spec:
+  replicas: 3
+  selector:
+    app: example-rc
+  template:
+    metadata:
+      labels:
+        app: example-rc
+    spec:
+      containers:
+      - name: example
+        image: k8s.gcr.io/echoserver:1.4
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+vagrant@kube-control1:~/work/20240102$ kubectl create -f example-rc.yaml
+replicationcontroller/example-rc created
+vagrant@kube-control1:~/work/20240102$ kubectl get pods --watch
+NAME                    READY   STATUS              RESTARTS   AGE
+example-pod-liveness    1/1     Running             0          3h11m
+example-pod-startup     1/1     Running             0          69m
+example-rc-7w4rq        1/1     Running             0          8s
+example-rc-p4v4z        1/1     Running             0          8s
+example-rc-rwsvp        0/1     ContainerCreating   0          8s
+myapp-fdd54f569-fb2wn   1/1     Running             0          5h31m
+example-rc-rwsvp        1/1     Running             0          15s
+
+정상적으로 생성되었다면, 파드와 레플리케이션 컨트롤러 확인시 파드들이 전부 보여진다.
+vagrant@kube-control1:~/work/20240102$ kubectl get replicationcontrollers
+NAME         DESIRED   CURRENT   READY   AGE
+example-rc   3         3         3       89s
+
+상세정보확인에서도 레플리케이션 컨트롤러로 관리되고 있음을 나타내고 있다.
+vagrant@kube-control1:~/work/20240102$ kubectl describe pods example-rc
+Controlled By:  ReplicationController/example-rc
+
+
+# 레플리케이션 컨트롤러 수 조정하기 ( scale 명령어)
+vagrant@kube-control1:~/work/20240102$ kubectl scale replicationcontroller example-rc --replicas=4
+replicationcontroller/example-rc scaled
+vagrant@kube-control1:~/work/20240102$ kubectl get replicationcontrollers
+NAME         DESIRED   CURRENT   READY   AGE
+example-rc   4         4         4       8m26s
+>>파드 복제본의 개수가 3개에서 4 개로 증가했다.
+
+반대로 줄일수도 있다.
+vagrant@kube-control1:~/work/20240102$ kubectl scale replicationcontroller example-rc --replicas=2
+replicationcontroller/example-rc scaled
+vagrant@kube-control1:~/work/20240102$ kubectl get replicationcontrollers
+NAME         DESIRED   CURRENT   READY   AGE
+example-rc   2         2         2       10m
+>>4개에서 2개로 줄었다.
+
+
+# 레플리카셋 컨트롤러 
+p.149 
+레플리케이션 컨트롤러와 비슷한데, 차이가 있다.
+
+ReplicaSet
+ - 파드복제본의 개수를 유지하는 컨트롤러
+ - 기존 ReplicationController의 기능을 개선한 것, 기본적으로 유사하다.
+
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: RS_NAME 
+spec:
+  replicas: N 
+  selector:
+    matchLabels:
+      LABEL_KEY1: VALUE1
+  template:
+    metadata:
+      labels:
+    spec:
+      containers:
+      - name: CONTAINER
+        image: IMAGE_REPO:TAG
+
+>> 레플리케이션 컨트롤러와 기본적인 구조는 같아보인다. 그러나 유사함에 차이가좀 있는데
+apiVersion을 apps/v1로 표기한다, 또한 selector필드에서 matchLabels라는 필드를 사용한다. 
+
+# 레플리카셋 실습
+vagrant@kube-control1:~/work/20240102$ vim replicaset-nginx.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: nginx-replicaset
+spec:
+  template:
+    metadata:
+      name: nginx-replicaset
+      labels:
+        app: nginx-replicaset
+    spec:
+      containers:
+      - name: nginx-replicaset
+        image: nginx
+        ports:
+        - containerPort: 80
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-replicaset
+
+vagrant@kube-control1:~/work/20240102$ kubectl create -f replicaset-nginx.yaml
+replicaset.apps/nginx-replicaset created
+vagrant@kube-control1:~/work/20240102$ kubectl get pods --watch
+NAME                     READY   STATUS              RESTARTS   AGE
+example-pod-liveness     1/1     Running             0          3h52m
+example-pod-startup      1/1     Running             0          111m
+example-rc-p4v4z         1/1     Running             0          41m
+example-rc-rwsvp         1/1     Running             0          41m
+myapp-fdd54f569-fb2wn    1/1     Running             0          6h13m
+nginx-replicaset-fsbsx   1/1     Running             0          10s
+nginx-replicaset-g6bxb   1/1     Running             0          10s
+nginx-replicaset-z4dkz   0/1     ContainerCreating   0          10s
+nginx-replicaset-z4dkz   1/1     Running             0          20s
+vagrant@kube-control1:~/work/20240102$ kubectl get replicaset
+NAME               DESIRED   CURRENT   READY   AGE
+myapp-fdd54f569    1         1         1       6d
+nginx-replicaset   3         3         3       53s
+>>세개의 레플리카를 갖는 레플리카셋 파드를 만들었다.
+한가지를 살펴보자.
+vagrant@kube-control1:~/work/20240102$ kubectl describe pods nginx-replicaset-fsbsx
+Name:             nginx-replicaset-fsbsx
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             kube-node1/192.168.56.21
+Start Time:       Tue, 02 Jan 2024 07:16:30 +0000
+Labels:           app=nginx-replicaset
+IP:               10.233.73.96
+Controlled By:  ReplicaSet/nginx-replicaset
+~~~~
+Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  8m48s  default-scheduler  Successfully assigned default/nginx-replicaset-fsbsx to kube-node1
+  Normal  Pulling    8m46s  kubelet            Pulling image "nginx"
+  Normal  Pulled     8m44s  kubelet            Successfully pulled image "nginx" in 2.108375912s (2.10838535s including waiting)
+  Normal  Created    8m44s  kubelet            Created container nginx-replicaset
+  Normal  Started    8m43s  kubelet            Started container nginx-replicaset
+
+마찬가지로 레플리카 수의 조정도 가능하다. 레플리카를 줄여보겠다. (3>2)
+vagrant@kube-control1:~/work/20240102$ kubectl scale replicaset nginx-replicaset --replicas=2
+replicaset.apps/nginx-replicaset scaled
+vagrant@kube-control1:~/work/20240102$ kubectl get replicaset
+NAME               DESIRED   CURRENT   READY   AGE
+myapp-fdd54f569    1         1         1       6d
+nginx-replicaset   2         2         2       12m
+
+반대로 레플리카 수를 늘려보자.(2>6)
+vagrant@kube-control1:~/work/20240102$ kubectl scale replicaset nginx-replicaset --replicas=6
+replicaset.apps/nginx-replicaset scaled
+vagrant@kube-control1:~/work/20240102$ kubectl get replicaset
+NAME               DESIRED   CURRENT   READY   AGE
+myapp-fdd54f569    1         1         1       6d
+nginx-replicaset   6         6         6       13m
+    
+>>결론: RC(Replication Controller)와 Replica Set은 Kubernetes에서 사용되는 두 가지 컨트롤러이고, 두 컨트롤러 모두 Pod의 수를 관리하고 유지하는 역할을 한다. 둘은 매우 유사하나, Replica Set은 더 유연한 선택 기준을 제공하고 다양한 레이블 매칭을 지원한다는 것이 특징이고 더 복잡한 환경에서 파드를 관리함& 스케일링할 때 장점을 가진다.
+
+**추가설명 
+Inequality 기반 매칭:
+•	Inequality 기반 매칭은 값이 크거나 작다는 조건을 기반으로 리소스를 선택할 수 있게 해줍니다.
+•	Kubernetes에서는 주로 Replica Set에서 사용되며, 특정 자원 요구 사항에 따라 파드를 선택할 때 유용합니다(예: 메모리 또는 CPU).
+
+Set 기반 매칭:
+•	Set 기반 매칭은 레이블 값이 일련의 값 중 하나에 속하는지 여부, 속하지 않는지 여부, 또는 존재 여부를 기반으로 리소스를 선택할 수 있게 해줍니다.
+•	이는 리소스가 여러 범주나 환경에 속할 수 있는 상황에서 강력하게 사용됩니다.
+
+핵심적인 차이는 = 기존 RC는 레이블 셀렉터 사용시에 일치성 기준을 사용하였으나, 꼭 그렇게 정의 하지 않아도 된다는것을 레플리카셋을 통해 볼 수 있음. 
+
+*번외>>>레플리카셋을 계속 지웠음에도 계속 파드가 살아날때 고려해봐야 할 점
+vagrant@kube-control1:~/work/20240102$ kubectl get replicaset
+NAME              DESIRED   CURRENT   READY   AGE
+myapp-fdd54f569   1         1         1       14m
+vagrant@kube-control1:~/work/20240102$ kubectl delete replicasets.apps myapp-fdd54f569
+replicaset.apps "myapp-fdd54f569" deleted
+vagrant@kube-control1:~/work/20240102$ kubectl get replicaset
+NAME              DESIRED   CURRENT   READY   AGE
+myapp-fdd54f569   1         1         0       3s
+vagrant@kube-control1:~/work/20240102$ kubectl get replicaset
+NAME              DESIRED   CURRENT   READY   AGE
+myapp-fdd54f569   1         1         1       8s
+레플리카셋을 지웠으나 계속해서 파드가 생성된다. 이럴때는 혹여나 Deployment를 진행하지 않았는지 생각해보자.
+
+디플로이먼트가 있는지 확인
+vagrant@kube-control1:~/work/20240102$ kubectl get deployments.apps
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+myapp   1/1     1            1           6d1h
+
+디플로이먼트를 삭제해주고, 하위항목까지 삭제안된 것이 없는지 재확인하자.
+vagrant@kube-control1:~/work/20240102$ kubectl delete deployments.apps myapp
+deployment.apps "myapp" deleted
+vagrant@kube-control1:~/work/20240102$ kubectl get deployments.apps
+No resources found in default namespace.
+vagrant@kube-control1:~/work/20240102$ kubectl get replicaset
+No resources found in default namespace.
+vagrant@kube-control1:~/work/20240102$ kubectl get replicationcontrollers
+No resources found in default namespace.
+
+이제 마지막으로 실행된 파드 myapp을 삭제하면, 완전히 삭제된다.
+vagrant@kube-control1:~/work/20240102$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+example-pod-liveness    1/1     Running   0          4h24m
+example-pod-startup     1/1     Running   0          143m
+myapp-fdd54f569-629zw   1/1     Running   0          11m
+vagrant@kube-control1:~/work/20240102$ kubectl delete pods myapp-fdd54f569-629zw
+pod "myapp-fdd54f569-629zw" deleted
+vagrant@kube-control1:~/work/20240102$ kubectl get pods
+NAME                   READY   STATUS    RESTARTS   AGE
+example-pod-liveness   1/1     Running   0          4h24m
+example-pod-startup    1/1     Running   0          143m
+확인해보면 다시 생겨나지 않는 것을 확인할 수 있었다.
+
+
+
+
