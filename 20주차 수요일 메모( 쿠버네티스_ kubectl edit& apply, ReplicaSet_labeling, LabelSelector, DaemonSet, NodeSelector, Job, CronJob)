@@ -1,0 +1,906 @@
+20주차 수요일 메모 ( Kubernetes _ 6 kubectl edit& apply, ReplicaSet_labeling, LabelSelector, DaemonSet, NodeSelector, Job, CronJob )
+
+
+지난시간에는 Container Probe, startupProbe, 파드 구성 패턴, 레플리케이션컨트롤러 , 레플리카셋 에 대해서 학습했다.
+
+Controller
+ - 하나 이상의 파드를 관리할 수 있는 Kubernetes Object
+
+Controller 종류
+ - ReplicationController  v
+ - ReplicaSet  v
+ - Deployment
+ - DaemonSet
+ - Job
+ - CronJob
+ - StatefulSet
+
+$ kubectl get replicationcontrollers
+$ kubectl get replicasets.apps
+$ kubectl get deployments.apps
+$ kubectl get daemonsets.apps 
+$ kubectl get jobs.batch
+$ kubectl get cronjobs.batch 
+$ kubectl get statefulsets.apps 
+
+# ReplicaSet
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: RS_NAME 
+spec:
+  replicas: N 
+  selector:
+    matchLabels:
+      LABEL_KEY1: VALUE1
+  template:
+    metadata:
+      labels:
+        LABEL_KEY1: VALUE1
+    spec:
+      containers:
+      - name: CONTAINER
+        image: IMAGE_REPO:TAG
+
+
+vagrant@kube-control1:~/work/20240103$ vim example-rs.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: example-rs
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example-rs
+  template:
+    metadata:
+      labels:
+        app: example-rs
+    spec:
+      containers:
+      - name: example
+        image: k8s.gcr.io/echoserver:1.4
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+
+vagrant@kube-control1:~/work/20240103$ kubectl create -f example-rs.yaml
+replicaset.apps/example-rs created
+vagrant@kube-control1:~/work/20240103$ kubectl get replicasets
+NAME         DESIRED   CURRENT   READY   AGE
+example-rs   3         3         3       29s
+
+다음으로 스케일링이다. 레플리카셋을 4개로 늘려봤다.
+vagrant@kube-control1:~/work/20240103$ kubectl scale replicaset example-rs --replicas=4
+replicaset.apps/example-rs scaled
+vagrant@kube-control1:~/work/20240103$ kubectl get pods
+NAME               READY   STATUS    RESTARTS   AGE
+example-rs-l4mmh   1/1     Running   0          104s
+example-rs-pvtf8   1/1     Running   0          104s
+example-rs-wtskx   1/1     Running   0          8s
+example-rs-xkbbd   1/1     Running   0          104s
+
+다시 3개로 줄여본다.
+vagrant@kube-control1:~/work/20240103$ kubectl scale replicaset example-rs --replicas 3
+replicaset.apps/example-rs scaled
+
+# yaml 파일로 된 레플리카셋의 정보를 보는방법
+vagrant@kube-control1:~/work/20240103$ kubectl get replicasets.apps example-rs -o yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  creationTimestamp: "2024-01-03T00:41:55Z"
+  generation: 3
+  name: example-rs
+  namespace: default
+  resourceVersion: "203064"
+  uid: aadf7653-21f3-49bf-a03e-895fac3cc828
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example-rs
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: example-rs
+    spec:
+      containers:
+      - image: k8s.gcr.io/echoserver:1.4
+        imagePullPolicy: IfNotPresent
+        name: example
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status:
+  availableReplicas: 3
+  fullyLabeledReplicas: 3
+  observedGeneration: 3
+  readyReplicas: 3
+  replicas: 3
+>>이 방법은 manifest에 정의하지 않았던 항목들도 등장하게 된다. 물론 매니페스트 파일에 정의한 부분도 같이 나온다. 실행중인 레플리카셋의 매니페스트 항목이 나타난다.
+
+# ‘실행중인’ 레플리카셋 등 오브젝트를 편집하는 방법(edit)
+
+$ kubectl edit OBJECT_TYPE RESOURCE_NAME 
+
+-실습
+vagrant@kube-control1:~/work/20240103$ kubectl edit replicasets.apps example-rs
+이렇게하면 vim에디터로 실행중인 manifest파일을 수정할 수 있게 된다. 
+여기서 replicas를 4로 바꿔서 저장해본다.
+replicaset.apps/example-rs edited
+조회를 해보면 정말 늘어났고, 파드도 늘어나있다.
+vagrant@kube-control1:~/work/20240103$ kubectl get replicasets.apps
+NAME         DESIRED   CURRENT   READY   AGE
+example-rs   4         4         4       13m
+
+vagrant@kube-control1:~/work/20240103$ kubectl get pods
+NAME               READY   STATUS    RESTARTS   AGE
+example-rs-b2ljf   1/1     Running   0          45s
+example-rs-l4mmh   1/1     Running   0          13m
+example-rs-pvtf8   1/1     Running   0          13m
+example-rs-xkbbd   1/1     Running   0          13m
+
+
+# 일반 vim에디터로 변경하고 실행중인 매니페스트 파일 적용하기(apply)
+vagrant@kube-control1:~/work/20240103$ vim example-rs.yaml 를 다시 열어서 
+spec:
+  replicas: 3 >> 5로 변경
+vagrant@kube-control1:~/work/20240103$ kubectl get replicaset
+NAME         DESIRED   CURRENT   READY   AGE
+example-rs   4         4         4       18m
+이대로는 변함없이 그대로 나타난다. 이때 적용을 하기 위해서는
+
+apply명령어를 사용한다.
+vagrant@kube-control1:~/work/20240103$ kubectl apply -f example-rs.yaml
+Warning: resource replicasets/example-rs is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+replicaset.apps/example-rs configured
+>> 위를보면 워닝이 나오는데 이것은 무시해도 된다. 마지막줄에 레플리카셋이 configured되었다고 출력해준다.
+
+확인해보자
+vagrant@kube-control1:~/work/20240103$ kubectl get pods
+NAME               READY   STATUS    RESTARTS   AGE
+example-rs-b2ljf   1/1     Running   0          7m45s
+example-rs-l4mmh   1/1     Running   0          20m
+example-rs-pvtf8   1/1     Running   0          20m
+example-rs-r25m4   1/1     Running   0          54s
+example-rs-xkbbd   1/1     Running   0          20m
+>> 파드복사본의 개수가 늘어난것이 확인된다.
+
+
+다시 축소하는것을 적용해보자
+vagrant@kube-control1:~/work/20240103$ vim example-rs.yaml 를 다시 열어서 
+spec:
+  replicas: 5 >> 3로 변경
+vagrant@kube-control1:~/work/20240103$ kubectl get replicaset
+NAME         DESIRED   CURRENT   READY   AGE
+example-rs   5         5         5       23m
+
+적용해준다
+vagrant@kube-control1:~/work/20240103$ kubectl apply -f example-rs.yaml
+replicaset.apps/example-rs configured
+확인해보면 잘 적용되어있다.
+vagrant@kube-control1:~/work/20240103$ kubectl get replicaset
+NAME         DESIRED   CURRENT   READY   AGE
+example-rs   3         3         3       23m
+
+
+이렇게 레플리카셋을 지정해두고 하나를 삭제해본다.
+vagrant@kube-control1:~$ kubectl get pods
+NAME               READY   STATUS    RESTARTS   AGE
+example-rs-l4mmh   1/1     Running   0          43m
+example-rs-pvtf8   1/1     Running   0          43m
+example-rs-xkbbd   1/1     Running   0          43m
+vagrant@kube-control1:~$ kubectl  delete pods example-rs-l4mmh
+pod "example-rs-l4mmh" deleted
+vagrant@kube-control1:~$ kubectl get pods
+NAME               READY   STATUS    RESTARTS   AGE
+example-rs-pvtf8   1/1     Running   0          43m
+example-rs-sq9vx   1/1     Running   0          5s
+example-rs-xkbbd   1/1     Running   0          43m
+>> example-rs-l4mmh 파드를 지웠음에도 다시 새로운 example-rs-pvtf8파드가 실행되었다. 파드를 더이상 사용하지 않으려면, deleting이나 scaling을 하도록 하자.
+
+vagrant@kube-control1:~$ kubectl delete replicasets.apps example-rs
+replicaset.apps "example-rs" deleted
+vagrant@kube-control1:~$ kubectl get pods
+No resources found in default namespace.
+실습했던 레플리카셋 파드를 모두 삭제했다.
+**참고로 vagrant@kube-control1:~$ kubectl delete -f example-rs.yaml 로도 삭제가 가능.
+
+
+# 레플리카셋 레이블링하기
+vagrant@kube-control1:~$ vim example-rs.yaml
+vagrant@kube-control1:~$ kubectl create -f example-rs.yaml
+replicaset.apps/example-rs created
+vagrant@kube-control1:~$ kubectl get pods --show-labels
+NAME               READY   STATUS    RESTARTS   AGE   LABELS
+example-rs-56v6r   1/1     Running   0          6s    app=example-rs
+example-rs-kpbv5   1/1     Running   0          6s    app=example-rs
+example-rs-r7tnl   1/1     Running   0          6s    app=example-rs
+
+레이블을 제거해본다.
+vagrant@kube-control1:~$ kubectl label pods example-rs-56v6r app-
+pod/example-rs-56v6r unlabeled
+
+다시 조회해본다
+vagrant@kube-control1:~$ kubectl get pods --show-labels
+NAME               READY   STATUS    RESTARTS   AGE   LABELS
+example-rs-56v6r   1/1     Running   0          65s   <none>
+example-rs-kpbv5   1/1     Running   0          65s   app=example-rs
+example-rs-pr6qr   1/1     Running   0          3s    app=example-rs
+example-rs-r7tnl   1/1     Running   0          65s   app=example-rs
+지정했던 레이블이 떼진 파드가 보인다. 그런데, 레플리카셋이 파드 하나를 더 만든것을 볼 수 있다. (pr6qr) 
+
+이 파드를 상세확인해보자.
+vagrant@kube-control1:~$ kubectl describe pods example-rs-pr6qr 
+Start Time:       Wed, 03 Jan 2024 01:37:23 +0000
+Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  5m37s  default-scheduler  Successfully assigned default/example-rs-pr6qr to kube-node1
+  Normal  Pulled     5m36s  kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
+  Normal  Created    5m36s  kubelet            Created container example
+  Normal  Started    5m36s  kubelet            Started container example
+
+>>그러면, 파드가 왜 4개가 되는 것일까?
+레플리카셋과 파드가 각각 있다고 치자. 레플리카셋(ReplicaSet)은 파드의 원하는 수를 유지하도록 설계된 Kubernetes 객체이다. 따라서 ReplicaSet이 관리하는 파드 수는 해당 ReplicaSet의 replicas 필드에 지정된 수와 일치해야 한다. 
+따라서 ReplicaSet의 파드에서 레이블을 제거하면 Kubernetes 시스템이 이를 감지하고 해당 파드를 제거하려고 시도할 것이다. 동시에 ReplicaSet의 replicas 수가 이미 3으로 설정되어 있으므로, ReplicaSet은 파드가 부족한 상태로 간주하고 새로운 파드를 생성하려고 하는 것이다.
+
+-다시 레이블을 고대로 붙여보면 어떨까?
+vagrant@kube-control1:~$ kubectl label pods example-rs-56v6r app=example-rs
+pod/example-rs-56v6r labeled
+vagrant@kube-control1:~$ kubectl describe replicasets
+Name:         example-rs
+Namespace:    default
+Selector:     app=example-rs
+Labels:       <none>
+Annotations:  <none>
+Replicas:     3 current / 3 desired
+Pods Status:  3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=example-rs
+  Containers:
+   example:
+    Image:        k8s.gcr.io/echoserver:1.4
+    Port:         8080/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age   From                   Message
+  ----    ------            ----  ----                   -------
+  Normal  SuccessfulCreate  18m   replicaset-controller  Created pod: example-rs-56v6r
+  Normal  SuccessfulCreate  18m   replicaset-controller  Created pod: example-rs-r7tnl
+  Normal  SuccessfulCreate  18m   replicaset-controller  Created pod: example-rs-kpbv5
+  Normal  SuccessfulCreate  17m   replicaset-controller  Created pod: example-rs-pr6qr
+  Normal  SuccessfulDelete  7s    replicaset-controller  Deleted pod: example-rs-pr6qr
+>>한개 파드(나중에 생성된 파드)가 deleted 된 것을 알 수 있다. 이또한 레플리카셋이 스케일링되는 것으로, 동일한 레이블이 붙은 이전 파드가 살아남고 후에 생성된 파드가 사라졌다.
+
+
+# Label Selctor 레이블셀렉터
+ 
+-일치성 기준 레이블 셀렉터
+      .spec.selector.matchLabels
+-집합성 기준 레이블 셀렉터
+     .spec.selector.matchExpressions
+
+집합성 기준 레이블 셀렉터 연산자
+    - In : 레이블의 키와 값이 일치해야 함
+    - NotIn : 레이블의 키와 값이 일치하지 않아야 함
+    - Exists : 레이블의 키가 포함되어야 함
+    - DoesNotExist : 레이블의 키가 포함되지 않아야 함
+
+
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: RS_NAME
+spec:
+  replicas: N
+  selector:
+    matchExpressions:
+    - key: LABEL_KEY1
+      operator: OPERATOR
+      values:
+      - VALUE1
+      - VALUE2
+  template:
+    metadata:
+      labels:
+        LABEL_KEY1: VALUE1
+     spec:
+        containers:
+        - name: CONTAINER_NAME
+          image: IMAGE_REPO:TAG
+
+
+# 실습
+$ vim example-rs-matchexp.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: example-rs-matchexp
+spec:
+  replicas: 3
+  selector:
+    matchExpressions:
+    - key: app
+      operator: in
+      values:
+      - example-rs-matchexp
+  template:
+    metadata:
+      labels:
+        app: example-rs-matchexp
+    spec:
+      containers:
+      - name: example
+        image: k8s.gcr.io/echoserver:1.4
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+>> 이전까지는 안써왔던 matchExpressions 필드가 추가된 것을 알 수 있다.
+matchExpressions는 레이블의 특정 속성에 대한 일치 표현식을 지정하는 셀렉터이다. 
+추가로 하위항목들을 정리하자면 이렇다.
+•	key: 레이블의 키를 지정한다.
+•	operator: 레이블 값을 비교하는 연산자를 지정한다. 예를 들어, In은 값이 목록에 속하는지 확인한다.
+•	values: 비교하려는 레이블 값의 목록을 지정한다.
+
+생성해보자
+vagrant@kube-control1:~$ kubectl create -f example-rs-matchexp.yaml
+Error from server (BadRequest): error when creating "example-rs-matchexp.yaml": ReplicaSet in version "v1" cannot be handled as a ReplicaSet: strict decoding error: unknown field "spec.selector.template"
+>이경우 들여쓰기 레벨이 다른것이므로 맞춰주자. 나의경우 template 필드의 들여쓰기레벨이 replicas, selector필드와 같지 않아서 발생했다.
+
+다시 생성하고 확인해본다.
+vagrant@kube-control1:~$ kubectl create -f example-rs-matchexp.yaml
+replicaset.apps/example-rs-matchexp created
+vagrant@kube-control1:~$ kubectl get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+example-rs-56v6r            1/1     Running   0          71m
+example-rs-kpbv5            1/1     Running   0          71m
+example-rs-matchexp-lgwvd   1/1     Running   0          74s
+example-rs-matchexp-qzrw4   1/1     Running   0          74s
+example-rs-matchexp-s6qrn   1/1     Running   0          74s
+example-rs-r7tnl            1/1     Running   0          71m
+>두번째로 정의해서 생긴 레플리카셋 (matchexp)가 보인다.
+
+상세정보를 확인해보도록 하자.
+vagrant@kube-control1:~$ kubectl describe replicasets.apps example-rs-matchexp
+ 
+Name:         example-rs-matchexp
+Namespace:    default
+Selector:     app in (example-rs-matchexp)
+Labels:       <none>
+Annotations:  <none>
+Replicas:     3 current / 3 desired
+Pods Status:  3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=example-rs-matchexp
+  Containers:
+   example:
+    Image:        k8s.gcr.io/echoserver:1.4
+    Port:         8080/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age   From                   Message
+  ----    ------            ----  ----                   -------
+  Normal  SuccessfulCreate  2m1s  replicaset-controller  Created pod: example-rs-matchexp-lgwvd
+  Normal  SuccessfulCreate  2m1s  replicaset-controller  Created pod: example-rs-matchexp-qzrw4
+  Normal  SuccessfulCreate  2m1s  replicaset-controller  Created pod: example-rs-matchexp-s6qrn
+>>레이블이 붙어있는 부분이 확인되고, 이미지와 포트 등이 확인된다. 또한 셀렉터 오퍼레이터로 in도 있는것이 보인다.
+
+파드에 옵션으로 새로만든 레플리카셋의 레이블 목록을 출력해본다.
+vagrant@kube-control1:~$ kubectl get pods --show-labels
+NAME                        READY   STATUS    RESTARTS   AGE     LABELS
+example-rs-56v6r            1/1     Running   0          73m     app=example-rs
+example-rs-kpbv5            1/1     Running   0          73m     app=example-rs
+example-rs-matchexp-lgwvd   1/1     Running   0          3m42s   app=example-rs-matchexp
+example-rs-matchexp-qzrw4   1/1     Running   0          3m42s   app=example-rs-matchexp
+example-rs-matchexp-s6qrn   1/1     Running   0          3m42s   app=example-rs-matchexp
+example-rs-r7tnl            1/1     Running   0          73m     app=example-rs
+
+이제 레플리카셋을 정리해주자.
+vagrant@kube-control1:~$ kubectl delete -f example-rs.yaml
+replicaset.apps "example-rs" deleted
+vagrant@kube-control1:~$ kubectl delete -f example-rs-matchexp.yaml
+replicaset.apps "example-rs-matchexp" deleted
+vagrant@kube-control1:~$ kubectl get pods
+No resources found in default namespace.
+
+다음으로 데몬셋에 대해서 알아보자.
+
+# DaemonSet // 데몬셋
+p.168  Ch-6.4
+
+-일반적으로 Kubernetes Cluster의 Control Plane을 제외한 나머지 모든 노드에 파드를 1개씩 배치하는 Kubernetes Controller Object
+
+DaemonSet은 Kubernetes에서 실행 중인 모든 노드에 특정한 파드 인스턴스를 유지하도록 하는 컨트롤러이다. 각 노드에는 해당 DaemonSet으로 정의된 파드가 실행되며, 노드가 추가되거나 제거될 때 자동으로 조정된다. 주로 시스템 레벨의 백그라운드 작업을 실행하는 데 사용하게 됨.
+
+vagrant@kube-control1:~$ vim example-ds.yaml
+$ vim example-ds.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: example-ds
+spec:
+  selector:
+    matchLabels:
+      app: example-ds
+  template:
+    metadata:
+      labels:
+        app: example-ds
+    spec:
+      containers:
+      - name: example
+        image: k8s.gcr.io/echoserver:1.4
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+
+vagrant@kube-control1:~$ kubectl create -f example-ds.yaml
+daemonset.apps/example-ds created
+vagrant@kube-control1:~$ kubectl get pods
+NAME               READY   STATUS    RESTARTS   AGE
+example-ds-6gjgc   1/1     Running   0          6s
+example-ds-6rz4k   1/1     Running   0          6s
+example-ds-gn5ss   1/1     Running   0          6s
+vagrant@kube-control1:~$ kubectl get daemonsets.apps
+NAME         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+example-ds   3         3         3       3            3           <none>          14s
+
+데몬셋의 상세정보를 확인해보자
+vagrant@kube-control1:~$ kubectl describe daemonsets.apps
+Name:           example-ds
+Selector:       app=example-ds
+Node-Selector:  <none>
+Labels:         <none>
+Annotations:    deprecated.daemonset.template.generation: 1
+Desired Number of Nodes Scheduled: 3
+Current Number of Nodes Scheduled: 3
+Number of Nodes Scheduled with Up-to-date Pods: 3
+Number of Nodes Scheduled with Available Pods: 3
+Number of Nodes Misscheduled: 0
+Pods Status:  3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=example-ds
+  Containers:
+   example:
+    Image:        k8s.gcr.io/echoserver:1.4
+    Port:         8080/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age   From                  Message
+  ----    ------            ----  ----                  -------
+  Normal  SuccessfulCreate  82s   daemonset-controller  Created pod: example-ds-gn5ss
+  Normal  SuccessfulCreate  82s   daemonset-controller  Created pod: example-ds-6rz4k
+  Normal  SuccessfulCreate  82s   daemonset-controller  Created pod: example-ds-6gjgc
+
+옵션을 사용해서 더 자세하게 본다.
+vagrant@kube-control1:~$ kubectl get pods -o wide
+NAME               READY   STATUS    RESTARTS   AGE    IP              NODE         NOMINATED NODE   READINESS GATES
+example-ds-6gjgc   1/1     Running   0          4m8s   10.233.74.31    kube-node2   <none>           <none>
+example-ds-6rz4k   1/1     Running   0          4m8s   10.233.118.98   kube-node3   <none>           <none>
+example-ds-gn5ss   1/1     Running   0          4m8s   10.233.73.108   kube-node1   <none>           <none>
+>>파드의 개수가 3개인데 각각 노드1, 2, 3 에 하나씩 분산돼서 배치된 모습을 볼 수 있다.
+데몬셋을 쓰게되면 쿠버네티스 클러스터 모든 노드에 하나씩 배치되게 된다.
+
+
+
+# 데몬셋_ 노드셀렉터 (레이블) 
+
+노드셀렉터를 통해서 개별 노드들을 관리하기 편하게(레이블링을 통해) 만들 수 있다.
+-노드셀렉터 파드(데몬셋) 을 작성한다.
+vagrant@kube-control1:~$ vim example-ds-nodeselector.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: example-ds-nodeselector
+spec:
+  selector:
+    matchLabels:
+      app: example-ds-nodeselector
+  template:
+    metadata:
+      labels:
+        app: example-ds-nodeselector
+    spec:
+      nodeSelector:
+        node: development
+      containers:
+      - name: example
+        image: k8s.gcr.io/echoserver:1.4
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+vagrant@kube-control1:~$ kubectl create -f example-ds-nodeselector.yaml
+daemonset.apps/example-ds-nodeselector created
+vagrant@kube-control1:~$ kubectl get daemonsets.apps
+NAME                      DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR      AGE
+example-ds                3         3         3       3            3           <none>             107m
+example-ds-nodeselector   0         0         0       0            0           node=development   37s
+
+>>조회를 해보면, 노드셀렉터의 경우 파드가 실행된것이 아무것도 없다.
+상세정보도 조회해보자.
+vagrant@kube-control1:~$ kubectl describe daemonsets.apps example-ds-nodeselector
+Name:           example-ds-nodeselector
+Selector:       app=example-ds-nodeselector
+Node-Selector:  node=development
+Labels:         <none>
+Annotations:    deprecated.daemonset.template.generation: 1
+Desired Number of Nodes Scheduled: 0
+Current Number of Nodes Scheduled: 0
+Number of Nodes Scheduled with Up-to-date Pods: 0
+Number of Nodes Scheduled with Available Pods: 0
+Number of Nodes Misscheduled: 0
+Pods Status:  0 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=example-ds-nodeselector
+  Containers:
+   example:
+    Image:        k8s.gcr.io/echoserver:1.4
+    Port:         8080/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:           <none>
+
+>> 대몬셋에 의해 생성된 노드가 없다는 것이다. 이때는 어떻게 할까.
+노드셀렉터란, 노드에 레이블을 붙여줄 수 있는데 조건을 같이 지정할때 사용한다. 
+노드를 한번 보도록 하자.
+vagrant@kube-control1:~$ kubectl get nodes
+NAME            STATUS   ROLES           AGE   VERSION
+kube-control1   Ready    control-plane   7d    v1.27.5
+kube-node1      Ready    <none>          7d    v1.27.5
+kube-node2      Ready    <none>          7d    v1.27.5
+kube-node3      Ready    <none>          7d    v1.27.5
+
+vagrant@kube-control1:~$ kubectl get nodes --show-labels
+NAME            STATUS   ROLES           AGE   VERSION   LABELS
+kube-control1   Ready    control-plane   7d    v1.27.5   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=kube-control1,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+kube-node1      Ready    <none>          7d    v1.27.5   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=kube-node1,kubernetes.io/os=linux
+kube-node2      Ready    <none>          7d    v1.27.5   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=kube-node2,kubernetes.io/os=linux
+kube-node3      Ready    <none>          7d    v1.27.5   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=kube-node3,kubernetes.io/os=linux
+>>레이블을 따로 지정하지 않았음에도 레이블이 붙어있는것을 확인할 수 있다.
+
+레이블을 노드1에 붙여주자.
+vagrant@kube-control1:~$ kubectl label nodes kube-node1 node=development
+node/kube-node1 labeled
+
+조회한다.
+vagrant@kube-control1:~$ kubectl get daemonsets.apps
+NAME                      DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR      AGE
+example-ds                3         3         3       3            3           <none>             116m
+example-ds-nodeselector   1         1         1       1            1           node=development   9m26s
+
+이때 조회해보니, 레이블 development가 붙은 파드가 하나 생성됐다!
+노드2에도 레이블을 붙여본다.
+vagrant@kube-control1:~$ kubectl label nodes kube-node2 node=development
+node/kube-node2 labeled
+
+vagrant@kube-control1:~$ kubectl get daemonsets.apps
+NAME                      DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR      AGE
+example-ds                3         3         3       3            3           <none>             118m
+example-ds-nodeselector   2         2         2       2            2           node=development   11m
+
+파드를 살펴본다.
+vagrant@kube-control1:~$ kubectl get pods -o wide
+NAME                            READY   STATUS    RESTARTS   AGE     IP              NODE         NOMINATED NODE   READINESS GATES
+example-ds-6gjgc                1/1     Running   0          118m    10.233.74.31    kube-node2   <none>           <none>
+example-ds-6rz4k                1/1     Running   0          118m    10.233.118.98   kube-node3   <none>           <none>
+example-ds-gn5ss                1/1     Running   0          118m    10.233.73.108   kube-node1   <none>           <none>
+example-ds-nodeselector-kzf72   1/1     Running   0          2m54s   10.233.73.109   kube-node1   <none>           <none>
+example-ds-nodeselector-mtm9k   1/1     Running   0          31s     10.233.74.32    kube-node2   <none>           <none>
+>>배치된 데몬셋파드 3개와 별개로, 노드셀렉터 데몬셋파드가 node1, node2에 각각 생성되었음을 확인할 수 있다.
+
+상세정보를 확인해본다.
+vagrant@kube-control1:~$ kubectl describe daemonsets.apps example-ds-nodeselector
+Name:           example-ds-nodeselector
+Selector:       app=example-ds-nodeselector
+Node-Selector:  node=development
+Labels:         <none>
+Annotations:    deprecated.daemonset.template.generation: 1
+Desired Number of Nodes Scheduled: 2
+Current Number of Nodes Scheduled: 2
+Number of Nodes Scheduled with Up-to-date Pods: 2
+Number of Nodes Scheduled with Available Pods: 2
+Number of Nodes Misscheduled: 0
+Pods Status:  2 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=example-ds-nodeselector
+  Containers:
+   example:
+    Image:        k8s.gcr.io/echoserver:1.4
+    Port:         8080/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age    From                  Message
+  ----    ------            ----   ----                  -------
+  Normal  SuccessfulCreate  6m29s  daemonset-controller  Created pod: example-ds-nodeselector-kzf72
+  Normal  SuccessfulCreate  4m6s   daemonset-controller  Created pod: example-ds-nodeselector-mtm9k
+
+>>노드셀렉터가 붙는이유가 뭔지모르겠다.
+노드에 특정 목적을 붙여서 이용하는 경우가 클러스터 사용에 있어서 간혹 있다. 서버를 한번에 전체 서버를 구매를 할 수 없는 경우나, 서버 교체주기에 따라 사양이 다른 서버가 있을 수 있는데 이를 별도로 표시하지 않거나하면 노드관리에 어려움이 있을 수 있으므로 레이블링을 해서 별도로 관리의 편의를 도모하는것으로 생각하면 된다.
+특정한 노드에 파드가 만들어지게 설정하는것이 바로 노드셀렉터이다.
+
+
+# Job Controller 잡 
+p.182  ch6-6
+
+Job이란 일회성 작업을 나타내는 kubernetes 컨트롤러이다. 한번 실행되면 완료될 때까지 파드를 실행한다. 주로 배치 프로세스, 배치 작업, 또는 일회성 작업을 처리하는데에 사용함. 즉, ‘애플리케이션(작업)이 정상적으로 실행되어 종료되는 것’에 초점을 둔 컨트롤러임.
+
+Object
+  - 주로 배치 작업 등과 같은 것을 실행하기에 적합한 Kubernetes Controller Object
+특징:
+•	Job은 성공적으로 완료되면 종료되며, 실패하면 재시도를 할 수 있다.
+•	병렬 작업이 필요한 경우, 파라미터 completions 및 parallelism을 설정하여 여러 인스턴스를 동시에 실행할 수 있다.
+•	작업을 완료하는 데 성공적으로 종료된 파드의 수가 completions에 도달하면 Job이 완료된다.
+•	레이블을 사용하지 않는다(불필요하기 때문). 이미 실행되어 종료된 작업을 다시 실행하는 경우가 있을 수 있으므로 레이블 셀렉터를 사용하지 않는 것. 이는 CronJob도 동일.
+
+
+
+
+실습
+잡파일 생성하기
+vagrant@kube-control1:~$ vim job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl
+        command: ["perl", "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+  backoffLimit: 4
+>>코드설명 
+api버전에서 job과 cronjob은 batch 그룹에 속한다.
+command 필드에서는 원주율을 계산하는 펄 명령내용을 설정했다.
+restartpolicy 필드값은 Never로 설정하여, 파드가 항상 성공으로 끝나게끔 설정했다.
+backoffLimit필드는 잡 실행이 실패했을 때, 자동으로 최대 몇 번까지 재시작할 지를 설정한 것이다. 이를 파드 비정상 실행종료의 백오프 정책이라고도 한다.
+
+.spec.template.spec.restartPolicy
+    Always : 컨테이너가 종료되면 항상 재시작
+    OnFailure : 컨테이너가 비정상적으로 종료되었거나 다양한 이유로 정상 종료되지 않았을 때 재시작
+    Never : 재시작 하지 않음
+
+.spec.backoffLimit
+    작업이 실패한 경우 자동으로 최대 몇번까지 재시작할지를 지정
+
+
+잡파일 적용
+vagrant@kube-control1:~$ kubectl apply -f job.yaml
+job.batch/pi created
+
+상세정보 확인해본다
+vagrant@kube-control1:~$ kubectl describe jobs.batch
+Name:             pi
+Namespace:        default
+Selector:         batch.kubernetes.io/controller-uid=dfac8ddc-d38a-493e-aa88-6c7cd486482f
+Labels:           batch.kubernetes.io/controller-uid=dfac8ddc-d38a-493e-aa88-6c7cd486482f
+                  batch.kubernetes.io/job-name=pi
+                  controller-uid=dfac8ddc-d38a-493e-aa88-6c7cd486482f
+                  job-name=pi
+Annotations:      batch.kubernetes.io/job-tracking:
+Parallelism:      1
+Completions:      1
+Completion Mode:  NonIndexed
+Start Time:       Wed, 03 Jan 2024 06:16:00 +0000
+Pods Statuses:    1 Active (0 Ready) / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  batch.kubernetes.io/controller-uid=dfac8ddc-d38a-493e-aa88-6c7cd486482f
+           batch.kubernetes.io/job-name=pi
+           controller-uid=dfac8ddc-d38a-493e-aa88-6c7cd486482f
+           job-name=pi
+  Containers:
+   pi:
+    Image:      perl
+    Port:       <none>
+    Host Port:  <none>
+    Command:
+      perl
+      -Mbignum=bpi
+      -wle
+      print bpi(2000)
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age   From            Message
+  ----    ------            ----  ----            -------
+  Normal  SuccessfulCreate  9s    job-controller  Created pod: pi-gwrg2
+
+그래서 다시 파드와 잡 목록을 조회해보자.
+vagrant@kube-control1:~$ kubectl get pods
+NAME                            READY   STATUS      RESTARTS   AGE
+example-ds-6gjgc                1/1     Running     0          172m
+example-ds-6rz4k                1/1     Running     0          172m
+example-ds-gn5ss                1/1     Running     0          172m
+example-ds-nodeselector-kzf72   1/1     Running     0          56m
+example-ds-nodeselector-mtm9k   1/1     Running     0          54m
+pi-gwrg2                        0/1     Completed   0          14m
+vagrant@kube-control1:~$ kubectl get jobs
+NAME   COMPLETIONS   DURATION   AGE
+pi     1/1           80s        14m
+
+>>각각 파드목록을 보면 이미 완료되어 삭제된 pi-gwrg2 파드의 기록이 남아있고,파드가 존재하진않는다. 또 jobs에서는 ‘완료’되었다고 표기됨을 알 수 있다.
+
+파드를 특정해서 보자.
+vagrant@kube-control1:~$ kubectl describe pods pi-gwrg2
+Name:             pi-gwrg2
+Labels:           batch.kubernetes.io/controller-uid=dfac8ddc-d38a-493e-aa88-6c7cd486482f
+                  batch.kubernetes.io/job-name=pi
+                  controller-uid=dfac8ddc-d38a-493e-aa88-6c7cd486482f
+                  job-name=pi
+Status:           Succeeded
+Controlled By:  Job/pi
+Containers:
+pi:
+Command:
+      perl
+      -Mbignum=bpi
+      -wle
+      print bpi(2000)
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 03 Jan 2024 06:17:08 +0000
+      Finished:     Wed, 03 Jan 2024 06:17:17 +0000
+    Ready:          False
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  19m   default-scheduler  Successfully assigned default/pi-gwrg2 to kube-node3
+  Normal  Pulling    19m   kubelet            Pulling image "perl"
+  Normal  Pulled     18m   kubelet            Successfully pulled image "perl" in 1m5.491001996s (1m5.491017375s including waiting)
+  Normal  Created    18m   kubelet            Created container pi
+  Normal  Started    18m   kubelet            Started container pi
+
+>> 잡은 그러면 파드로 정의해서 실행하면 될걸, 왜 batch작업으로 실행하고 끝내는가?
+Job을 사용하여 배치 작업을 정의하고 실행하는 주된 이유는 작업의 완료 여부 및 관리를 간편하게 처리하기 위함이다. job은 다음과 같은 특징이 있다.
+
+1.	완료 여부 확인: Job은 작업이 완료될 때까지 파드를 실행하며, 작업이 성공적으로 완료되면 해당 Job은 완료됩니다. 따라서 작업의 성공 또는 실패를 간단하게 확인할 수 있습니다.
+2.	재시도 가능: Job은 실패한 경우 자동으로 재시도될 수 있습니다. backoffLimit을 통해 재시도 횟수를 설정할 수 있습니다.
+3.	병렬 처리: Job은 병렬 작업을 지원하며, parallelism을 통해 동시에 실행되는 파드의 수를 제어할 수 있습니다.
+4.	안정적인 작업 처리: Job은 실패한 경우에도 성공할 때까지 계속해서 재시도할 수 있어 안정적인 작업 처리를 가능케 합니다.
+
+
+# CronJob 크론잡
+p.187 ch6-7
+
+CronJob
+  - Cron + Job의 기능을 합쳐 둔 형태의 Kubernetes Controller Object
+  - 주기적으로 실행할 작업을 관리할 수 있는 Kubernetes Controller Object
+  - 매 작업 주기마다 새로운 Job이 실행되면서 예약된 작업을 수행함
+  - CronJob은 Job을 포함하는 Kubernetes Controller Object
+
+
+#크론잡 실습
+vagrant@kube-control1:~$ vim cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hello
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello
+            image: busybox
+            args:
+            - /bin/sh
+            - -c
+            - date; echo Hello from the Kubernetes cluster
+          restartPolicy: OnFailure
+
+vagrant@kube-control1:~$ kubectl create -f cronjob.yaml
+cronjob.batch/hello created
+
+--watch옵션으로 1분마다 생성되는 파드를 보자.
+vagrant@kube-control1:~$ kubectl get pods --watch
+NAME                   READY   STATUS      RESTARTS   AGE
+hello-28404431-rbjj7   0/1     Completed   0          89s
+hello-28404432-zjl25   0/1     Completed   0          29s
+hello-28404433-pj6g9   0/1     Pending     0          0s
+hello-28404433-pj6g9   0/1     Pending     0          0s
+hello-28404433-pj6g9   0/1     ContainerCreating   0          0s
+hello-28404433-pj6g9   0/1     ContainerCreating   0          1s
+hello-28404433-pj6g9   0/1     Completed           0          4s
+hello-28404433-pj6g9   0/1     Completed           0          5s
+hello-28404433-pj6g9   0/1     Completed           0          5s
+hello-28404433-pj6g9   0/1     Completed           0          6s
+hello-28404433-pj6g9   0/1     Completed           0          6s
+hello-28404434-grp64   0/1     Pending             0          0s
+hello-28404434-grp64   0/1     Pending             0          0s
+hello-28404434-grp64   0/1     ContainerCreating   0          0s
+hello-28404434-grp64   0/1     ContainerCreating   0          1s
+hello-28404434-grp64   0/1     Completed           0          7s
+hello-28404434-grp64   0/1     Completed           0          8s
+hello-28404434-grp64   0/1     Completed           0          8s
+hello-28404434-grp64   0/1     Completed           0          9s
+hello-28404434-grp64   0/1     Completed           0          9s
+hello-28404431-rbjj7   0/1     Terminating         0          3m9s
+hello-28404431-rbjj7   0/1     Terminating         0          3m9s
+보고있으면, CronJob에 의해서 1분마다 생성되고, 완료되고, 제거되는 파드들이 보인다.
+
+vagrant@kube-control1:~$ kubectl get pods
+NAME                   READY   STATUS      RESTARTS   AGE
+hello-28404435-7jnwt   0/1     Completed   0          2m52s
+hello-28404436-7mjxs   0/1     Completed   0          112s
+hello-28404437-rr2s7   0/1     Completed   0          52s
+vagrant@kube-control1:~$ kubectl get pods
+NAME                   READY   STATUS      RESTARTS   AGE
+hello-28404436-7mjxs   0/1     Completed   0          2m14s
+hello-28404437-rr2s7   0/1     Completed   0          74s
+hello-28404438-959xp   0/1     Completed   0          14s
+vagrant@kube-control1:~$ kubectl get pods
+NAME                   READY   STATUS      RESTARTS   AGE
+hello-28404437-rr2s7   0/1     Completed   0          2m10s
+hello-28404438-959xp   0/1     Completed   0          70s
+hello-28404439-wbg85   0/1     Completed   0          10s
+>>실시간으로 보는 --watch옵션없이 조회하면 이렇다.
+
+>>deloyment는 그 기능을 활용해서 애플리케이션을 이용할수 있으므로, 시간내서 보도록한다(다음시간).
+**가능한 기능의 종류만 따지면 deployment가 제일 많으나,
+목적에 따라서 daemonSet과 CronJob같은 컨트롤러는 그 용도가 다르게 쓰인다고 생각하면 된다.
+
+vagrant@kube-control1:~$ kubectl describe cronjobs hello
+Name:                          hello
+Namespace:                     default
+Labels:                        <none>
+Annotations:                   <none>
+Schedule:                      */1 * * * *
+Concurrency Policy:            Allow
+Suspend:                       False
+Successful Job History Limit:  3
+Failed Job History Limit:      1
+Starting Deadline Seconds:     <unset>
+Selector:                      <unset>
+Parallelism:                   <unset>
+Completions:                   <unset>
+Pod Template:
+  Labels:  <none>
+  Containers:
+   hello:
+    Image:      busybox
+    Port:       <none>
+    Host Port:  <none>
+    Args:
+      /bin/sh
+      -c
+      date; echo Hello from the Kubernetes cluster
+    Environment:     <none>
+    Mounts:          <none>
+  Volumes:           <none>
+Last Schedule Time:  Wed, 03 Jan 2024 07:27:00 +0000
+Active Jobs:         <none>
+
