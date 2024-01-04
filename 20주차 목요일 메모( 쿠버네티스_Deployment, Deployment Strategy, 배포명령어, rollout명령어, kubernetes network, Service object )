@@ -1,0 +1,779 @@
+20주차 수요일 메모 ( Kubernetes_7 Deployment, Deployment Strategy, 배포명령어, rollout명령어, kubernetes network, Service object)
+
+
+지난시간에는 kubectl edit& apply, ReplicaSet_labeling, LabelSelector, DaemonSet, NodeSelector, Job, CronJob 등을 알아보았다.
+
+
+
+#Job 복습
+한번 실행되면 완료될 때까지 파드를 실행한다. 주로 배치 프로세스, 배치 작업, 또는 일회성 작업을 처리하는데에 사용함. 
+즉, ‘애플리케이션(작업)이 정상적으로 실행되어 종료되는 것’에 초점을 둔 컨트롤러
+
+.spec.completions 필드 : 작업이 완료되기까지의 반복횟수 지정
+
+$ vim example-job-multi.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: example-job-multi
+spec:
+  completions: 3
+  template:
+    metadata:
+      labels:
+        app: example-job-multi
+    spec:
+      containers:
+      - name: pi
+        image: perl:latest
+        command: ["perl", "-Mbignum=bpi", "-wle", "print bpi(1000)"]
+      restartPolicy: OnFailure
+
+
+vagrant@kube-control1:~/work/20240104$ kubectl create -f example-job-multi.yaml
+job.batch/example-job-multi created
+
+vagrant@kube-control1:~/work/20240104$ kubectl get jobs
+NAME                COMPLETIONS   DURATION   AGE
+example-job-multi   3/3           20s        53s
+
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                      READY   STATUS      RESTARTS   AGE
+example-job-multi-jxnkq   0/1     Completed   0          41s
+example-job-multi-lwhcp   0/1     Completed   0          48s
+example-job-multi-r7nc2   0/1     Completed   0          55s
+
+~~~~~
+(다른탭에서 $ kubectl get pods --watch로 첫번쨰 탭을 관찰)
+
+$ vim example-job-parallel.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: example-job-parallel
+spec:
+  completions: 3
+  parallelism: 3
+  template:
+    metadata:
+      labels:
+        app: example-job-parallel
+    spec:
+      containers:
+      - name: pi
+        image: perl:latest
+        command: ["perl", "-Mbignum=bpi", "-wle", "print bpi(1000)"]
+      restartPolicy: OnFailure
+
+
+vagrant@kube-control1:~/work/20240104$ kubectl create -f example-job-parallel.yaml
+job.batch/example-job-parallel created
+
+
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                         READY   STATUS      RESTARTS   AGE
+example-job-multi-jxnkq      0/1     Completed   0          17m
+example-job-multi-lwhcp      0/1     Completed   0          17m
+example-job-multi-r7nc2      0/1     Completed   0          18m
+example-job-parallel-g7p4t   0/1     Completed   0          90s
+example-job-parallel-pcd5m   0/1     Completed   0          90s
+example-job-parallel-wwbqx   0/1     Completed   0          90s
+
+
+
+# CronJob 실습
+
+-다른실습을위해 생성한 잡을 먼저 지운다.
+vagrant@kube-control1:~/work/20240104$ kubectl delete jobs.batch  example-job-multi example-job-parallel
+job.batch "example-job-multi" deleted
+job.batch "example-job-parallel" deleted
+
+startingDeadlineSeconds : 시작 데드라인 시간(초)
+Job이 시작되기 전에 완료되어야 하는 최대 시간(초)을 나타내는 옵션으로, job이 시작된 후 지정된 시간동안
+완료되지 않으면 해당 job이 종료된다. 기본값이 정해져있지는 않다.
+
+concurrencyPolicy:  동시에 작업이 실행되는 job이 있을때, 이전 실행중인 job과 어떻게 상호작용을 할 지 정의하는 필드이다.
+이는 두가지 옵션을 가지는데,
+ Allow: 동시에 작업 실행을 허용(기본값)
+ Forbid: 동시에 작업 실행을 금지함. 잡이 완료되지 않은 경우 다음 작업은 건너뜀.
+ Replace: 작업(Job)이 완료되지 않은 경우 이전작업을 취소하고 새로운 작업(Job)으로 교체 실행 
+
+
+
+$ vim example-cronjob-dl-al.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: example-cronjob-dl-al
+spec:
+  schedule: "* * * * *"
+  startingDeadlineSeconds: 100
+  concurrencyPolicy: Allow
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: example-cronjob-dl-al
+        spec:
+          containers:
+          - name: example-job
+            image: busybox:latest
+            command: ["sleep", "80"]
+          restartPolicy: OnFailure
+
+
+vagrant@kube-control1:~/work/20240104$ kubectl create -f example-cronjob-dl-al.yaml
+cronjob.batch/example-cronjob-dl-al created
+
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                   READY   STATUS      RESTARTS   AGE
+example-cronjob-dl-al-28405534-xxhmj   0/1     Completed   0          3m59s
+example-cronjob-dl-al-28405535-rqwg7   0/1     Completed   0          2m59s
+example-cronjob-dl-al-28405536-hs7nh   0/1     Completed   0          119s
+example-cronjob-dl-al-28405537-5cnwn   1/1     Running     0          59s
+
+
+# Deployment 디플로이먼트 컨트롤러 // 배포
+p.155 ch 6-3
+
+Deployment Controller Object
+  - ReplicaSet에서 발전된 형태의 Controller로 ReplicaSet을 포함하는 Controller
+  - ReplicaSet에서 애플리케이션 배포와 관련된 기능이 추가됨.
+
+Deployment 예제
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: DEPLOY_NAME 
+spec:
+  replicas: N 
+  selector:
+    matchLabels:
+      LABEL_KEY1: VALUE1
+  template:
+    metadata:
+      labels:
+        LABEL_KEY1: VALUE1
+    spec:
+      containers:
+      - name: CONTAINER
+        image: IMAGE_REPO:TAG
+
+
+$ vim nginx-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-deployment
+  template:
+    metadata:
+      labels:
+        app: nginx-deployment
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.10
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+vagrant@kube-control1:~/work/20240104$ kubectl create -f nginx-deployment.yaml
+deployment.apps/nginx-deployment created
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                READY   STATUS              RESTARTS   AGE
+nginx-deployment-549d886d8b-8stt4   0/1     ContainerCreating   0          3s
+nginx-deployment-549d886d8b-bp8qn   0/1     ContainerCreating   0          3s
+nginx-deployment-549d886d8b-znlmg   0/1     ContainerCreating   0          4s
+vagrant@kube-control1:~/work/20240104$ kubectl get deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   0/3     3            0           16s
+
+다시 조회해보자.
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-549d886d8b-8stt4   1/1     Running   0          30s
+nginx-deployment-549d886d8b-bp8qn   1/1     Running   0          30s
+nginx-deployment-549d886d8b-znlmg   1/1     Running   0          31s
+vagrant@kube-control1:~/work/20240104$ kubectl get replicaset
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-549d886d8b   3         3         3       3m27s
+vagrant@kube-control1:~/work/20240104$ kubectl get deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/3     3            3           33s
+모두 정상적으로 만들어졌다.
+>>Deployment 이전 ReplicaSet이 생성되고, 그 레플리카셋 안에 Pod 들이 생성되는것이 이 과정이다.
+
+
+# Deployment Scaling 
+디플로이먼트를 스케일링해보자.
+vagrant@kube-control1:~/work/20240104$ kubectl scale deployment nginx-deployment --replicas 5
+deployment.apps/nginx-deployment scaled
+vagrant@kube-control1:~/work/20240104$ kubectl get deployments.apps
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   5/5     5            5           24m
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-549d886d8b-8stt4   1/1     Running   0          25m
+nginx-deployment-549d886d8b-bgcjk   1/1     Running   0          24s
+nginx-deployment-549d886d8b-bp8qn   1/1     Running   0          25m
+nginx-deployment-549d886d8b-ncbw6   1/1     Running   0          24s
+nginx-deployment-549d886d8b-znlmg   1/1     Running   0          25m
+
+이번엔 레플리카를 두개로 줄여본다
+vagrant@kube-control1:~/work/20240104$ kubectl scale deployment nginx-deployment --replicas 2
+deployment.apps/nginx-deployment scaled
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                READY   STATUS        RESTARTS   AGE
+nginx-deployment-549d886d8b-8stt4   1/1     Running       0          25m
+nginx-deployment-549d886d8b-bp8qn   1/1     Running       0          25m
+nginx-deployment-549d886d8b-znlmg   0/1     Terminating   0          25m
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-549d886d8b-8stt4   1/1     Running   0          25m
+nginx-deployment-549d886d8b-bp8qn   1/1     Running   0          25m
+
+
+상세정보를 한번 보자
+vagrant@kube-control1:~/work/20240104$ kubectl describe deployments.apps nginx-deployment
+Name:                   nginx-deployment
+Namespace:              default
+CreationTimestamp:      Thu, 04 Jan 2024 02:00:54 +0000
+Labels:                 <none>
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=nginx-deployment
+Replicas:               2 desired | 2 updated | 2 total | 2 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=nginx-deployment
+  Containers:
+   nginx:
+    Image:        nginx:1.10
+    Port:         80/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Progressing    True    NewReplicaSetAvailable
+  Available      True    MinimumReplicasAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   nginx-deployment-549d886d8b (2/2 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  26m   deployment-controller  Scaled up replica set nginx-deployment-549d886d8b to 3
+  Normal  ScalingReplicaSet  116s  deployment-controller  Scaled up replica set nginx-deployment-549d886d8b to 5 from 3
+  Normal  ScalingReplicaSet  79s   deployment-controller  Scaled down replica set nginx-deployment-549d886d8b to 2 from 5
+
+스케일을 3으로 변경하고 레플리카셋 상세정보도 본다.
+vagrant@kube-control1:~/work/20240104$ kubectl describe replicasets.apps nginx-deployment-549d886d8b
+Name:           nginx-deployment-549d886d8b
+Namespace:      default
+Selector:       app=nginx-deployment,pod-template-hash=549d886d8b
+Labels:         app=nginx-deployment
+                pod-template-hash=549d886d8b
+Annotations:    deployment.kubernetes.io/desired-replicas: 3
+                deployment.kubernetes.io/max-replicas: 4
+                deployment.kubernetes.io/revision: 1
+Controlled By:  Deployment/nginx-deployment
+Replicas:       3 current / 3 desired
+Pods Status:    3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=nginx-deployment
+           pod-template-hash=549d886d8b
+  Containers:
+   nginx:
+    Image:        nginx:1.10
+    Port:         80/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age    From                   Message
+  ----    ------            ----   ----                   -------
+  Normal  SuccessfulCreate  34m    replicaset-controller  Created pod: nginx-deployment-549d886d8b-znlmg
+  Normal  SuccessfulCreate  34m    replicaset-controller  Created pod: nginx-deployment-549d886d8b-8stt4
+  Normal  SuccessfulCreate  34m    replicaset-controller  Created pod: nginx-deployment-549d886d8b-bp8qn
+  Normal  SuccessfulCreate  9m17s  replicaset-controller  Created pod: nginx-deployment-549d886d8b-ncbw6
+  Normal  SuccessfulCreate  9m17s  replicaset-controller  Created pod: nginx-deployment-549d886d8b-bgcjk
+  Normal  SuccessfulDelete  8m40s  replicaset-controller  Deleted pod: nginx-deployment-549d886d8b-znlmg
+  Normal  SuccessfulDelete  8m40s  replicaset-controller  Deleted pod: nginx-deployment-549d886d8b-bgcjk
+  Normal  SuccessfulDelete  8m40s  replicaset-controller  Deleted pod: nginx-deployment-549d886d8b-ncbw6
+  Normal  SuccessfulCreate  24s    replicaset-controller  Created pod: nginx-deployment-549d886d8b-kv28z
+
+
+# Deployment Strategy 배포 전략 //롤링업데이트, 리크리트
+
+이는 애플리케이션의 배포와 관련된 작업을 수행하는 방식, 즉 전략을 정의한 것을 의미한다.
+
+Deployment가 지원하는 Deployment Strategy 
+먼저 Deployment가 배포되면, 이로인해서 ReplicaSet이 생성된다. 그리고 app(pod)안에 각각 Version이 있을것이다. 
+1. RollingUpdate는 업데이트 배포에 있어서 기존버전 Pod(appversion)을 하나씩 새 버전의 파드로 교체하는 방식으로 진행이 된다.
+이때 레플리카셋을 사용해서 관리하면서, 업데이트 도중에도 서비스가 계속 가동되면서 트래픽이 새 버전으로 이동하므로,
+전체 서비스 중단이 최소화된다. (무중단 업데이트 제공) 
+ 
+** max unavailable : 롤링업데이트진행 중 사용할 수 없는 최대 파드의 수를 나타내는 필드
+   정수 : 3
+   비율 : 10% (기본값: 25%)  등으로 나타낸다.(정수와 백분율로 표기)
+** max surge : 롤링 업데이트 동안 추가로 생성할 수 있는 최대 파드의 수를 나타내는 필드로, 이또한 기본값은 25%로 나타난다. 
+>>3개의 파드의 경우 0.75이지만,올림하여1개의 파드를 생성
+
+2. Recreate는 간단한방법이다. 모든 서비스중인 App Pod를 중지하고, 새버전의 Pod로 교체하는 방식이며 빠르게 전환이 가능하지만
+잠시 서비스의 완전한 중단이 일어난다. 따라서 기존 서비스를 사용하던 사용자에게 눈에띄는 중단이 체감된다. (중단이 필요한 업데이트)
+
+롤링업데이트의 예상단점: 
+-종속성 문제: 만약 애플리케이션 내부에 서비스 의존성이 많다면, 롤링 업데이트 중에 서비스의 일부가 업데이트되지 않은 상태에서는
+전체 시스템이 올바르게 동작하지 않을 수 있다.(v1에서 작동하던게 v2로 업데이트되었는데 서비스이용자가 v1에 접근해 애플리케이션을 사용하면 잘 동작하지 않는 등 예상문제)
+-트래픽 증가: 롤링 업데이트 중에는 이전 버전과 새 버전의 서비스가 동시에 가동되므로 전체 트래픽이 두 배로 증가할 수 있다. 이는 트래픽이 매우 많은 경우에 부하 문제유발
+-시간 소요: 큰 규모의 클러스터나 큰 규모의 애플리케이션의 경우 롤링 업데이트가 완료되기까지 상당한 시간이 걸릴 수 있다. 이는 업데이트 동안 서비스의 가용성이 낮아질 수 있다
+
+롤링업데이트와 비교가능한 배포방식
+Blue-Green Deployment(블루-그린 배포): 끊기긴하나, 무중단배포전략에 가깝다.
+•	개념: 이는 두 개의 환경(블루와 그린)을 사용하여 업데이트를 진행하는 방법입니다. 
+현재 서비스 중인 버전(블루)과 새로운 버전(그린)이 별도의 환경에 배치되어 있는 방식이다.
+•	구현: 처음에는 블루 환경에서 서비스가 운영되고, 그린 환경에는 새로운 버전이 배포된다. 
+테스트가 완료되면 트래픽이 블루에서 그린으로 전환되어 업데이트가 완료됨. 만약 문제가 발생하면, 블루로 트래픽을 다시 전환하여 롤백할 수 있다.
+
+#실습
+우선 배포파일 복제본을 생성함
+vagrant@kube-control1:~/work/20240104$ cp nginx-deployment.yaml nginx-deployment-min.yaml
+vagrant@kube-control1:~/work/20240104$ cp nginx-deployment.yaml nginx-deployment-v1.yaml
+
+$ vim nginx-deployment-v1.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  minReadySeconds: 20
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-deployment
+  template:
+    metadata:
+      labels:
+        app: nginx-deployment
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.10
+        ports:
+        - containerPort: 80
+          protocol: TCP
+>> 참고할점은
+*RollingUpdate
+    rollingUpdate 필드가 각각 다르다는 것이다. 대소문자 구별에 주의하자.
+*스펙필드 밑에는 minReadySeconds 필드가 있는데, 이것은 어플리케이션이 준비될 최소시간을 조금 부여해주는것이며,
+위 작성한 yaml에서는 새로운 배포될 컨테이너가 준비할 최소시간을 20초간 부여해준다는 뜻이다. 
+
+
+# Deployment 명령어
+
+Deployment 생성
+$ kubectl create -f MANIFEST.yaml
+
+Deployment 목록 확인
+$ kubectl get deployments
+
+Deployment 파드 갯수 조정(스케일)
+$ kubectl scale deployments DEPLOYMENT_NAME --replicas=N
+
+Deployment에 새로운 애플리케이션 버전(이미지) 배포
+$ kubectl set image deployment DEPLOYMENT_NAME CONTAINER_NAME=IMAGE_REPO:TAG
+$ kubectl set image deployment/nginx-deployment nginx-deployment=nginx:1.14
+
+Deployment 이미지 변경 사항 목록 확인
+$ kubectl rollout history deployments DEPLOYMENT_NAME
+
+Deployment 특정 리비전 상세정보 확인
+$ kubectl rollout history deployments DEPLOYMENT_NAME --revision=N
+
+직전의 Revision으로 Rollback
+$ kubectl rollout undo deployments DEPLOYMENT_NAME
+
+특정 Revision으로 Deployment Rollback
+$ kubectl rollout undo deployments DEPLOYMENT_NAME --to-revision=N
+
+Deployment 배포 일시 정지
+$ kubectl rollout pause deployment/DEPLOYMENT_NAME
+
+Deployment 배포 재개
+$ kubectl rollout resume deployment/DEPLOYMENT_NAME
+
+Deployment 재시작
+$ kubectl rollout restart deployment/DEPLOYMENT_NAME
+
+
+#배포 명령어 실습 
+우선 배포를한다.
+vagrant@kube-control1:~/work/20240104$ kubectl create -f nginx-deployment-v1.yaml
+deployment.apps/nginx-deployment created
+
+일단 다른탭에서 vagrant@kube-control1:~/work/20240104$ kubectl get pods --watch로 실시간로그를 파악하도록 한다.
+
+이번엔 배포할 컨테이너의 이미지를 지정하도록 한다. (이미지 교체방법)
+vagrant@kube-control1:~/work/20240104$ kubectl set image deployment nginx-deployment nginx=nginx:1.11
+deployment.apps/nginx-deployment image updated
+ 
+nginx-deployment-6886466cbc-768cr   0/1     ContainerCreating   0          2s
+nginx-deployment-549d886d8b-tlpr6   0/1     Terminating         0          4m33s
+nginx-deployment-549d886d8b-tlpr6   0/1     Terminating         0          4m33s
+nginx-deployment-6886466cbc-gr7r6   1/1     Running             0          10s
+nginx-deployment-6886466cbc-768cr   1/1     Running             0          12s
+nginx-deployment-549d886d8b-sgrr2   1/1     Terminating         0          5m2s
+nginx-deployment-6886466cbc-sgr2m   0/1     Pending             0          0s
+nginx-deployment-6886466cbc-sgr2m   0/1     Pending             0          0s
+nginx-deployment-549d886d8b-mtjx9   1/1     Terminating         0          5m3s
+nginx-deployment-6886466cbc-sgr2m   0/1     ContainerCreating   0          0s
+nginx-deployment-549d886d8b-sgrr2   1/1     Terminating         0          5m3s
+nginx-deployment-549d886d8b-mtjx9   1/1     Terminating         0          5m3s
+nginx-deployment-549d886d8b-sgrr2   0/1     Terminating         0          5m3s
+nginx-deployment-549d886d8b-sgrr2   0/1     Terminating         0          5m4s
+nginx-deployment-549d886d8b-sgrr2   0/1     Terminating         0          5m4s
+nginx-deployment-549d886d8b-sgrr2   0/1     Terminating         0          5m4s
+nginx-deployment-549d886d8b-mtjx9   0/1     Terminating         0          5m4s
+nginx-deployment-549d886d8b-mtjx9   0/1     Terminating         0          5m5s
+nginx-deployment-549d886d8b-mtjx9   0/1     Terminating         0          5m5s
+nginx-deployment-549d886d8b-mtjx9   0/1     Terminating         0          5m5s
+nginx-deployment-6886466cbc-sgr2m   0/1     ContainerCreating   0          2s
+nginx-deployment-6886466cbc-sgr2m   1/1     Running             0          9s
+
+vagrant@kube-control1:~/work/20240104$ kubectl get deployments.apps
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/3     3            3           6m7s
+vagrant@kube-control1:~/work/20240104$ kubectl get replicasets.apps
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-549d886d8b   0         0         0       6m16s
+nginx-deployment-6886466cbc   3         3         3       105s
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-6886466cbc-768cr   1/1     Running   0          2m47s
+nginx-deployment-6886466cbc-gr7r6   1/1     Running   0          2m47s
+nginx-deployment-6886466cbc-sgr2m   1/1     Running   0          2m15s
+
+상세정보를 조회해본다.
+vagrant@kube-control1:~/work/20240104$ kubectl describe deployments.apps nginx-deployment
+Name:                   nginx-deployment
+Namespace:              default
+CreationTimestamp:      Thu, 04 Jan 2024 03:35:28 +0000
+Labels:                 <none>
+Annotations:            deployment.kubernetes.io/revision: 2
+Selector:               app=nginx-deployment
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        20
+RollingUpdateStrategy:  1 max unavailable, 1 max surge
+Pod Template:
+  Labels:  app=nginx-deployment
+  Containers:
+   nginx:
+    Image:        nginx:1.11
+    Port:         80/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  nginx-deployment-549d886d8b (0/0 replicas created)
+NewReplicaSet:   nginx-deployment-6886466cbc (3/3 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  8m15s  deployment-controller  Scaled up replica set nginx-deployment-549d886d8b to 3
+  Normal  ScalingReplicaSet  3m44s  deployment-controller  Scaled up replica set nginx-deployment-6886466cbc to 1
+  Normal  ScalingReplicaSet  3m44s  deployment-controller  Scaled down replica set nginx-deployment-549d886d8b to 2 from 3
+  Normal  ScalingReplicaSet  3m44s  deployment-controller  Scaled up replica set nginx-deployment-6886466cbc to 2 from 1
+  Normal  ScalingReplicaSet  3m13s  deployment-controller  Scaled down replica set nginx-deployment-549d886d8b to 1 from 2
+  Normal  ScalingReplicaSet  3m12s  deployment-controller  Scaled up replica set nginx-deployment-6886466cbc to 3 from 2
+  Normal  ScalingReplicaSet  3m12s  deployment-controller  Scaled down replica set nginx-deployment-549d886d8b to 0 from 1
+>>변경점으로 올드레플리카셋, 뉴레플리카셋 그리고 이미지버전이 nginx 1.11버전으로 바뀌었음을 알 수 있다.
+또한 events필드에 파드의 실행로그 (교체되면서 Scale된) 를 확인가능하다.
+
+
+
+# 오후실습
+
+실행중인 deployment를 edit해본다.
+vagrant@kube-control1:~/work/20240104$ kubectl edit deployments.apps nginx-deployment
+- image: nginx:1.12 로 변경(기존 1.10버전)
+
+vagrant@kube-control1:~/work/20240104$ kubectl edit deployments.apps nginx-deployment
+deployment.apps/nginx-deployment edited
+
+한번에 확인해본다.
+vagrant@kube-control1:~/work/20240104$ kubectl get deployments,replicasets,pods
+NAME                               READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/nginx-deployment   3/3     3            3           4m23s
+
+NAME                                          DESIRED   CURRENT   READY   AGE
+replicaset.apps/nginx-deployment-549d886d8b   0         0         0       4m23s
+replicaset.apps/nginx-deployment-5bc5cbd468   3         3         3       94s
+
+NAME                                    READY   STATUS    RESTARTS   AGE
+pod/nginx-deployment-5bc5cbd468-8l4zq   1/1     Running   0          94s
+pod/nginx-deployment-5bc5cbd468-96pkz   1/1     Running   0          58s
+pod/nginx-deployment-5bc5cbd468-f4zvt   1/1     Running   0          94s
+
+상세확인도해본다.
+vagrant@kube-control1:~/work/20240104$ kubectl describe deployments.apps nginx-deployment
+Name:                   nginx-deployment
+Namespace:              default
+CreationTimestamp:      Thu, 04 Jan 2024 05:18:43 +0000
+Labels:                 <none>
+Annotations:            deployment.kubernetes.io/revision: 2
+Selector:               app=nginx-deployment
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        20
+RollingUpdateStrategy:  1 max unavailable, 1 max surge
+Pod Template:
+  Labels:  app=nginx-deployment
+  Containers:
+   nginx:
+    Image:        nginx:1.12
+    Port:         80/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  nginx-deployment-549d886d8b (0/0 replicas created)
+NewReplicaSet:   nginx-deployment-5bc5cbd468 (3/3 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  7m18s  deployment-controller  Scaled up replica set nginx-deployment-549d886d8b to 3
+  Normal  ScalingReplicaSet  4m29s  deployment-controller  Scaled up replica set nginx-deployment-5bc5cbd468 to 1
+  Normal  ScalingReplicaSet  4m29s  deployment-controller  Scaled down replica set nginx-deployment-549d886d8b to 2 from 3
+  Normal  ScalingReplicaSet  4m29s  deployment-controller  Scaled up replica set nginx-deployment-5bc5cbd468 to 2 from 1
+  Normal  ScalingReplicaSet  3m53s  deployment-controller  Scaled down replica set nginx-deployment-549d886d8b to 0 from 2
+  Normal  ScalingReplicaSet  3m53s  deployment-controller  Scaled up replica set nginx-deployment-5bc5cbd468 to 3 from 2
+
+
+# rollout 명령어 // kubectl rollout ~
+-history : Deployment 이미지 변경 사항 목록 확인 (--revision=N)
+-undo : 직전의 Revision으로 Rollback (--to-revision=N)
+-pause : Deployment 배포 일시 정지
+-resume : Deployment 배포 재개
+-restart : Deployment 재시작
+-status : 애플리케이션 배포 상황 확인하기
+
+vagrant@kube-control1:~/work/20240104$ kubectl rollout history deployment nginx-deployment
+deployment.apps/nginx-deployment
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+>>배포와 관련된 이력을 볼 수 있는 명령어이다.  
+vagrant@kube-control1:~/work/20240104$ kubectl rollout history deployment nginx-deployment --revision=1
+deployment.apps/nginx-deployment with revision #1
+Pod Template:
+  Labels:       app=nginx-deployment
+        pod-template-hash=549d886d8b
+  Containers:
+   nginx:
+    Image:      nginx:1.10
+    Port:       80/TCP
+    Host Port:  0/TCP
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+
+vagrant@kube-control1:~/work/20240104$ kubectl rollout history deployment nginx-deployment --revision=2
+deployment.apps/nginx-deployment with revision #2
+Pod Template:
+  Labels:       app=nginx-deployment
+        pod-template-hash=5bc5cbd468
+  Containers:
+   nginx:
+    Image:      nginx:1.12
+    Port:       80/TCP
+    Host Port:  0/TCP
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+
+
+# Kubeadm 설치하기 //kubeadm 으로 import, 환경 변경하기.
+
+kubespray방식의 쿠버네티스환경에서 kubeadm환경으로 변경해서 설치하려고한다.
+network 실습 이전 진행한다.
+
+환경을 바꾸기 이전에 백업한다. vagrant@kube-control1:~$ tar cvf work.tar work
+그리고 scp명령어로 홈디렉터리로 옮길 수 있다.
+PS C:\Users\USER> scp vagrant@192.168.56.11:/home/vagrant/work.tar .
+vagrant@192.168.56.11's password:
+work.tar                                                                              100%   50KB  10.8MB/s   00:00
+
+
+# 쿠버네티스 네트워크 (chapter 7,8,15,16)
+쿠버네티스 클러스터의 네트워크 개념부터 알아보도록한다.
+CH 15. 클러스터 네트워크 구성 p.354~
+
+물리적인 클러스터 네트워크부분과, 클러스터가 묶이는 논리적인 네트워크부분이 존재한다. 
+
+Docker Network
+ - Kubernetes의 네트워크는 컨테이너 런타임을 기초로 동작함
+ - Docker 컨테이너는 bridge, macvlan, host, overlay, null, link 등의 네트워크 유형으로 분류함.
+
+Bridge
+ - Docker Host의 docker0 브리지 네트워크 인터페이스를 통해 NAT 통신
+ - Docker Host의 veth와 컨테이너 내의 eth0의 veth 쌍이 구성됨
+
+MACVLAN
+ - Docker Host의 Upstream Network의 대역에 가상의 MAC 주소를 생성하여 네트워크 연결
+
+Host
+ - Docker Host의 네트워크 설정을 직접 사용
+
+ NULL
+ - Docker 컨테이너가 네트워크를 사용하지 않는 네트워크 구성
+
+Link
+ - 다른 컨테이너의 네트워크 구성을 함께 공유하여 사용하는 네트워크 구성
+
+Kubernetes Pod Network
+ - Kubernetes의 Pod는 하나의 네트워크를 파드 내의 컨테이너에 공유함
+ - Pod Infra Container(pause)  : 파드 생성시 같이 생성되는 숨겨진 컨테이너로 파드의 네트워크 정보를 유지하도록 동작함
+ - 파드 내의 컨테이너는 localhost로 동일 파드 내의 다른 컨테이너에 접근이 가능함
+
+Kubernetes Service Object
+  Kubernetes Cluster Network의 설정을 담고 있는 오브젝트
+
+Kubernetes Service Network : 
+   - Linux의 network에서 패킷의 전달 경로 등을 결정하는 iptables를 사용하여 Nodes/
+Pods/Services 단 라우팅 구성이 설정됨
+   - 이러한 설정에 CNI(Container Network Interface)가 관여함.
+
+CNI (*애드온이라고도 한다)
+Container Network Interface에는 다음과 같은것들이 있다.
+  - Flannel
+  - Calico
+  - WeaveNet
+  - Cillium
+
+
+# 서비스 // service object
+리눅스에서 우리가 여태껏 해왔던 ‘서비스’의 개념과 다소 다르다.
+
+Service(obejct)를 사용하면 파드의 동적인 IP 주소와 포트 번호 등에 대한 추상화를 통해 클러스터 내부 또는 외부에서 파드에 접근할 수 있다.
+  - 클러스터 외부에서 접근할 때 파드에 고정적인 접근 경로를 제공하기 위한 Kubernetes Object
+  - 여러 파드에 대한 단일 진입점을 제공하는 Kubernetes Object
+
+Service Types(서비스 종류,유형):
+•	ClusterIP: 기본적으로 생성되는 서비스 유형으로, 클러스터 내부에서만 사용 가능한 가상 IP를 할당합니다.
+외부에서는 접근할 수 없습니다.
+•	NodePort: 각 노드의 특정 포트를 열어 외부에서 접근 가능하게 합니다.
+Cluster 외부에서 노드의 해당 포트로 접근시 연결된 파드로 트래픽이 전달됨.
+•	LoadBalancer: 일반적으로 클라우드 서비스를 이용하는 경우 사용 가능한 서비스 타입의 오브젝트이며, 
+제공하는 로드 밸런서를 사용하여 외부 트래픽을 파드로 전달합니다.  Kubernetes Cluster 앞단에 LoadBalancer가 위치하여 부하분산을 수행함.
+LoadBalancer 타입은 ClusterIP와 NodePort 기능을 포함함
+•	ExternalName: 외부 서비스나 DNS 네임으로 파드에 접근할 수 있도록 하는 서비스 유형입니다.
++ **Headless(헤들리스): ClusterIP가 없는 서비스로, 각 파드에 고유한 DNS 레코드를 제공하여 
+개별적으로 특정 파드에 접근해야하는 경우, 직접 접근할 수 있게 합니다.
+
+
+#서비스 오브젝트 실습 (내일 추가로 확인할것임)
+vagrant@kube-control1:~/work/20240104$ vim nginx-deployment-v1.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-svc-clusterip
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-deployment
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+
+vagrant@kube-control1:~/work/20240104$ kubectl create -f nginx-deployment-v1.yaml
+deployment.apps/nginx-deployment created
+vagrant@kube-control1:~/work/20240104$ kubectl create -f nginx-svc-clusterip.yaml
+service/nginx-svc-clusterip created
+vagrant@kube-control1:~/work/20240104$ kubectl get pods
+NAME                                READY   STATUS              RESTARTS   AGE
+nginx-deployment-549d886d8b-2mnf7   1/1     Running             0          16s
+nginx-deployment-549d886d8b-g6m49   0/1     ContainerCreating   0          16s
+nginx-deployment-549d886d8b-lr8zl   1/1     Running             0          16s
+vagrant@kube-control1:~/work/20240104$ kubectl get deployments
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/3     3            0           28s
+vagrant@kube-control1:~/work/20240104$ kubectl get services
+NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+kubernetes            ClusterIP   10.96.0.1        <none>        443/TCP   27h
+nginx-svc-clusterip   ClusterIP   10.101.226.111   <none>        80/TCP    29s
+
+이 서비스를 상세정보로 보자.
+vagrant@kube-control1:~/work/20240104$ kubectl describe services nginx-svc-clusterip
+Name:              nginx-svc-clusterip
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          app=nginx-deployment
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.101.226.111
+IPs:               10.101.226.111
+Port:              <unset>  80/TCP
+TargetPort:        80/TCP
+Endpoints:         192.168.119.132:80,192.168.233.196:80,192.168.9.68:80
+Session Affinity:  None
+Events:            <none>
+
+웹으로 위의 클러스터 아이피주소로 접속해보자.
+vagrant@kube-control1:~/work/20240104$ curl http://10.101.226.111
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+
+>>기본 nginx 웹서버가 생성되었다.
+
