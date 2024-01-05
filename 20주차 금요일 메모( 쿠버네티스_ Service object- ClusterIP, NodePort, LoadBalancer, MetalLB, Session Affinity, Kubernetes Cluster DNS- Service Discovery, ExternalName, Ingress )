@@ -1,0 +1,979 @@
+20주차 금요일 메모 ( Kubernetes_ Service object- ClusterIP, NodePort, LoadBalancer, MetalLB, Session Affinity, Kubernetes Cluster DNS- Service Discovery, ExternalName, Ingress )
+
+
+지난시간에는 Deployment, Deployment Strategy, 배포명령어, rollout명령어, kubernetes network, Service object 에 대해서 알아보았다.
+
+
+
+# 복기 - 쿠버네티스 클러스터 네트워크
+
+CNI (*애드온이라고도 한다)
+Container Network Interface에는 다음과 같은것들이 있다.
+  - Flannel
+  - Calico
+  - WeaveNet
+  - Cillium
+
+Docker Network
+ - Kubernetes의 네트워크는 컨테이너 런타임을 기초로 동작함
+ - Docker 컨테이너는 bridge, macvlan, host, overlay, null, link 등의 네트워크 유형으로 분류함.
+Bridge
+ - Docker Host의 docker0 브리지 네트워크 인터페이스를 통해 NAT 통신
+ - Docker Host의 veth와 컨테이너 내의 eth0의 veth 쌍이 구성됨
+MACVLAN
+ - Docker Host의 Upstream Network의 대역에 가상의
+ MAC 주소를 생성하여 네트워크 연결
+Host
+ - Docker Host의 네트워크 설정을 직접 사용
+NULL
+ - Docker 컨테이너가 네트워크를 사용하지 않는 네트워크 구성
+Link
+ - 다른 컨테이너의 네트워크 구성을 함께 공유하여 사용하는 네트워크 구성
+Kubernetes Pod Network
+ - Kubernetes의 Pod는 하나의 네트워크를 파드 내의 컨테이너에 공유함
+ - Pod Infra Container(pause)  : 파드 생성시 같이 생성되는 숨겨진 컨테이너로 파드의 네트워크 정보를 유지하도록 동작함
+ - 파드 내의 컨테이너는 localhost로 동일 파드 내의 다른 컨테이너에 접근이 가능함
+
+
+
+# 서비스 오브젝트 
+
+Service
+  - Kubernetes Cluster 외부에서 접근할 때 파드에 고정적인 접근 경로를 제공하기 위한 Kubernetes Object
+  - 여러 파드에 대한 단일 진입점을 제공하는 Kubernetes Object
+  - Service Object에 부여된 IP 주소는 해당 서비스가 종료될 때 까지 변하지 않음
+
+Service Types
+ - ClusterIP : Kubernetes Cluster 내부에서 접근 가능한 IP 주소를 제공하는 서비스 타입
+ Kubernetes Cluster 외부에서는 ClusterIP의 IP 주소로 접근이 불가함.
+
+ - NodePort : Kubernetes Cluster의 모든 노드의 동일한 포트를 개방하는 서비스 타입
+Kubernetes Cluster 외부에서 노드의 해당 포트로 접근시 연결된 파드로 트래픽이 전달됨.
+NodePort는 ClusterIP를 포함함. 
+NodePort의 포트번호 범위는 30000 ~ 32767
+
+ - LoadBalancer : 일반적으로 클라우드 서비스를 이용하는 경우 사용 가능한 서비스 타입
+Kubernetes Cluster 앞단에 LoadBalancer가 위치하여 부하분산을 수행함.
+LoadBalancer 타입은 ClusterIP와 NodePort 기능을 포함함
+
+ - Headless(None) : CluterIP가 없는 서비스 타입으로 특정 파드에 접근해야 하는 경우 사용할 수 있는 서비스 타입
+
+ - ExternalName : Kubernetes Cluster 내부의 파드가 외부의 서비스를 쉽게 접근할 수 있도록 하기 위한 서비스 타입
+
+>>포트 타입(종류)
+port : Service가 사용하는 포트
+
+containerPort : 컨테이너가 개방하는 포트
+
+targetPort : 파드가 개방하는 포트
+
+nodePort: 외부에서 직접적으로 접근 가능한 포트
+
+servicePort: ingress 에서 연결해주는 포트로 연결해주는 포트가 endpoint 의 포트(targetPort)가 됨.
+
+
+
+$ kubectl get all  로 혹시나 지난시간 있는 서비스가 있다면 모두 지워준다.
+
+vagrant@kube-control1:~/work/240105$ kubectl get all
+NAME                                    READY   STATUS    RESTARTS      AGE
+pod/nginx-deployment-549d886d8b-2mnf7   1/1     Running   1 (16h ago)   17h
+pod/nginx-deployment-549d886d8b-g6m49   1/1     Running   1 (16h ago)   17h
+pod/nginx-deployment-549d886d8b-lr8zl   1/1     Running   1 (16h ago)   17h
+
+NAME                          TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+service/kubernetes            ClusterIP   10.96.0.1        <none>        443/TCP   44h
+service/nginx-svc-clusterip   ClusterIP   10.101.226.111   <none>        80/TCP    17h
+
+NAME                               READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/nginx-deployment   3/3     3            3           17h
+
+NAME                                          DESIRED   CURRENT   READY   AGE
+replicaset.apps/nginx-deployment-549d886d8b   3         3         3       17h
+
+vagrant@kube-control1:~/work/240105$ kubectl delete deployment nginx-deployment
+deployment.apps "nginx-deployment" deleted
+vagrant@kube-control1:~/work/240105$ kubectl delete service kubernetes
+service "kubernetes" deleted
+vagrant@kube-control1:~/work/240105$ kubectl delete service nginx-svc-clusterip
+service "nginx-svc-clusterip" deleted
+
+# ClusterIP 타입 서비스 
+
+$ vim example-rs.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: example-rs
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example-rs
+  template:
+    metadata:
+      labels:
+        app: example-rs
+    spec:
+      containers:
+      - name: example
+        image: devops2341/go-myweb:alpine
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+
+$ vim example-svc-clusterip.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-clusterip
+spec:
+  type: ClusterIP
+  selector:
+    app: example-rs
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+
+>>클러스터ip 코드설명: 
+•	type: 서비스의 유형을 나타낸다. 여기서는 ClusterIP로 설정되어 있어 
+클러스터 내부에서만 접근 가능한 내부 IP 주소를 할당받게 된다.
+•	selector: 어떤 Pod이 이 서비스에 속하는지를 식별하는데 사용되는 레이블셀렉터다. 
+여기서는 app: example-rs 레이블이 있는 Pod들이 서비스에 속하게 된다.
+•	ports: 서비스가 수신하는 포트 및 해당 포트로 전달되는 요청을 받을 Pod의 포트를 정의한다.
+•	port: 서비스가 노출하는 포트 번호다. 여기서는 8080으로 설정되어 있다.
+•	targetPort: 이 서비스를 통해 전달되는 트래픽이 도달할 Pod의 포트 번호이다. 
+여기서는 8080으로 설정되어 있다.
+•	protocol: 트래픽이 전달될 때 사용되는 프로토콜을 나타낸다.
+ 여기서는 TCP로 설정되어 있다.
+
+
+
+
+vagrant@kube-control1:~/work/240105$ kubectl get replicasets.apps,pods
+NAME                         DESIRED   CURRENT   READY   AGE
+replicaset.apps/example-rs   3         3         3       17s
+
+NAME                   READY   STATUS    RESTARTS   AGE
+pod/example-rs-4547r   1/1     Running   0          16s
+pod/example-rs-fjgcr   1/1     Running   0          16s
+pod/example-rs-tlprn   1/1     Running   0          16s
+vagrant@kube-control1:~/work/240105$ kubectl describe service
+example-svc-clusterip  kubernetes
+
+상세정보 확인
+vagrant@kube-control1:~/work/240105$ kubectl describe service example-svc-clusterip
+Name:              example-svc-clusterip
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          app=example-rs
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.101.198.180
+IPs:               10.101.198.180
+Port:              <unset>  8080/TCP
+TargetPort:        8080/TCP
+Endpoints:         192.168.119.135:8080,192.168.233.199:8080,192.168.9.71:8080
+Session Affinity:  None
+Events:            <none>
+
+vagrant@kube-control1:~/work/240105$ kubectl get endpoints
+NAME                    ENDPOINTS                                                     AGE
+example-svc-clusterip   192.168.119.135:8080,192.168.233.199:8080,192.168.9.71:8080   92s
+kubernetes              192.168.56.11:6443                                            5m42s
+
+vagrant@kube-control1:~/work/240105$ kubectl describe endpoints example-svc-clusterip
+Name:         example-svc-clusterip
+Namespace:    default
+Labels:       <none>
+Annotations:  endpoints.kubernetes.io/last-change-trigger-time: 2024-01-05T01:43:11Z
+Subsets:
+  Addresses:          192.168.119.135,192.168.233.199,192.168.9.71
+  NotReadyAddresses:  <none>
+  Ports:
+    Name     Port  Protocol
+    ----     ----  --------
+
+vagrant@kube-control1:~/work/240105$ kubectl get pods -o wide
+NAME               READY   STATUS    RESTARTS   AGE     IP                NODE         NOMINATED NODE   READINESS GATES
+example-rs-4547r   1/1     Running   0          2m47s   192.168.233.199   kube-node2   <none>           <none>
+example-rs-fjgcr   1/1     Running   0          2m47s   192.168.9.71      kube-node1   <none>           <none>
+example-rs-tlprn   1/1     Running   0          2m47s   192.168.119.135   kube-node3   <none>           <none>
+
+만약 스케일업을하면?
+vagrant@kube-control1:~/work/240105$ kubectl scale replicaset example-rs --replicas 5
+replicaset.apps/example-rs scaled
+vagrant@kube-control1:~/work/240105$ kubectl describe endpoints example-svc-clusterip
+Name:         example-svc-clusterip
+Namespace:    default
+Labels:       <none>
+Annotations:  endpoints.kubernetes.io/last-change-trigger-time: 2024-01-05T01:46:23Z
+Subsets:
+  Addresses:          192.168.119.135,192.168.119.136,192.168.233.199,192.168.9.71,192.168.9.72
+  NotReadyAddresses:  <none>
+  Ports:
+    Name     Port  Protocol
+    ----     ----  --------
+    <unset>  8080  TCP
+
+Events:  <none>
+>엔드포인트가 늘어난다.
+vagrant@kube-control1:~/work/240105$ kubectl get pods -o wide
+NAME               READY   STATUS    RESTARTS   AGE     IP                NODE         NOMINATED NODE   READINESS GATES
+example-rs-4547r   1/1     Running   0          4m33s   192.168.233.199   kube-node2   <none>           <none>
+example-rs-4828j   1/1     Running   0          70s     192.168.119.136   kube-node3   <none>           <none>
+example-rs-fjgcr   1/1     Running   0          4m33s   192.168.9.71      kube-node1   <none>           <none>
+example-rs-tlprn   1/1     Running   0          4m33s   192.168.119.135   kube-node3   <none>           <none>
+example-rs-xw6dr   1/1     Running   0          70s     192.168.9.72      kube-node1   <none>           <none>
+>또한 파드도 마찬가지로 늘어난다(노드당 골고루 부여됨)
+vagrant@kube-control1:~/work/240105$ kubectl scale replicaset example-rs --replicas 3 으로
+다시 레플리카셋 스케일을 3개로 줄이면 생성되었던 example-rs-4828j, example-rs-xw6dr 파드가 삭제된다.
+
+
+웹에 접속해보자.
+
+vagrant@kube-control1:~/work/240105$ kubectl get services
+NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+example-svc-clusterip   ClusterIP   10.101.198.180   <none>        8080/TCP   6m6s
+kubernetes              ClusterIP   10.96.0.1        <none>        443/TCP    10m
+vagrant@kube-control1:~/work/240105$ kubectl get pod -o wide
+NAME               READY   STATUS    RESTARTS   AGE     IP                NODE         NOMINATED NODE   READINESS GATES
+example-rs-4547r   1/1     Running   0          6m26s   192.168.233.199   kube-node2   <none>           <none>
+example-rs-fjgcr   1/1     Running   0          6m26s   192.168.9.71      kube-node1   <none>           <none>
+example-rs-tlprn   1/1     Running   0          6m26s   192.168.119.135   kube-node3   <none>           <none>
+
+클러스터 아이피에 접속을 해보도록 한다.
+vagrant@kube-control1:~/work/240105$ curl http://10.101.198.180:8080/
+Hello World!
+example-rs-tlprn
+vagrant@kube-control1:~/work/240105$ curl http://10.101.198.180:8080/
+Hello World!
+example-rs-fjgcr
+vagrant@kube-control1:~/work/240105$ curl http://10.101.198.180:8080/
+Hello World!
+example-rs-fjgcr
+vagrant@kube-control1:~/work/240105$ curl http://10.101.198.180:8080/
+Hello World!
+example-rs-4547r
+vagrant@kube-control1:~/work/240105$ curl http://10.101.198.180:8080/
+Hello World!
+example-rs-tlprn
+>> 클러스터 아이피 타입의 오브젝트는 각 노드에 분산으로 트래픽을 나눠주었다.
+
+
+# NodePort 타입 서비스
+모든 노드의 동일한 포트를 개방하는 서비스
+
+vagrant@kube-control1:~/work/240105$ vim example-svc-nodeport.yaml
+vagrant@kube-control1:~/work/240105$ cat example-svc-nodeport.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: example-rs
+  ports:
+  - port: 8080
+    targetPort: 8080
+
+
+vagrant@kube-control1:~/work/240105$ kubectl create -f example-svc-nodeport.yaml
+service/example-svc-nodeport created
+
+vagrant@kube-control1:~/work/240105$ kubectl get services
+NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+example-svc-clusterip   ClusterIP   10.101.198.180   <none>        8080/TCP         42m
+example-svc-nodeport    NodePort    10.99.84.3       <none>        8080:30600/TCP   20s
+kubernetes              ClusterIP   10.96.0.1        <none>        443/TCP          46m
+
+상세정보를 확인해보자.
+vagrant@kube-control1:~/work/240105$ kubectl describe service example-svc-nodeport
+Name:                     example-svc-nodeport
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=example-rs
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.99.84.3
+IPs:                      10.99.84.3
+Port:                     <unset>  8080/TCP
+TargetPort:               8080/TCP
+NodePort:                 <unset>  30600/TCP
+Endpoints:                192.168.119.135:8080,192.168.233.199:8080,192.168.9.71:8080
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+>>추가적으로 노드포트항목이 설정된 것을 알 수 있다.
+External Traffic Policy:  Cluster 해당필드는 Kubernetes 서비스의 외부 트래픽 처리 방식을 정의하는 데 사용되고, 
+서비스가 외부로 노출된경우 해당서비스로 들어오는 외부 트래픽이 어떻게 처리되어야 하는 지를 나타낸다.
+* ExternalTrafficPolicy: Cluster로 설정된경우
+•	외부에서의 트래픽은 서비스의 Endpoint으로 직접 전달된다.
+•	이는 클러스터 내의 모든 노드에 트래픽을 분산시키는 방식이다. 서비스의 Endpoint에
+연결된 모든 Pod에 트래픽이 동일하게 분배된다.
+•	이 옵션을 선택하면 외부 트래픽이 클러스터 내의 모든 노드에 고르게 분산되므로
+ 특정 노드에 부하가 집중되지 않는다.
+>>마찬가지로 로컬에서 클러스터아이피 10.99.84.3:8080으로 접근을 해보면
+vagrant@kube-control1:~/work/240105$ curl http://10.99.84.3:8080/
+ 노드별로 고르게 로드밸런싱하여 접근이 된다. 외부접근은 후술한다.
+
+# 노드포트로 접속하려는 경우
+Kubernetes_NODE_IP + NodePort
+의 형태로 접근하여야 한다.
+위에 실습한 내용으로 기반하면
+
+(Kubernetes Cluster 외부에서)
+NodePort:                 <unset>  30600/TCP를 이용해서 접근하려한다.
+
+PS C:\Users\USER> curl http://192.168.56.21:30600/
+PS C:\Users\USER> curl http://192.168.56.22:30600/
+PS C:\Users\USER> curl http://192.168.56.23:30600/
+이 방법으로 
+StatusCode        : 200
+StatusDescription : OK
+Content           : Hello World!
+                    example-rs-4547r
+
+RawContent        : HTTP/1.1 200 OK
+                    Content-Length: 30
+                    Content-Type: text/plain; charset=utf-8
+                    Date: Fri, 05 Jan 2024 02:32:18 GMT
+
+                    Hello World!
+                    example-rs-4547r
+
+Forms             : {}
+Headers           : {[Content-Length, 30], [Content-Type, text/plain; charset=utf-8], [Date, Fri, 05 Jan 2024 02:32:18
+                    GMT]}
+Images            : {}
+InputFields       : {}
+Links             : {}
+ParsedHtml        : mshtml.HTMLDocumentClass
+RawContentLength  : 30
+이와같은것을 볼 수 있다. 또한 웹으로 직접 연결해보면 웹검색창에
+
+(http://) 192.168.56.21:30600
+(http://) 192.168.56.22:30600
+(http://) 192.168.56.23:30600
+
+ 
+ 
+ 
+으로 각각 접속하면 로드밸런싱하여 파드가 랜덤하게 트래픽부하를 분산해서 담당하게된다.
+
+이제 삭제하고, 다시만들어보자
+(Control Plane에서)
+$ kubectl delete -f example-svc-nodeport.yaml
+service "example-svc-nodeport" deleted
+
+$ kubectl create -f example-svc-nodeport.yaml
+service/example-svc-nodeport created
+
+vagrant@kube-control1:~/work/240105$ kubectl get services
+NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+example-svc-clusterip   ClusterIP   10.101.198.180   <none>        8080/TCP         56m
+example-svc-nodeport    NodePort    10.104.230.235   <none>        8080:30145/TCP   9s
+kubernetes              ClusterIP   10.96.0.1        <none>        443/TCP          60m
+
+다시 야믈파일로 노드포트를 재정의해본다.
+vagrant@kube-control1:~/work/240105$ vim example-svc-nodeport2.yaml
+vagrant@kube-control1:~/work/240105$ cat example-svc-nodeport2.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-nodeport2
+spec:
+  type: NodePort
+  selector:
+    app: example-rs
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+>>노드포트 필드를 30080으로 직접 정의해줬다. (ports.port.nodePort)
+
+서비스목록을 조회해본다
+vagrant@kube-control1:~/work/240105$ kubectl  create -f example-svc-nodeport2.yaml
+service/example-svc-nodeport2 created
+vagrant@kube-control1:~/work/240105$ kubectl get service
+NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+example-svc-clusterip   ClusterIP   10.101.198.180   <none>        8080/TCP         61m
+example-svc-nodeport    NodePort    10.104.230.235   <none>        8080:30145/TCP   5m4s
+example-svc-nodeport2   NodePort    10.109.232.244   <none>        8080:30080/TCP   10s
+kubernetes              ClusterIP   10.96.0.1        <none>        443/TCP          65m
+>> 노드포트2가 클러스터ip 10.109.232.244를 가지고, 포트번호 30080/tcp를 가지고 서비스되고있다.
+웹에 로그인해보면 , 다만 다른점은 노드가 고정되서 접속이 된다는 점.
+>>>결론: nodePort를 설정하면, 클러스터의 각 노드에서 해당 nodePort로 들어오는 
+트래픽은 해당 서비스로 라우팅된다. 이는 로드 밸런싱과는 조금 다른 개념을 가진다.
+특정 노드로만 트래픽이 고정되며, 로드 밸런싱이 자동으로 이뤄지지 않는다.
+로드 밸런싱을 사용하려면, LoadBalancer 타입의 서비스를 사용하는 것이 일반적
+>>왜 특정 노드로만 트래픽 고정을 이용하는가 하는 질문점 .
+nodePort는 주로 개발 및 디버깅 목적으로 사용되거나 특수한 요구 사항을 충족시키기 위해 사용되는 등 특수목적을 가지기 때문이다.
+
+
+# LoadBalancer 타입 서비스
+클라우드 제공자의 로드 밸런서를 사용하여 외부에서 서비스에 접근할 수 있도록 하는 서비스 타입이다.
+
+vagrant@kube-control1:~/work/240105$ vim example-svc-lb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: example-rs
+  ports:
+  - port: 8080
+    targetPort: 8080
+>> type만 LoadBalancer로 변경됐다.
+
+vagrant@kube-control1:~/work/240105$ kubectl create -f example-svc-lb.yaml
+service/example-svc-lb created
+vagrant@kube-control1:~/work/240105$ kubectl get services
+NAME                    TYPE           CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+example-svc-clusterip   ClusterIP      10.101.198.180   <none>        8080/TCP         78m
+example-svc-lb          LoadBalancer   10.111.221.197   <pending>     8080:30504/TCP   9s
+example-svc-nodeport    NodePort       10.104.230.235   <none>        8080:30145/TCP   21m
+example-svc-nodeport2   NodePort       10.109.232.244   <none>        8080:30080/TCP   16m
+kubernetes              ClusterIP      10.96.0.1        <none>        443/TCP          82m
+>>잘보면 로드밸런서 서비스는 external-ip가 <Pending>으로 표기된다. 
+이 이유는 일반적으로 클라우드환경에서 사용할 수 있는 로드밸런서 오브젝트 타입이기때문에
+수동으로 로드밸런서 환경을 구성해주지 않는 한 계속 이렇게 뜬다.
+
+vagrant@kube-control1:~/work/240105$ kubectl describe service example-svc-lb
+Name:                     example-svc-lb
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=example-rs
+Type:                     LoadBalancer
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.111.221.197
+IPs:                      10.111.221.197
+Port:                     <unset>  8080/TCP
+TargetPort:               8080/TCP
+NodePort:                 <unset>  30504/TCP
+Endpoints:                192.168.119.135:8080,192.168.233.199:8080,192.168.9.71:8080
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+이대로는 사용못하니 서비스를 지워주자
+vagrant@kube-control1:~/work/240105$ kubectl delete -f example-svc-lb.yaml
+service "example-svc-lb" deleted
+vagrant@kube-control1:~/work/240105$ kubectl get services
+NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+example-svc-clusterip   ClusterIP   10.101.198.180   <none>        8080/TCP         80m
+example-svc-nodeport    NodePort    10.104.230.235   <none>        8080:30145/TCP   24m
+example-svc-nodeport2   NodePort    10.109.232.244   <none>        8080:30080/TCP   19m
+kubernetes              ClusterIP   10.96.0.1        <none>        443/TCP          84m
+
+
+# (MetalLB) 로드밸런서 오브젝트를 클라우드서비스 없이 사용하기
+
+보통 클라우드 환경에서는 클라우드 제공자(CSP_AWS&GCP&...)의 로드 밸런서를 사용하여 외부 서비스에 대한 로드 밸런싱을 수행하지만,
+로컬 환경이나 온프레미스 환경에서는 이와 같은 클라우드 제공자의 로드 밸런서를 사용할 수 없는 경우가 있는데. 
+MetalLB는 이러한 상황에서 사용자가 직접 로드 밸런서 역할을 수행할 수 있도록 지원하는 오픈소스 프로젝트이다.
+
+Metallb
+ - Open Source Project의 LoadBalancer 도구
+ - https://metallb.universe.tf/
+ - L2, L4 기반의 LoadBalancer를 구성할 수 있음
+
+
+ 
+
+# MetalLB설치하기
+step1 : https://metallb.universe.tf/ 로 이동한다.
+
+step2 : https://metallb.universe.tf/installation/ 을 정독하고 과정을 따른다.
+IPVS 모드에서 kube-proxy를 사용하는 경우 Kubernetes v1.14.2부터 엄격한 ARP 모드를 활성화 (=모드변경하기)
+
+$ kubectl edit configmap -n kube-system kube-proxy 로 속성편집으로 들어간다.
+46     kind: KubeProxyConfiguration    하위필드 mode 부분을변경해야한다.
+48     mode: "ipvs"   		  로 수정한다.
+
+37     ipvs:					이 필드로 이동
+38       excludeCIDRs: null
+39       minSyncPeriod: 0s
+40       scheduler: ""
+41       strictARP: true		  41번행 true로 변경한다
+
+이후 저장.
+
+step3 : MetalLB 를 설치한다.
+
+$ kubectl create -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml
+ 
+
+이후 현재 작업 디렉터리에 metallb를 만들고, manifest file을 정의한다.
+$ mkdir metallb
+$ vim metallb/config.yaml
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.56.200-192.168.56.210
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - default-pool
+
+vagrant@kube-control1:~/work/240105$ kubectl create -f metallb/config.yaml
+ipaddresspool.metallb.io/default-pool created
+l2advertisement.metallb.io/default created
+vagrant@kube-control1:~/work/240105$ kubectl get namespaces
+NAME               STATUS   AGE
+...
+metallb-system     Active   11m
+...
+vagrant@kube-control1:~/work/240105$ kubectl get all -n metallb-system
+NAME                              READY   STATUS    RESTARTS   AGE
+pod/controller-565ccc769f-zszs2   1/1     Running   0          12m
+pod/speaker-95x2t                 1/1     Running   0          12m
+pod/speaker-df8w4                 1/1     Running   0          12m
+pod/speaker-wf8mf                 1/1     Running   0          12m
+pod/speaker-xxqw5                 1/1     Running   0          12m
+
+NAME                      TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+service/webhook-service   ClusterIP   10.107.33.24   <none>        443/TCP   12m
+
+NAME                     DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+daemonset.apps/speaker   4         4         4       4            4           kubernetes.io/os=linux   12m
+
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/controller   1/1     1            1           12m
+
+NAME                                    DESIRED   CURRENT   READY   AGE
+replicaset.apps/controller-565ccc769f   1         1         1       12m
+>>여기까지 설치단계이다.
+
+step4 : LoadBalancer 만들기
+
+vagrant@kube-control1:~/work/240105$ kubectl create -f example-svc-lb.yaml
+service/example-svc-lb created
+vagrant@kube-control1:~/work/240105$ kubectl get services
+NAME                    TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)          AGE
+example-svc-clusterip   ClusterIP      10.101.198.180   <none>           8080/TCP         119m
+example-svc-lb          LoadBalancer   10.108.14.90     192.168.56.200   8080:31742/TCP   7s
+example-svc-nodeport    NodePort       10.104.230.235   <none>           8080:30145/TCP   63m
+example-svc-nodeport2   NodePort       10.109.232.244   <none>           8080:30080/TCP   58m
+kubernetes              ClusterIP      10.96.0.1        <none>           443/TCP          123m
+>>확인을 해보면, External-ip 가 원래 <pending.. >상태였다가 해당 아이피가 할당된것을 볼 수 있다. 매니페스트파일로 정의했기 때문임.
+
+step5 : 로드밸런서 서비스를 확인한다.
+vagrant@kube-control1:~/work/240105$ kubectl describe service example-svc-lb
+Name:                     example-svc-lb
+Namespace:                default
+Labels:                   <none>
+Annotations:              metallb.universe.tf/ip-allocated-from-pool: default-pool
+Selector:                 app=example-rs
+Type:                     LoadBalancer
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.108.14.90
+IPs:                      10.108.14.90
+LoadBalancer Ingress:     192.168.56.200		#ExternalIP
+Port:                     <unset>  8080/TCP
+TargetPort:               8080/TCP
+NodePort:                 <unset>  31742/TCP
+Endpoints:                192.168.119.135:8080,192.168.233.199:8080,192.168.9.71:8080
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+>> external ip부분이 LoadBalancer Ingress 항목으로 대체되어 나타나있다.
+
+step6 : 로드밸런서 서비스 실습
+
+$ curl http://NODE_IP:NODEPORT/
+Kubernetes Cluster 내에서 LoadBalancer 타입의 Service Object의 ClusterIP를 통한 접근
+$ curl http://10.108.14.90:8080/
+
+LoadBalancer 타입의 Service Object의 NodePort를 통한 접근
+$ curl http://192.168.56.21:31742/
+$ curl http://192.168.56.22:31742/
+$ curl http://192.168.56.23:31742/
+vagrant@kube-control1:~/work/240105$ curl http://192.168.56.23:31742/
+Hello World!
+example-rs-fjgcr
+vagrant@kube-control1:~/work/240105$ curl http://192.168.56.23:31742/
+Hello World!
+example-rs-4547r
+vagrant@kube-control1:~/work/240105$ curl http://192.168.56.23:31742/
+Hello World!
+example-rs-tlprn
+vagrant@kube-control1:~/work/240105$ curl http://192.168.56.21:31742/
+
+LoadBalancer 타입의 Service Object의 LoadBalancer의 IP와 Port를 통한 접근
+$ curl http://192.168.56.200:8080/
+vagrant@kube-control1:~/work/240105$ curl http://192.168.56.200:8080/
+Hello World!
+example-rs-tlprn
+
+레플리카셋을 하나 정의한다.
+$ vim example2-rs.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: example2-rs
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: example2-rs
+  template:
+    metadata:
+      labels:
+        app: example2-rs
+    spec:
+      containers:
+      - name: example
+        image: devops2341/go-myweb:alpine
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+로드밸런서 서비스를 하나 정의한다.
+$ vim example2-svc-lb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example2-svc-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: example2-rs
+  ports:
+  - name: web
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+
+vagrant@kube-control1:~/work/240105$ kubectl create -f example2-rs.yaml -f example2-svc-lb.yaml
+replicaset.apps/example2-rs created
+service/example2-svc-lb created
+
+vagrant@kube-control1:~/work/240105$ kubectl get replicasets.apps
+NAME          DESIRED   CURRENT   READY   AGE
+example-rs    3         3         3       4h6m
+example2-rs   2         2         2       17s
+vagrant@kube-control1:~/work/240105$ kubectl get services
+NAME                    TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)          AGE
+example-svc-lb          LoadBalancer   10.108.14.90     192.168.56.200   8080:31742/TCP   127m
+example2-svc-lb         LoadBalancer   10.106.211.112   192.168.56.201   80:32739/TCP     22s
+
+웹에서 조회
+vagrant@kube-control1:~/work/240105$ curl http://192.168.56.200:8080/
+Hello World!
+example-rs-4547r
+vagrant@kube-control1:~/work/240105$ curl http://192.168.56.201:80/
+Hello World!
+example2-rs-zgxfv
+
+~~~
+
+**주의: 요구사항으로 쿠버네티스에 네트워크부하분산기능이 없는 실행중인 클러스터의
+버전이 v1.13.0 이상일 것을 요한다. 버전은 굉장히 중요하므로 유의.
+
+버전확인을 하는법
+$ kubectl version --short
+Flag --short has been deprecated, and will be removed in the future. The --short output will become the default.
+Client Version: v1.27.9
+Kustomize Version: v5.0.1
+Server Version: v1.27.9
+
+
+# 로드밸런싱 개념_ 세션 어피니티 (Session Affinity)
+
+Session Affinity
+클라이언트의 세션 연결을 유지하기 위해 요청을 전달할 파드(컨테이너)를 
+처음 접속한 파드로 고정하면서 요청을 분산하여 전달하기 위한 기술
+
+특장점
+1.	상태 유지(Stateful): 세션 어피니티를 사용하면 서버는 특정 클라이언트와의
+ 상태를 유지할 수 있다. 이는 연속적인 요청이나 특정 세션이 발생할 때
+ 동일한 서버에 연결될 수 있다.
+2.	캐싱 및 성능 향상: 특정 세션에 대한 요청이 동일한 서버로 라우팅되면, 
+해당 서버에 캐싱된 데이터를 활용하여 응답 시간을 줄일 수 있다.
+3.	데이터 일관성 유지: 세션 어피니티를 사용하면 특정 세션에 대한 모든 요청이
+동일한 서버로 전달되므로, 해당 세션과 관련된 데이터 일관성을 유지하기가 더 쉬워진다.
+
+.spec.sessionAffinity :  세션 어피니티를 적용 여부를 지정하는필드.
+ None    - SessionAffinity 미적용
+ ClientIP  - IP주소를 기반으로 SessionAffinity를 적용.
+
+
+# 세션어피니티 실습
+vagrant@kube-control1:~/work/240105$ vim example-svc-session.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-session
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  selector:
+    app: example-rs
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+
+세션오브젝트를 하나 생성한다
+vagrant@kube-control1:~/work/240105$ kubectl create -f example-svc-session.yaml
+service/example-svc-session created
+
+vagrant@kube-control1:~/work/240105$ kubectl get service
+NAME                    TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)          AGE
+example-svc-session     ClusterIP      10.111.166.109   <none>           8080/TCP         18s
+
+vagrant@kube-control1:~/work/240105$ kubectl describe services example-svc-session
+Name:              example-svc-session
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          app=example-rs
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.111.166.109
+IPs:               10.111.166.109
+Port:              <unset>  8080/TCP
+TargetPort:        8080/TCP
+Endpoints:         192.168.119.135:8080,192.168.233.199:8080,192.168.9.71:8080
+Session Affinity:  ClientIP
+Events:            <none>
+>>세션어피니티가 ClientIP기반으로 달려있는것을 확인이 가능하다.
+
+임시 작업용 파드 실행(자동 삭제)
+$ kubectl run netshoot --rm -it --image=nicolaka/netshoot:latest /bin/bash
+netshoot:~# ifconfig
+eth0      Link encap:Ethernet  HWaddr C6:58:38:B8:AA:05
+          inet addr:192.168.233.200  Bcast:0.0.0.0  Mask:255.255.255.255
+
+netshoot:~# curl http://10.111.166.109:8080/
+Hello World!
+example-rs-tlprn
+netshoot:~# curl http://10.111.166.109:8080/
+Hello World!
+example-rs-tlprn
+netshoot:~# curl http://10.111.166.109:8080/
+Hello World!
+example-rs-tlprn
+하나의 노드만 호출된다.
+
+배쉬에서 나와서 다시 파드를실행한다.
+vagrant@kube-control1:~/work/240105$ kubectl run netshoot --rm -it --image=nicolaka/netshoot:latest /bin/bash
+eth0      Link encap:Ethernet  HWaddr A6:19:63:A5:25:26
+          inet addr:192.168.233.201  Bcast:0.0.0.0  Mask:255.255.255.255
+
+netshoot:~# curl http://10.111.166.109:8080/
+Hello World!
+example-rs-4547r
+>>다시 다른 한 노드에만 세션어피니티가 되는 모습이다.
+
+
+# Service Discovery 서비스 디스커버리
+쿠버네티스 DNS, p.374   Chapter16.
+
+Service Discovery
+  Kubernetes Cluster의 Pod, Service에 대해 탐색할 수 있는 방법
+
+다시 임시작업용 파드를 하나 띄운다. 
+vagrant@kube-control1:~/work/240105$ kubectl run netshoot --rm -it --image=nicolaka/netshoot:latest /bin/bash
+netshoot:~#
+
+환경변수를 실행할 수 있는 env 명령어를 띄워본다.
+netshoot:~# env
+KUBERNETES_SERVICE_PORT_HTTPS=443
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1
+KUBERNETES_SERVICE_HOST=10.96.0.1
+KUBERNETES_PORT=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP_PORT=443
+EXAMPLE_SVC_CLUSTERIP_SERVICE_HOST=10.102.127.92
+EXAMPLE_SVC_CLUSTERIP_SERVICE_PORT=8080
+EXAMPLE_SVC_CLUSTERIP_PORT=tcp://10.102.127.92:8080
+EXAMPLE_SVC_CLUSTERIP_PORT_8080_TCP_ADDR=10.102.127.92
+EXAMPLE_SVC_CLUSTERIP_PORT_8080_TCP=tcp://10.102.127.92:8080
+EXAMPLE_SVC_CLUSTERIP_PORT_8080_TCP_PROTO=tcp
+EXAMPLE_SVC_CLUSTERIP_PORT_8080_TCP_PORT=8080
+
+{SERVICE_NAME}_SERVICE_HOST=10.102.127.92
+{SERVICE_NAME}_SERVICE_PORT=8080
+{SERVICE_NAME}_PORT=tcp://10.102.127.92:8080
+{SERVICE_NAME}_PORT_8080_TCP_ADDR=10.102.127.92
+{SERVICE_NAME}_PORT_8080_TCP=tcp://10.102.127.92:8080
+{SERVICE_NAME}_PORT_8080_TCP_PROTO=tcp
+{SERVICE_NAME}_PORT_8080_TCP_PORT=8080
+
+# Kubernetes Cluster DNS를 이용한 Service Discovery
+
+Kubernetes Cluster DNS
+   Kubernetes Cluster의 Pod, Service를 쉽게 접근할 수 있도록 하기 위해 Kubernetes Cluster 내에서 제공되는 도메인 주소 체계
+   Service, Pod 등을 Kubernetes Cluster의 도메인 주소 형태로 접근할 수 있음
+   Kubernetes Cluster의 기본 도메인은 cluster.local 임.
+   Kubernetes Service의 FQDN 형태의 주소는 {SERVICE}.{NAMESPACE}.svc.cluster.local
+
+$ kubectl get all -n kube-system
+NAME                                        READY   STATUS    RESTARTS      AGE
+pod/coredns-5d78c9869d-8sbqn                1/1     Running   3 (22h ago)   2d2h
+pod/coredns-5d78c9869d-skxw8                1/1     Running   3 (22h ago)   2d2h
+pod/etcd-kube-control1                      1/1     Running   3 (22h ago)   2d2h
+pod/kube-apiserver-kube-control1            1/1     Running   3 (22h ago)   2d2h
+pod/kube-controller-manager-kube-control1   1/1     Running   3 (22h ago)   2d2h
+pod/kube-proxy-m4hnz                        1/1     Running   3 (22h ago)   2d2h
+pod/kube-proxy-mdl5k                        1/1     Running   3 (22h ago)   2d2h
+pod/kube-proxy-nwhjp                        1/1     Running   3 (22h ago)   2d2h
+pod/kube-proxy-zxqqq                        1/1     Running   3 (22h ago)   2d2h
+pod/kube-scheduler-kube-control1            1/1     Running   3 (22h ago)   2d2h
+
+NAME               TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+service/kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   2d2h
+
+NAME                        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+daemonset.apps/kube-proxy   4         4         4       4            4           kubernetes.io/os=linux   2d2h
+
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/coredns   2/2     2            2           2d2h
+
+NAME                                 DESIRED   CURRENT   READY   AGE
+replicaset.apps/coredns-5d78c9869d   2         2         2       2d2h
+
+
+다시 단순작업창을 열어본다.
+
+vagrant@kube-control1:~/work/240105$ kubectl run netshoot --rm -it --image=nicolaka/netshoot:latest /bin/bash
+netshoot:~#
+netshoot:~# curl http://example-svc-clusterip:8080/
+Hello World!
+example-rs-4547r
+netshoot:~# curl http://example-svc-clusterip.default:8080/
+Hello World!
+example-rs-4547r
+netshoot:~# curl http://example-svc-clusterip.default.svc:8080/
+Hello World!
+example-rs-fjgcr
+netshoot:~# curl http://example-svc-clusterip.default.svc.cluster.local:8080/
+Hello World!
+example-rs-4547r
+>>매번 파드들을 실행할때, 파드는 각기 다른 ip주소를 가지는 데 반해 서비스 오브젝트의 도메인 주소를 가지고 접속을 하면
+쉽게 연동이되는 서버와 연결을 할 수 있게된다. 쿠버네티스 클러스터 내에서 접속이 가능한부분.
+>>> 각각의 curl 명령어는 서비스 디스커버리를 통해 서비스의 엔드포인트에 정상적으로 액세스하고 있다.
+Kubernetes는 서비스 이름, 네임스페이스, DNS 서버 및 도메인을 통해 클러스터 내의 서비스에 대한 동적인 디스커버리를 제공함.
+
+
+
+# ExternalName
+
+$ vim externalname.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: externalname-service
+spec:
+  type: ExternalName
+  externalName: google.com
+
+>>   externalName필드에는 서비스오브젝트에서 외부와 연동할 주소를 (api서버의 주소 등) 적어주는 곳이다.
+
+vagrant@kube-control1:~/work/240105$ kubectl create -f externalname.yaml
+service/externalname-service created
+vagrant@kube-control1:~/work/240105$ kubectl get service externalname-service
+NAME                   TYPE           CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+externalname-service   ExternalName   <none>       google.com    <none>    69s
+vagrant@kube-control1:~/work/240105$ kubectl describe service externalname-service
+Name:              externalname-service
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          <none>
+Type:              ExternalName
+IP Families:       <none>
+IP:
+IPs:               <none>
+External Name:     google.com
+Session Affinity:  None
+Events:            <none>
+
+# ExternalName을 사용하는 실습
+vagrant@kube-control1:~/work/240105$ kubectl run netshoot --rm -it --image=nicolaka/netshoot:latest /bin/bash
+
+netshoot:~# host externalname-service
+externalname-service.default.svc.cluster.local is an alias for google.com.
+google.com has address 142.250.76.142
+google.com has IPv6 address 2404:6800:400a:813::200e
+google.com mail is handled by 10 smtp.google.com.
+
+netshoot:~# curl http://externalname-service.default.svc.cluster.local/
+<!DOCTYPE html>
+<html lang=en>
+  <meta charset=utf-8>
+  <meta name=viewport content="initial-scale=1, minimum-scale=1, width=device-width">
+  <title>Error 404 (Not Found)!!1</title>
+  <style>
+    *{margin:0;padding:0}html,code{font:15px/22px arial,sans-serif}html{background:#fff;color:#222;padding:15px}body{margin:7% auto 0;max-width:390px;min-height:180px;padding:30px 0 15px}* > body{background:url(//www.google.com/images/errors/robot.png) 100% 5px no-repeat;padding-right:205px}p{margin:11px 0 22px;overflow:hidden}ins{color:#777;text-decoration:none}a img{border:0}@media screen and (max-width:772px){body{background:none;margin-top:0;max-width:none;padding-right:0}}#logo{background:url(//www.google.com/images/branding/googlelogo/1x/googlelogo_color_150x54dp.png) no-repeat;margin-left:-5px}@media only screen and (min-resolution:192dpi){#logo{background:url(//www.google.com/images/branding/googlelogo/2x/googlelogo_color_150x54dp.png) no-repeat 0% 0%/100% 100%;-moz-border-image:url(//www.google.com/images/branding/googlelogo/2x/googlelogo_color_150x54dp.png) 0}}@media only screen and (-webkit-min-device-pixel-ratio:2){#logo{background:url(//www.google.com/images/branding/googlelogo/2x/googlelogo_color_150x54dp.png) no-repeat;-webkit-background-size:100% 100%}}#logo{display:inline-block;height:54px;width:150px}
+  </style>
+  <a href=//www.google.com/><span id=logo aria-label=Google></span></a>
+  <p><b>404.</b> <ins>That’s an error.</ins>
+  <p>The requested URL <code>/</code> was not found on this server.  <ins>That’s all we know.</ins>
+>>외부에서 주소가 바뀌었을 경우, externalname만 바꿔주면 다시 접속을 할 수 있게된다.
+>> ExternalName 서비스는 Kubernetes에서 서비스를 외부에 위치한 다른 클러스터 또는
+ 외부 시스템과 연결하는 데 사용되는 특별한 유형의 서비스이다.
+ExternalName 서비스는 Kubernetes의 서비스 디스커버리 메커니즘을 활용하여
+ 클러스터 내에서 외부 시스템에 대한 연결을 단순화하는 데 사용된다.
+
+
+# Ingress인그레스
+p.216 ch8.1~
+
+요약-Ingress는 클러스터 외부에서 안으로 접근하는 요청들을 어떻게 처리할지 정의해둔 규칙 모음이다.
+Ingress controller가 있어야 작동한다.
+
+-(L7계층 HTTP(S)기반 로드밸런싱) 
+
+-Kubernetes Cluster 외부에서 Kubernetes Cluster의 애플리케이션에 접근할 때 요청 트래픽이
+특정 애플리케이션으로 전달되도록 정의하는 규칙을 포함하는 Kubernetes Object
+ 요청 트래픽의 애플리케이션 데이터(접속 요청 주소, 접속 요청 경로 등)를 분석하여
+애플리케이션 요청 트래픽이 해당 애플리케이션으로 전달될 수 있도록 함
+
+Ingress Controller
+   Kubernetes의 Ingress Object를 처리하는 Controller
+   Ingress Object에 정의된 규칙에 따라 애플리케이션의 요청 트래픽을 처리함
+
+
+QNA.세션어피니티와 쿠키//
+쿠키는 데이터 저장으로 애플리케이션이 동작하는 데 사용하는 개념이고,
+세션어피니티는 쿠버네티스 클러스터에서 서비스오브젝트가 가리키는 파드들이 여럿 있는데, 
+여러개의 파드와 연결되어있는데 쿠버네티스 외부에서 클라이언트에 연결했을 때 요청들을 분산한다.
+이때 계속 그 연결(세션)에 대한정보를 서버에서 처리함으로 계속 연결되어야 할 필요가 있다. 
+(세션이 끊기고 다른 파드로 접속되면 내가 만들었던 파일이 날아간다던가) 
+*참고할것= 스티키 세션// 세션어피니티(IP기반으로하는 세션)
+
+QNA.노드포트가 사용되는 경우&사례//
+노드포트에서 사용되는 포트번호의 범위는 3만번 대로, 그 포트를 가지고 대외적 서비스를 제공하게되면
+서비스에 접근하려면 죄다 최종사용자들이3만번대 포트를 달고와야된다.
+대개 사용자들은 웰노운포트로 접근하기때문에 로드밸런서 방식을 사용해서 오는것이 맞다는 느낌이다.
+노드포트는 특히나 쿠버네티스의 노드주소를 공개해야 되기 때문에 보안적,대외적 서비스에 있어서는 어려움이 있다.
+
+
+
