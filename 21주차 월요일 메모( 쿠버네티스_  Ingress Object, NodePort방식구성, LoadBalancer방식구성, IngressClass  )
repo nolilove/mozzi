@@ -1,0 +1,842 @@
+21주차 월요일 메모 ( Kubernetes_ Ingress, NodePort방식구성,LoadBalancer방식구성,IngressClass  )
+
+# Ingress 인그레스 
+# 인그레스 오브젝트를 노드포트방식으로 동작구성하기
+# IngressClass
+# 인그레스 오브젝트를 로드밸런서 타입 서비스로 동작구성하기
+# 인그레스클래스네임 정의없이 실행하도록 구성하기
+# 하나의 인그레스 오브젝트에 여러개의 룰을 지정하기
+
+지난주에는 Service object- ClusterIP, NodePort, LoadBalancer, MetalLB, Session Affinity,
+Kubernetes Cluster DNS- Service Discovery, ExternalName, Ingress 에 대해서 알아보았다.
+
+    
+# 복기 
+Service Types
+ - ClusterIP : Kubernetes Cluster 내부에서 접근 가능한 IP 주소를 제공하는 서비스 타입
+ Kubernetes Cluster 외부에서는 ClusterIP의 IP 주소로 접근이 불가함.
+
+ - NodePort : Kubernetes Cluster의 모든 노드의 동일한 포트를 개방하는 서비스 타입
+Kubernetes Cluster 외부에서 노드의 해당 포트로 접근시 연결된 파드로 트래픽이 전달됨.
+NodePort는 ClusterIP를 포함함. 
+NodePort의 포트번호 범위는 30000 ~ 32767
+
+ - LoadBalancer : 일반적으로 클라우드 서비스를 이용하는 경우 사용 가능한 서비스 타입
+Kubernetes Cluster 앞단에 LoadBalancer가 위치하여 부하분산을 수행함.
+LoadBalancer 타입은 ClusterIP와 NodePort 기능을 포함함
+
+ - Headless(None) : CluterIP가 없는 서비스 타입으로 특정 파드에 접근해야 하는 경우 사용할 수 있는 서비스 타입
+
+ - ExternalName : Kubernetes Cluster 내부의 파드가 외부의 서비스를 쉽게 접근할 수 있도록 하기 위한 서비스 타입/
+마치 클러스터 외부의 서비스를 클러스터 내부의 서비스처럼 만드는 오브젝트 타입이다. 이 주소를 가지고 접속하면 주소변경되더라도 손쉽게 대응이 가능.
+
+
+
+#복기실습
+서비스오브젝트를 사용하기 이전에 파드가 존재해야 한다.
+파드를 정의해본다.
+
+vagrant@kube-control1:~/work/20240108$ vim example-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod
+  labels:
+    app: example-pod
+    env: production
+spec:
+  containers:
+  - name: example
+    image: k8s.gcr.io/echoserver:1.4
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-pod.yaml
+pod/example-pod created
+
+
+vagrant@kube-control1:~/work/20240108$ vim example-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: example-pod
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+*타입, 셀렉터, 포트는 항상 정의해야함.
+
+vagrant@kube-control1:~/work/20240108$ kubectl create -f  example-svc.yaml
+service/example-svc created
+
+vagrant@kube-control1:~/work/20240108$ kubectl get services
+NAME          TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+example-svc   ClusterIP   10.106.44.74   <none>        80/TCP    4m20s
+kubernetes    ClusterIP   10.96.0.1      <none>        443/TCP   2d23h
+vagrant@kube-control1:~/work/20240108$ kubectl describe service example-svc
+Name:              example-svc
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          app=example-pod
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.103.40.50
+IPs:               10.103.40.50
+Port:              <unset>  80/TCP
+TargetPort:        8080/TCP
+Endpoints:         192.168.9.76:8080
+Session Affinity:  None
+Events:            <none>
+
+vagrant@kube-control1:~/work/20240108$ kubectl get endpoints
+NAME          ENDPOINTS            AGE
+example-svc   192.168.9.76:8080    6m11s
+kubernetes    192.168.56.11:6443   2d23h
+
+vagrant@kube-control1:~/work/20240108$ kubectl describe endpoints example-svc
+Name:         example-svc
+Namespace:    default
+Labels:       <none>
+Annotations:  endpoints.kubernetes.io/last-change-trigger-time: 2024-01-08T00:52:33Z
+Subsets:
+  Addresses:          192.168.9.76
+  NotReadyAddresses:  <none>
+  Ports:
+    Name     Port  Protocol
+    ----     ----  --------
+    <unset>  8080  TCP
+
+Events:  <none>
+
+
+ClusterIP를 통한 접근
+$ curl http://CLUSTERIP:PORT/
+$ curl http://10.96.39.64/
+
+Pod 직접 접근
+$ curl http://POD_IP/
+$ curl http://192.168.119.138/
+curl: (7) Failed to connect to 192.168.119.138 port 80 after 0 ms: Connection refused
+
+$ curl http://POD_IP:CONTAINER_PORT/
+$ curl http://192.168.119.138:8080/
+
+
+
+
+
+# Ingress 인그레스 
+p.216 ch8-1s
+   - Kubernetes Cluster 외부에서 Kubernetes Cluster 내부의 애플리케이션에 요청 패킷을 보낼 때
+요청 패킷이 특정 애플리케이션으로 전달될 수 있도록 정의하는 규칙의 모임.
+   - 요청 패킷에 포함된 애플리케이션 데이터를 분석하여 애플리케이션에 전달하기 위한 Kubernetes Object
+
+
+-	Ingress Controller
+  Kubernetes Ingress Object를 처리하기 위한 Controller
+  Ingress Object에 정의된 규칙에 따라 애플리케이션 트래픽을 다룸
+
+ 
+
+인그레스nginx를 따로 설치해본다.
+https://github.com/kubernetes/ingress-nginx
+https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/
+
+
+===ingress-nginx ingress controller 설치하기( NodePort ) ===
+$ kubectl create -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/baremetal/deploy.yaml
+
+$ kubectl get namespaces
+NAME               STATUS   AGE
+…
+default            Active   4d20h
+ingress-nginx      Active   20s
+…
+
+$ kubectl get pods -n ingress-nginx
+NAME                                      READY   STATUS      RESTARTS   AGE
+ingress-nginx-admission-create-d2hrv      0/1     Completed   0          39s
+ingress-nginx-admission-patch-s7dr4       0/1     Completed   2          39s
+ingress-nginx-controller-9f68fd6d-v5zjv   0/1     Running     0          39s
+
+vagrant@kube-control1:~/work/20240108$ kubectl  get services -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.100.168.177   <none>        80:32295/TCP,443:32495/TCP   69s
+ingress-nginx-controller-admission   ClusterIP   10.98.10.217     <none>        443/TCP                      68s
+
+ingress-nginx-controller Service Object 편집하기
+$ kubectl edit service ingress-nginx-controller -n ingress-nginx
+
+22   - 10.100.168.177
+23   externalTrafficPolicy: Cluster  두 행 사이에 내용을 추가한다.
+
+21   clusterIPs:
+22   - 10.100.168.177
+23   externalIPs:
+24   - 192.168.56.21
+25   - 192.168.56.22
+26   - 192.168.56.23
+27   externalTrafficPolicy: Cluster 
+
+
+다시 조회해보면
+vagrant@kube-control1:~/work/20240108$ kubectl get  services -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP                                 PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.100.168.177   192.168.56.21,192.168.56.22,192.168.56.23   80:32295/TCP,443:32495/TCP   11m
+ingress-nginx-controller-admission   ClusterIP   10.98.10.217     <none>                                      443/TCP                      11m
+
+
+Ingress Object 기본 구조 (매니페스트 파일)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: INGRESS_NAME
+spec:
+  defaultBackend:
+    service:
+      name: SERVICE_NAME
+      port:
+        number: PORT
+  rules:
+  - host: ADDRESS
+    http:
+      paths:
+      - path: PATH
+        pathType: Prefix
+        backend:
+          service:
+            name: SERVICE_NAME
+            port:
+              number: PORT
+
+.spec.rules.[ ].pathType : 경로 비교 방식 지정
+    Prefix  :  요청 경로의 시작 부분이 일치하는 경우 애플리케이션 요청 전달
+    Exact  :  요청 경로가 정확히 일치하는 경우 애플리케이션 요청 전달
+    ImplementationSpecific  :  Ingres
+
+>>>필드해석
+1.	rules: Ingress에 적용되는 규칙을 정의한다. 각 규칙은 특정 호스트 또는 경로에 대한 설정을 나타낸다.
+여러 규칙을 지정하여 다양한 요청을 처리할 수 있다.
+2.	host: Ingress에 대한 규칙이 적용될 호스트를 지정한다. 이는 요청된 호스트 헤더와 일치해야 하며 호스트에 대한 규칙을 정의함.
+3.	http: HTTP 프로토콜에 대한 규칙을 정의한다.
+4.	paths: 특정 경로에 대한 규칙을 지정한다. 여러 경로를 지정하여 다양한 엔드포인트를 처리할 수 있다.
+5.	path: 요청된 URL의 경로에 대한 패턴을 나타낸다. 이는 특정 서비스로 요청을 라우팅하는 데 사용된다.
+6.	pathType: 경로 일치 유형을 나타낸다. 가능한 값으로 Prefix와 Exact가 있다. Prefix는 지정된 경로 접두사에
+매칭되는 모든 요청을 처리하고, Exact는 정확한 경로 매칭을 수행한다.
+7.	backend: 특정 경로에 매칭되었을 때 요청을 전달할 백엔드 서비스를 지정한다.
+•	service: 백엔드 서비스의 정보를 나타낸다.
+•	name: 서비스의 이름을 지정.
+•	port: 서비스의 포트를 지정.
+
+
+(참고용)이전 API 버전의 Ingress Object
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-example
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: example.com
+    http:
+      paths:
+      - path: / 
+        backend:
+          serviceName: SERVICE_NAME
+          servicePort: PORT
+
+
+#인그레스 실습하기
+지난시간에 만들어놨던것(레플리카셋)을 복붙해오자.
+vagrant@kube-control1:~/work/20240108$ cp ../20240105/example-rs.yaml .
+
+그리고 서비스(노드포트)를 하나 만든다.
+vagrant@kube-control1:~/work/20240108$ vim example-svc-nodeport.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: example-rs
+  ports:
+  - port: 80
+    targetPort: 8080
+
+그리고 인그레스 오브젝트를 하나 정의한다.
+$ vim example-ing.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-ing
+spec:
+   ingressClassName: nginx
+  rules:
+  - host: www.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name:  example-svc-nodeport
+            port:
+              number: 80
+  defaultBackend:
+    service:
+      name: example-svc-nodeport
+      port:
+        number: 80
+>>코드설명:
+Ingress 규칙은 www.example.com 도메인으로 들어오는 최상위 모든 경로(/)에 대한
+요청을 example-svc-nodeport 서비스로 라우팅하도록 설정했고,
+이렇게 설정된 Ingress를 통해 클러스터 외부에서 www.example.com으로 들어오는 요청이
+Kubernetes 클러스터 내의 해당 서비스로 전달한다.
+
+vagrant@kube-control1:~/work/20240108$ vim example-rs.yaml
+vagrant@kube-control1:~/work/20240108$ vim example-svc-nodeport.yaml
+vagrant@kube-control1:~/work/20240108$ vim example-ing.yaml
+이렇게 세개를 작성한다음 모두 실행한다.
+
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-rs.yaml
+replicaset.apps/example-rs created
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-svc-nodeport.yaml
+service/example-svc-nodeport created
+
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-ing.yaml
+Error from server (InternalError): error when creating "example-ing.yaml": Internal error occurred: failed calling webhook "validate.nginx.ingress.kubernetes.io": failed to call webhook: Post "https://ingress-nginx-controller-admission.ingress-nginx.svc:443/networking/v1/ingresses?timeout=10s": dial tcp 10.98.10.217:443: connect: connection refused
+>에러하나가 떴는데, 
+
+vagrant@kube-control1:~/work/20240108$ kubectl get nodes
+NAME            STATUS     ROLES           AGE   VERSION
+kube-control1   Ready      control-plane   5d    v1.27.9
+kube-node1      NotReady   <none>          5d    v1.27.9
+kube-node2      NotReady   <none>          5d    v1.27.9
+kube-node3      NotReady   <none>          5d    v1.27.9
+요상태이다.
+
+vagrant@kube-control1:~/work/20240108$ kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/baremetal/deploy.yaml 로 지워주자.
+
+
+kubectl create -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.0/deploy/static/provider/baremetal/deploy.yaml
+버전을 바꿔서 실행해본다
+namespace/ingress-nginx created
+serviceaccount/ingress-nginx created
+serviceaccount/ingress-nginx-admission created
+role.rbac.authorization.k8s.io/ingress-nginx created
+role.rbac.authorization.k8s.io/ingress-nginx-admission created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx-admission created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+configmap/ingress-nginx-controller created
+service/ingress-nginx-controller created
+service/ingress-nginx-controller-admission created
+deployment.apps/ingress-nginx-controller created
+job.batch/ingress-nginx-admission-create created
+job.batch/ingress-nginx-admission-patch created
+ingressclass.networking.k8s.io/nginx created
+validatingwebhookconfiguration.admissionregistration.k8s.io/ingress-nginx-admission created
+vagrant@kube-control1:~/work/20240108$ kubectl get namespaces
+NAME               STATUS   AGE
+calico-apiserver   Active   5d
+calico-system      Active   5d
+default            Active   5d
+ingress-nginx      Active   28s
+kube-node-lease    Active   5d
+kube-public        Active   5d
+kube-system        Active   5d
+metallb-system     Active   3d1h
+tigera-operator    Active   5d
+vagrant@kube-control1:~/work/20240108$ kubectl get pods
+No resources found in default namespace.
+vagrant@kube-control1:~/work/20240108$ kubectl get pods -n ingress-nginx
+NAME                                        READY   STATUS      RESTARTS   AGE
+ingress-nginx-admission-create-ckwzx        0/1     Completed   0          45s
+ingress-nginx-admission-patch-f9896         0/1     Completed   2          45s
+ingress-nginx-controller-765dd5f787-j7x95   0/1     Running     0          45s
+
+vagrant@kube-control1:~/work/20240108$ kubectl get services -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.100.57.37    <none>        80:31530/TCP,443:30391/TCP   104s
+ingress-nginx-controller-admission   ClusterIP   10.98.123.156   <none>        443/TCP                      104s
+>> 80번은 노드포트 31530/tcp , 443번은 노드포트 30391/tcp 부분인것을 알 수 있다.
+
+
+
+# 다시 레플리카셋, 노드포트, 인그레스 오브젝트를 생성해주면 된다.
+
+vagrant@kube-control1:~/work/20240108$ vim example-rs.yaml
+vagrant@kube-control1:~/work/20240108$ vim example-svc-nodeport.yaml
+vagrant@kube-control1:~/work/20240108$ vim example-ing.yaml
+
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-rs.yaml
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-svc-nodeport.yaml
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-ing.yaml
+
+vagrant@kube-control1:~/work/20240108$ kubectl get services
+NAME                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+example-svc            ClusterIP   10.103.40.50    <none>        80/TCP         4h42m
+example-svc-nodeport   NodePort    10.105.249.67   <none>        80:30380/TCP   42s
+kubernetes             ClusterIP   10.96.0.1       <none>        443/TCP        3d3h
+vagrant@kube-control1:~/work/20240108$ kubectl get ingress
+NAME          CLASS    HOSTS             ADDRESS   PORTS   AGE
+example-ing   <none>   www.example.com             80      37s
+
+도메인주소를 통해 접근을 할 수 있으려면 도메인주소에 대한 ip주소를 먼저 받아야 할 것이다.
+
+
+# 인그레스 오브젝트를 노드포트방식으로 동작구성하기
+  - Domain Name에 대한 이름 풀이가 가능해야 함.
+
+방법1. DNS 서버 구축
+방법2. /etc/hosts 파일 설정
+$ sudo vim /etc/hosts
+192.168.56.21   www.example.com
+*윈도우의 경우 관리자모드CMD> C:\Windows\System32>notepad.exe \Windows\System32\drivers\etc\hosts   에서
+   192.168.56.21  www.example.com 추가 후 포트를 연결해주면 된다.
+
+
+
+방법3. curl 명령어 사용
+$ curl --resolve DOMAIN:PORT:IP_ADDRESS  http://DOMAIN:PORT/
+  $ curl  --resolve www.example.com:31530:192.168.56.21 http://www.example.com:31530/
+
+위처럼 입력하면
+vagrant@kube-control1:~/work/20240108$ curl  --resolve www.example.com:31530:192.168.56.21 http://www.example.com:31530/
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+라는것이 뜬다. nginx자체에는 접속을 했는데, 인그레스 설정이 완전히 되지는 않았음을 보여주는것.
+ -> Ingress Controller에 접속이 되었으나 처리할 IngressClass(Ingress Controller)를 찾지 못하여 오류 발생
+
+
+
+# IngressClass
+-	Kubernetes Cluster에서 여러개의 ingress controller를 함께 사용할 수 있도록 정의하는 kubernetes object임.
+-	Kubernetes v1.24 버전부터 Ingress Object에서 사용할 IngressClass(Ingress Controller)를 지정해야 함.
+
+IngressClass Object 목록 확인
+$ kubectl get ingressclasses
+vagrant@kube-control1:~/work/20240108$ kubectl get ingressclasses
+NAME    CONTROLLER             PARAMETERS   AGE
+nginx   k8s.io/ingress-nginx   <none>       20m
+
+IngressClass Object 상세정보 확인
+vagrant@kube-control1:~/work/20240108$ kubectl describe ingressclasses nginx
+Name:         nginx
+Labels:       app.kubernetes.io/component=controller
+              app.kubernetes.io/instance=ingress-nginx
+              app.kubernetes.io/name=ingress-nginx
+              app.kubernetes.io/part-of=ingress-nginx
+              app.kubernetes.io/version=1.9.0
+Annotations:  <none>
+Controller:   k8s.io/ingress-nginx
+Events:       <none>
+
+방법1. 각 Ingress Object에서 사용할 IngressClass 지정
+…
+spec:
+  ingressClassName: INGRESSCLASS
+…
+    
+방법2. Kubernetes Cluster의 Default Ingress Class를 지정
+$ kubectl edit ingressclass nginx
+…
+metadata:
+  name: nginx
+  annotations:
+   ingressclass.kubernetes.io/is-default-class: "true"
+…
+
+
+vagrant@kube-control1:~/work/20240108$ kubectl delete -f example-ing.yaml
+ingress.networking.k8s.io "example-ing" deleted
+
+example-ing.yaml을 수정함.(ingressClassName)
+
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-ing.yaml
+ingress.networking.k8s.io/example-ing created
+
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-ing.yaml
+ingress.networking.k8s.io/example-ing created
+
+vagrant@kube-control1:~/work/20240108$ kubectl get ingress
+NAME          CLASS   HOSTS             ADDRESS         PORTS   AGE
+example-ing   nginx   www.example.com   192.168.56.21   80      36s
+vagrant@kube-control1:~/work/20240108$ kubectl describe ingress example-ing
+ 
+Name:             example-ing
+Labels:           <none>
+Namespace:        default
+Address:          192.168.56.21
+Ingress Class:    nginx
+Default backend:  example-svc-nodeport:80 (192.168.119.144:8080,192.168.233.212:8080,192.168.9.81:8080)
+Rules:
+  Host             Path  Backends
+  ----             ----  --------
+  www.example.com
+                   /   example-svc-nodeport:80 (192.168.119.144:8080,192.168.233.212:8080,192.168.9.81:8080)
+Annotations:       <none>
+Events:
+  Type    Reason  Age                From                      Message
+  ----    ------  ----               ----                      -------
+  Normal  Sync    26s (x2 over 47s)  nginx-ingress-controller  Scheduled for sync
+
+
+이제 노드포트방식으로 접속을 해보면
+vagrant@kube-control1:~/work/20240108$ curl  --resolve www.example.com:31530:192.168.56.21 http://www.example.com:31530/
+Hello World!
+example-rs-zjjzv
+>>잘 된다.
+
+$ sudo vim /etc/hosts
+192.168.56.21   www.example.com
+
+$ curl http://www.example.com:31530/
+Hello World!
+example-rs-6746l
+
+이전 추가 내용 삭제
+$ sudo vim /etc/hosts
+192.168.56.21   www.example.com
+실습후 내용을 지운다.
+
+vagrant@kube-control1:~/work/20240108$ kubectl delete -f example-ing.yaml
+ingress.networking.k8s.io "example-ing" deleted
+인그레스 오브젝트도 지워준다.
+
+
+
+# 인그레스 오브젝트를 로드밸런서 타입 서비스로 동작구성하기
+
+Ingress Controller 삭제
+$ kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/baremetal/deploy.yaml
+
+$ kubectl delete namespace ingress-nginx
+
+=== ingress-nginx Ingress Controller 설치(LoadBalancer) ===
+$ kubectl create -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.0/deploy/static/provider/baremetal/deploy.yaml
+
+$ kubectl get pods -n ingress-nginx
+vagrant@kube-control1:~/work/20240108$ kubectl get pods -n ingress-nginx
+NAME                                        READY   STATUS      RESTARTS   AGE
+ingress-nginx-admission-create-9vdz5        0/1     Completed   0          7s
+ingress-nginx-admission-patch-dvs9l         0/1     Completed   0          7s
+ingress-nginx-controller-765dd5f787-kvhtk   0/1     Running     0          8s
+
+vagrant@kube-control1:~/work/20240108$  kubectl get services -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.97.60.109     <none>        80:31119/TCP,443:31066/TCP   32s
+ingress-nginx-controller-admission   ClusterIP   10.100.221.176   <none>        443/TCP                      32s
+
+노드포트로 작성되어있는데, 로드밸런서로 작동하도록 만들것이다.
+$ kubectl edit service ingress-nginx-controller -n ingress-nginx
+19 spec:   필드의
+46   type: NodePort   를 
+46   type: LoadBalancer 로 변경
+
+
+확인해보자.
+vagrant@kube-control1:~/work/20240108$ kubectl get service -n ingress-nginx
+NAME                                 TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)                      AGE
+ingress-nginx-controller             LoadBalancer   10.97.60.109     192.168.56.200   80:31119/TCP,443:31066/TCP   3m14s
+ingress-nginx-controller-admission   ClusterIP      10.100.221.176   <none>           443/TCP                      3m14s
+
+그러면 로드밸런서 타입으로 변경된 것을 알 수 있음.
+192.168.56.200라는 아이피를 로드밸런서가 가진다. http:31119번,https는 31066번포트를 사용한다.
+
+이제 인그레스 오브젝트를 생성해보자. 
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-rs.yaml
+replicaset.apps/example-rs created
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-svc-nodeport.yaml
+service/example-svc-nodeport created
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-ing.yaml
+ingress.networking.k8s.io/example-ing created
+
+마지막으로 이걸 입력해서 웹 접근이 되는지 확인.
+vagrant@kube-control1:~/work/20240108$ curl --resolve www.example.com:80:192.168.56.200 http:/
+/www.example.com/
+Hello World!
+example-rs-nr7vx
+
+(리눅스환경)
+$ sudo vim /etc/hosts에서
+192.168.56.200   www.example.com
+
+을 추가해주고 저장하면, 따로 입력을 하지 않아도 접근이 가능해진다.
+(윈도우환경)
+관리자권한 CMD에서 notepad.exe \Windows\System32\drivers\etc\hosts에서
+위처럼 똑같이 추가해주고 저장하면 동일한 결과값이 나온다.
+
+
+
+# 인그레스클래스네임 정의없이 실행하도록 구성하기
+
+
+vagrant@kube-control1:~/work/20240108$ kubectl delete -f example-ing.yaml
+ingress.networking.k8s.io "example-ing" deleted
+
+1단계
+vagrant@kube-control1:~/work/20240108$ vim example-ing.yaml
+#ingressClassName: nginx 주석처리해주고 저장한다.
+ 
+
+vagrant@kube-control1:~/work/20240108$ kubectl describe ingressclasses nginx
+Name:         nginx
+Labels:       app.kubernetes.io/component=controller
+              app.kubernetes.io/instance=ingress-nginx
+              app.kubernetes.io/name=ingress-nginx
+              app.kubernetes.io/part-of=ingress-nginx
+              app.kubernetes.io/version=1.9.0
+Annotations:  <none>
+Controller:   k8s.io/ingress-nginx
+Events:       <none>
+
+2단계
+이 상태에서 에딧
+vagrant@kube-control1:~/work/20240108$ kubectl edit ingressclass nginx
+16   annotations:
+17     ingressclass.kubernetes.io/is-default-class: "true"    이 두줄을 추가해준다.
+ 
+
+vagrant@kube-control1:~/work/20240108$ kubectl get ingressclasses
+NAME    CONTROLLER             PARAMETERS   AGE
+nginx    k8s.io/ingress-nginx          <none>      23m
+vagrant@kube-control1:~/work/20240108$ kubectl describe ingressclasses
+Name:         nginx
+Labels:       app.kubernetes.io/component=controller
+              app.kubernetes.io/instance=ingress-nginx
+              app.kubernetes.io/name=ingress-nginx
+              app.kubernetes.io/part-of=ingress-nginx
+              app.kubernetes.io/version=1.9.0
+Annotations:  ingressclass.kubernetes.io/is-default-class: true
+Controller:   k8s.io/ingress-nginx
+Events:       <none>
+
+3단계
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-rs.yaml (있다면 넘어감)
+vagrant@kube-control1:~/work/20240108$ kubectl create -f example-ing.yaml
+ingress.networking.k8s.io/example-ing created
+vagrant@kube-control1:~/work/20240108$ kubectl get ingresses
+NAME          CLASS   HOSTS             ADDRESS   PORTS   AGE
+example-ing   nginx   www.example.com             80      23s
+vagrant@kube-control1:~/work/20240108$ kubectl describe ingresses example-ing
+Name:             example-ing
+Labels:           <none>
+Namespace:        default
+Address:          192.168.56.21
+Ingress Class:    nginx
+Default backend:  example-svc-nodeport:80 (192.168.119.145:8080,192.168.233.214:8080,192.168.9.84:8080)
+Rules:
+  Host             Path  Backends
+  ----             ----  --------
+  www.example.com
+                   /   example-svc-nodeport:80 (192.168.119.145:8080,192.168.233.214:8080,192.168.9.84:8080)
+Annotations:       <none>
+Events:
+  Type    Reason  Age               From                      Message
+  ----    ------  ----              ----                      -------
+  Normal  Sync    4s (x2 over 46s)  nginx-ingress-controller  Scheduled for sync
+>>클래스를 별도지정하지 않아도 ingress class가 nginx로 나온것을 확인.
+vagrant@kube-control1:~/work/20240108$ curl http://www.example.com/로 웹접근이 가능하다.
+
+
+# 하나의 인그레스 오브젝트에 여러개의 룰을 지정하기
+
+1단계
+레플리카를 복사해서 해보자.
+
+vagrant@kube-control1:~/work/20240108$ cp example-rs.yaml example-rs-mhost1.yaml
+vagrant@kube-control1:~/work/20240108$ vim example-rs-mhost1.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: example-rs-mhost1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example-rs-mhost1
+  template:
+    metadata:
+      labels:
+        app: example-rs-mhost1
+    spec:
+      containers:
+      - name: example
+        image: devops2341/go-myweb:alpine
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+또다른 mhost2를 생성
+vagrant@kube-control1:~/work/20240108$ vim example-rs-mhost2.yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: example-rs-mhost2
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example-rs-mhost2
+  template:
+    metadata:
+      labels:
+        app: example-rs-mhost2
+    spec:
+      containers:
+      - name: example
+        image: devops2341/go-myweb:alpine
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+2단계 
+각각의 레플리카셋에대한 서비스오브젝트를 작성한다.
+
+vagrant@kube-control1:~/work/20240108$ cp example-svc-nodeport.yaml  example-svc-mhost1.yaml
+
+
+$ vim example-svc-mhost1.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-mhost1
+spec:
+  type: NodePort
+  selector:
+    app: example-rs-mhost1
+  ports:
+  - port: 80
+    targetPort: 8080
+
+두번째것도 만들자
+$ vim example-svc-mhost2.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-svc-mhost2
+spec:
+  type: NodePort
+  selector:
+    app: example-rs-mhost2
+  ports:
+  - port: 80
+    targetPort: 8080
+    
+$ vim example-ing-mhost.yaml 
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-ing-mhost
+spec:
+  rules:
+  - host: web01.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: example-svc-mhost1
+            port:
+              number: 80
+  - host: web02.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: example-svc-mhost2
+            port:
+              number: 80
+>>정의된 규칙:
+해당 인그레스오브젝트는 두 개의 호스트에 대한 규칙이 정의되어 있습니다.
+•	첫 번째 규칙은 web01.example.com 도메인에 대한 것으로, / 경로로 들어오는 모든 요청을 example-svc-mhost1 서비스로 라우팅합니다.
+•	두 번째 규칙은 web02.example.com 도메인에 대한 것으로, / 경로로 들어오는 모든 요청을 example-svc-mhost2 서비스로 라우팅합니다.
+백엔드 서비스 설정:
+각 규칙은 특정 서비스로 요청을 라우팅합니다.
+•	첫 번째 규칙은 example-svc-mhost1 서비스로, 포트 번호 80을 사용합니다.
+•	두 번째 규칙은 example-svc-mhost2 서비스로, 포트 번호 80을 사용합니다.
+PathType:
+pathType은 Prefix로 설정되어 있습니다. 이는 지정된 경로의 접두사에 매칭되는 모든 요청을 처리합니다.
+
+
+3단계
+다음으로 이 실습을 위해서 레플리카셋, 인그레스, 서비스를 생성하자
+
+$ kubectl create -f example-rs-mhost1.yaml -f example-rs-mhost2.yaml
+$ kubectl create -f example-svc-mhost1.yaml -f example-svc-mhost2.yaml
+service/example-svc-mhost1 created
+service/example-svc-mhost2 created
+$ kubectl create -f example-ing-mhost.yaml
+ingress.networking.k8s.io/example-ing-mhost created
+
+vagrant@kube-control1:~/work/20240108$ kubectl get ingresses
+NAME                CLASS   HOSTS                                 ADDRESS         PORTS   AGE
+example-ing         nginx   www.example.com                       192.168.56.21   80      43m
+example-ing-mhost   nginx   web01.example.com,web02.example.com   192.168.56.21   80      35s
+
+상세정보를 확인하자
+vagrant@kube-control1:~/work/20240108$ kubectl describe ingresses example-ing-mhost
+Name:             example-ing-mhost
+Labels:           <none>
+Namespace:        default
+Address:          192.168.56.21
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host               Path  Backends
+  ----               ----  --------
+  web01.example.com
+                     /   example-svc-mhost1:80 (192.168.119.151:8080,192.168.233.219:8080,192.168.9.89:8080)
+  web02.example.com
+                     /   example-svc-mhost2:80 (192.168.119.150:8080,192.168.233.220:8080,192.168.9.90:8080)
+Annotations:         <none>
+Events:
+  Type    Reason  Age                From                      Message
+  ----    ------  ----               ----                      -------
+  Normal  Sync    28s (x2 over 34s)  nginx-ingress-controller  Scheduled for sync
+
+웹에 접근해본다.
+$ curl --resolve web01.example.com:80:192.168.56.200 http://web01.example.com/
+Hello World!
+example-rs-mhost1-ph47s
+example-rs-mhost1-4n7rk
+example-rs-mhost1-lxqx8
+$ curl --resolve web02.example.com:80:192.168.56.200 http://web02.example.com/
+Hello World!
+example-rs-mhost2-s2cl5
+example-rs-mhost2-swh5d
+example-rs-mhost2-w4xws
+>>로드밸런싱이 잘 된다.
+
+** 만약 안된다면(혹은 포트연결이 잘 안되어있다면, 죄다 삭제하고 다시만들자)
+kubectl delete -f example-rs-mhost1.yaml -f example-rs-mhost2.yaml
+kubectl delete -f example-svc-mhost1.yaml -f example-svc-mhost2.yaml
+kubectl delete -f example-ing-mhost.yaml
+
+$ kubectl create -f example-rs-mhost1.yaml -f example-rs-mhost2.yaml
+$ kubectl create -f example-svc-mhost1.yaml -f example-svc-mhost2.yaml
+$ kubectl create -f example-ing-mhost.yaml
+
+
+>>https필드로 하는것은 다음시간에 하도록한다.
